@@ -44,6 +44,27 @@ struct renderer {
 	EGLSurface surface;
 	EGLContext context;
 	GLuint shader_program;
+	uint32_t width;
+	uint32_t height;
+	GLint read_format;
+	GLint read_type;
+};
+
+struct dmabuf_plane {
+	int fd;
+	uint32_t offset;
+	uint32_t size;
+	uint32_t pitch;
+	uint64_t modifier;
+};
+
+struct dmabuf_frame {
+	uint32_t width;
+	uint32_t height;
+	uint32_t format;
+
+	uint32_t n_planes;
+	struct dmabuf_plane plane[4];
 };
 
 static inline void* gl_load_single_extension(const char* name)
@@ -240,7 +261,7 @@ void renderer_destroy(struct renderer* self)
 	glDeleteProgram(self->shader_program);
 }
 
-int renderer_init(struct renderer* self, int width, int height)
+int renderer_init(struct renderer* self, uint32_t width, uint32_t height)
 {
 	if (!eglBindAPI(EGL_OPENGL_ES_API))
 		return -1;
@@ -308,6 +329,11 @@ int renderer_init(struct renderer* self, int width, int height)
 
 	glUseProgram(self->shader_program);
 
+	self->width = width;
+	self->height = height;
+	glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &self->read_format);
+	glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &self->read_type);
+
 	glViewport(0, 0, width, height);
 	gl_clear();
 
@@ -320,4 +346,76 @@ make_current_failure:
 surface_failure:
 	eglDestroyContext(self->display, self->context);
 	return -1;
+}
+
+static inline void append_attr(EGLint* dst, int* i, EGLint name, EGLint value)
+{
+	dst[*i] = name;
+	i[0] += 1;
+	dst[*i] = value;
+	i[0] += 1;
+}
+
+static void dmabuf_attr_append_planes(EGLint* dst, int* i,
+				      struct dmabuf_frame* frame)
+{
+#define APPEND_PLANE_ATTR(n) \
+	if (frame->n_planes <= n) \
+		return; \
+\
+	append_attr(dst, i, EGL_DMA_BUF_PLANE##n##_FD_EXT, frame->plane[n].fd); \
+	append_attr(dst, i, EGL_DMA_BUF_PLANE##n##_OFFSET_EXT, frame->plane[n].offset); \
+	append_attr(dst, i, EGL_DMA_BUF_PLANE##n##_PITCH_EXT, frame->plane[n].pitch); \
+	append_attr(dst, i, EGL_DMA_BUF_PLANE##n##_MODIFIER_LO_EXT, frame->plane[n].modifier); \
+	append_attr(dst, i, EGL_DMA_BUF_PLANE##n##_MODIFIER_HI_EXT, frame->plane[n].modifier >> 32); \
+
+	APPEND_PLANE_ATTR(0);
+	APPEND_PLANE_ATTR(1);
+	APPEND_PLANE_ATTR(2);
+	APPEND_PLANE_ATTR(3);
+#undef APPEND_PLANE_ATTR
+}
+
+int render_dmabuf_frame(struct renderer* self, struct dmabuf_frame* frame)
+{
+	int index = 0;
+	EGLint attr[6 + 10 * 4 + 1];
+
+	if (frame->n_planes == 0)
+		return -1;
+
+	append_attr(attr, &index, EGL_WIDTH, frame->width);
+	append_attr(attr, &index, EGL_HEIGHT, frame->height);
+	append_attr(attr, &index, EGL_LINUX_DRM_FOURCC_EXT, frame->format);
+	dmabuf_attr_append_planes(attr, &index, frame);
+	attr[index++] = EGL_NONE;
+
+	EGLImageKHR image =
+		eglCreateImageKHR(self->display, EGL_NO_CONTEXT,
+				  EGL_LINUX_DMA_BUF_EXT, NULL, attr);
+	if (!image)
+		return -1;
+
+	GLuint tex;
+	glGenTextures(1, &tex);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_EXTERNAL_OES, tex);
+	glEGLImageTargetTexture2DOES(GL_TEXTURE_EXTERNAL_OES, image);
+
+	gl_render();
+
+	glBindTexture(GL_TEXTURE_2D, 0);
+	glDeleteTextures(1, &tex);
+	eglDestroyImageKHR(self->display, image);
+
+	return 0;
+}
+
+/* Copy a horizontal stripe from the GL frame into a pixel buffer */
+void render_copy_pixels(struct renderer* self, void* dst, uint32_t y, uint32_t height)
+{
+	assert(y + height <= self->height);
+
+	glReadPixels(0, y, self->width, height, self->read_format,
+		    self->read_type, dst);
 }
