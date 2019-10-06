@@ -10,15 +10,11 @@
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 
+#include "logging.h"
+#include "render.h"
 #include "dmabuf.h"
 
 #define MAYBE_UNUSED __attribute__((unused))
-
-#ifdef NDEBUG
-#define log_debug(...)
-#else
-#define log_debug(...) fprintf(stderr, __VA_ARGS__)
-#endif
 
 #define XSTR(s) STR(s)
 #define STR(s) #s
@@ -40,17 +36,6 @@
 #define X(type, name) type name;
 	X_GL_EXTENSIONS
 #undef X
-
-struct renderer {
-	EGLDisplay display;
-	EGLSurface surface;
-	EGLContext context;
-	GLuint shader_program;
-	uint32_t width;
-	uint32_t height;
-	GLint read_format;
-	GLint read_type;
-};
 
 static inline void* gl_load_single_extension(const char* name)
 {

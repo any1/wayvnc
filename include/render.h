@@ -1,6 +1,20 @@
 #pragma once
 
+#include <GLES2/gl2.h>
+#include <EGL/egl.h>
+
 struct dmabuf_frame;
+
+struct renderer {
+	EGLDisplay display;
+	EGLSurface surface;
+	EGLContext context;
+	GLuint shader_program;
+	uint32_t width;
+	uint32_t height;
+	GLint read_format;
+	GLint read_type;
+};
 
 int render_dmabuf_frame(struct renderer* self, struct dmabuf_frame* frame);
 
