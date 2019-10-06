@@ -37,6 +37,7 @@ struct wayvnc {
 	struct renderer renderer;
 	struct zwlr_export_dmabuf_manager_v1* export_manager;
 	const struct output* selected_output;
+	struct dmabuf_capture* capture;
 
 	uv_poll_t wayland_poller;
 	uv_prepare_t flusher;
@@ -44,6 +45,8 @@ struct wayvnc {
 
 	struct nvnc* nvnc;
 };
+
+void on_capture_done(struct dmabuf_capture* capture);
 
 static void output_handle_geometry(void* data, struct wl_output* wl_output,
 				   int32_t x, int32_t y, int32_t phys_width,
@@ -235,10 +238,14 @@ void on_uv_walk(uv_handle_t* handle, void* arg)
 	uv_close(handle, NULL);
 }
 
+void wayvnc_exit(void)
+{
+	uv_walk(uv_default_loop(), on_uv_walk, NULL);
+}
+
 void on_signal(uv_signal_t* handle, int signo)
 {
-	struct wayvnc* self = wl_container_of(handle, self, signal_handler);
-	uv_walk(handle->loop, on_uv_walk, NULL);
+	wayvnc_exit();
 }
 
 int init_main_loop(struct wayvnc* self)
@@ -289,6 +296,52 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port)
 	return 0;
 }
 
+int wayvnc_start_capture(struct wayvnc* self)
+{
+	self->capture = dmabuf_capture_start(self->export_manager, false,
+					     self->selected_output->wl_output,
+					     on_capture_done);
+	if (!self->capture)
+		return -1;
+
+	self->capture->userdata = self;
+
+	return 0;
+}
+
+void wayvnc_process_frame(struct wayvnc* self, struct dmabuf_frame* frame)
+{
+	/* TODO */
+
+	if (wayvnc_start_capture(self) < 0) {
+		log_error("Failed to start capture. Exiting...\n");
+		wayvnc_exit();
+	}
+}
+
+void on_capture_done(struct dmabuf_capture* capture)
+{
+	struct wayvnc* self = capture->userdata;
+
+	switch (capture->status) {
+	case DMABUF_CAPTURE_FATAL:
+		log_error("Fatal error while capturing. Exiting...\n");
+		wayvnc_exit();
+		break;
+	case DMABUF_CAPTURE_CANCELLED:
+		if (wayvnc_start_capture(self) < 0) {
+			log_error("Failed to start capture. Exiting...\n");
+			wayvnc_exit();
+		}
+		break;
+	case DMABUF_CAPTURE_DONE:
+		wayvnc_process_frame(self, &capture->frame);
+		break;
+	case DMABUF_CAPTURE_UNSPEC:
+		abort();
+	}
+}
+
 int main(int argc, char* argv[])
 {
 	struct wayvnc self;
@@ -323,13 +376,23 @@ int main(int argc, char* argv[])
 	if (init_nvnc(&self, "0.0.0.0", 5900) < 0)
 		goto nvnc_failure;
 
+	if (wayvnc_start_capture(&self) < 0)
+		goto capture_failure;
+
+	self.capture->userdata = &self;
+
 	uv_run(uv_default_loop(), UV_RUN_DEFAULT);
+
+	if (self.capture)
+		dmabuf_capture_stop(self.capture);
 
 	nvnc_close(self.nvnc);
 	renderer_destroy(&self.renderer);
 	wayvnc_destroy(&self);
 	return 0;
 
+capture_failure:
+	nvnc_close(self.nvnc);
 nvnc_failure:
 main_loop_failure:
 	renderer_destroy(&self.renderer);

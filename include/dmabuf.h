@@ -37,6 +37,7 @@ struct dmabuf_capture {
 
         enum dmabuf_capture_status status;
         void (*on_done)(struct dmabuf_capture*);
+        void* userdata;
 };
 
 struct dmabuf_capture*
