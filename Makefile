@@ -5,6 +5,7 @@ EXEC := wayvnc
 SOURCES := \
 	src/main.c \
 	src/render.c \
+	src/strlcpy.c \
 
 include common.mk
 
