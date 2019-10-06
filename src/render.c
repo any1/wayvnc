@@ -262,7 +262,7 @@ int renderer_init(struct renderer* self, uint32_t width, uint32_t height)
 	EGLConfig cfg;
 	EGLint cfg_count;
 
-	if (!eglChooseConfig(self->display, cfg_attr, cfg, 1, &cfg_count))
+	if (!eglChooseConfig(self->display, cfg_attr, &cfg, 1, &cfg_count))
 		return -1;
 
 	static const EGLint ctx_attr[] = {

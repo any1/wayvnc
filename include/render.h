@@ -16,6 +16,8 @@ struct renderer {
 	GLint read_type;
 };
 
+int renderer_init(struct renderer* self, uint32_t width, uint32_t height);
+
 int render_dmabuf_frame(struct renderer* self, struct dmabuf_frame* frame);
 
 /* Copy a horizontal stripe from the GL frame into a pixel buffer */
