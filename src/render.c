@@ -396,8 +396,8 @@ int render_dmabuf_frame(struct renderer* self, struct dmabuf_frame* frame)
 	return 0;
 }
 
-/* Copy a horizontal stripe from the GL frame into a pixel buffer */
-void render_copy_pixels(struct renderer* self, void* dst, uint32_t y, uint32_t height)
+void render_copy_pixels(struct renderer* self, void* dst, uint32_t y,
+			uint32_t height)
 {
 	assert(y + height <= self->height);
 
