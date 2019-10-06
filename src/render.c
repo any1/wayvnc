@@ -10,6 +10,8 @@
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 
+#include "dmabuf.h"
+
 #define MAYBE_UNUSED __attribute__((unused))
 
 #ifdef NDEBUG
@@ -48,23 +50,6 @@ struct renderer {
 	uint32_t height;
 	GLint read_format;
 	GLint read_type;
-};
-
-struct dmabuf_plane {
-	int fd;
-	uint32_t offset;
-	uint32_t size;
-	uint32_t pitch;
-	uint64_t modifier;
-};
-
-struct dmabuf_frame {
-	uint32_t width;
-	uint32_t height;
-	uint32_t format;
-
-	uint32_t n_planes;
-	struct dmabuf_plane plane[4];
 };
 
 static inline void* gl_load_single_extension(const char* name)

@@ -1,3 +1,4 @@
 build-*
 *.swp
 protocols/build
+.clang_complete
