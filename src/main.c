@@ -5,21 +5,18 @@
 #include <stdbool.h>
 #include <assert.h>
 #include <inttypes.h>
+#include <neatvnc.h>
+#include <uv.h>
+#include <libdrm/drm_fourcc.h>
 #include <wayland-client.h>
+#include <GLES2/gl2.h>
+#include <GLES2/gl2ext.h>
 
 #include "wlr-export-dmabuf-unstable-v1.h"
 #include "render.h"
 #include "dmabuf.h"
 #include "strlcpy.h"
 #include "logging.h"
-
-struct wayvnc {
-	struct wl_display* display;
-	struct wl_registry* registry;
-	struct wl_list outputs;
-
-	struct zwlr_export_dmabuf_manager_v1* export_manager;
-};
 
 struct output {
 	struct wl_output* wl_output;
@@ -30,6 +27,22 @@ struct output {
 	uint32_t height;
 	char make[256];
 	char model[256];
+};
+
+struct wayvnc {
+	struct wl_display* display;
+	struct wl_registry* registry;
+	struct wl_list outputs;
+
+	struct renderer renderer;
+	struct zwlr_export_dmabuf_manager_v1* export_manager;
+	const struct output* selected_output;
+
+	uv_poll_t wayland_poller;
+	uv_prepare_t flusher;
+	uv_signal_t signal_handler;
+
+	struct nvnc* nvnc;
 };
 
 static void output_handle_geometry(void* data, struct wl_output* wl_output,
@@ -79,6 +92,17 @@ void output_destroy(struct output* output)
 	free(output);
 }
 
+struct output* wayvnc_output_find(struct wayvnc* self, uint32_t id)
+{
+	struct output* output;
+
+	wl_list_for_each(output, &self->outputs, link)
+		if (output->id == id)
+			return output;
+
+	return NULL;
+}
+
 void output_list_destroy(struct wl_list* list)
 {
 	struct output* output;
@@ -126,7 +150,15 @@ static void registry_add(void* data, struct wl_registry* registry,
 static void registry_remove(void* data, struct wl_registry* registry,
 			    uint32_t id)
 {
-	/* TODO */
+	struct wayvnc* self = data;
+
+	struct output* out = wayvnc_output_find(self, id);
+	if (out) {
+		wl_list_remove(&out->link);
+		output_destroy(out);
+
+		/* TODO: If this is the selected output, exit */
+	}
 }
 
 void wayvnc_destroy(struct wayvnc* self)
@@ -173,12 +205,98 @@ failure:
 	return -1;
 }
 
+int wayvnc_select_first_output(struct wayvnc* self)
+{
+	struct output* out;
+
+	wl_list_for_each(out, &self->outputs, link) {
+		self->selected_output = out;
+		return 0;
+	}
+
+	return -1;
+}
+
+void on_wayland_event(uv_poll_t* handle, int status, int event)
+{
+	struct wayvnc* self = wl_container_of(handle, self, wayland_poller);
+	wl_display_dispatch(self->display);
+}
+
+void prepare_for_poll(uv_prepare_t* handle)
+{
+	struct wayvnc* self = wl_container_of(handle, self, flusher);
+	wl_display_flush(self->display);
+}
+
+void on_uv_walk(uv_handle_t* handle, void* arg)
+{
+	uv_unref(handle);
+	uv_close(handle, NULL);
+}
+
+void on_signal(uv_signal_t* handle, int signo)
+{
+	struct wayvnc* self = wl_container_of(handle, self, signal_handler);
+	uv_walk(handle->loop, on_uv_walk, NULL);
+}
+
+int init_main_loop(struct wayvnc* self)
+{
+	uv_loop_t* loop = uv_default_loop();
+
+	uv_poll_init(loop, &self->wayland_poller,
+		     wl_display_get_fd(self->display));
+	uv_poll_start(&self->wayland_poller, UV_READABLE, on_wayland_event);
+
+	uv_prepare_init(loop, &self->flusher);
+	uv_prepare_start(&self->flusher, prepare_for_poll);
+
+	uv_signal_init(loop, &self->signal_handler);
+	uv_signal_start(&self->signal_handler, on_signal, SIGINT);
+
+	return 0;
+}
+
+uint32_t fourcc_from_gl_format(uint32_t format)
+{
+	switch (format) {
+	case GL_BGRA_EXT: return DRM_FORMAT_XRGB8888;
+	case GL_RGBA: return DRM_FORMAT_XBGR8888;
+	}
+
+	return DRM_FORMAT_INVALID;
+}
+
+int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port)
+{
+	self->nvnc = nvnc_open(addr, port);
+	if (!self->nvnc)
+		return -1;
+
+	nvnc_set_userdata(self->nvnc, self);
+
+	uint32_t format = fourcc_from_gl_format(self->renderer.read_format);
+	if (format == DRM_FORMAT_INVALID)
+		return -1;
+
+	nvnc_set_name(self->nvnc, "WayVNC");
+	nvnc_set_dimensions(self->nvnc,
+			    self->selected_output->width,
+			    self->selected_output->height,
+			    format);
+
+	return 0;
+}
+
 int main(int argc, char* argv[])
 {
 	struct wayvnc self;
 
-	if (init_wayland(&self) < 0)
+	if (init_wayland(&self) < 0) {
+		log_error("Failed to initialise wayland\n");
 		return 1;
+	}
 
 	printf("Outputs:\n");
 
@@ -187,5 +305,35 @@ int main(int argc, char* argv[])
 		printf("%"PRIu32": Make: %s. Model: %s\n", out->id, out->make,
 		       out->model);
 
+	/* TODO: Allow selecting output */
+	if (wayvnc_select_first_output(&self) < 0) {
+		log_error("No output found\n");
+		goto failure;
+	}
+
+	if (renderer_init(&self.renderer, self.selected_output->width,
+			  self.selected_output->height) < 0) {
+		log_error("Failed to initialise renderer\n");
+		goto failure;
+	}
+
+	if (init_main_loop(&self) < 0)
+		goto main_loop_failure;
+
+	if (init_nvnc(&self, "0.0.0.0", 5900) < 0)
+		goto nvnc_failure;
+
+	uv_run(uv_default_loop(), UV_RUN_DEFAULT);
+
+	nvnc_close(self.nvnc);
+	renderer_destroy(&self.renderer);
+	wayvnc_destroy(&self);
 	return 0;
+
+nvnc_failure:
+main_loop_failure:
+	renderer_destroy(&self.renderer);
+failure:
+	wayvnc_destroy(&self);
+	return 1;
 }

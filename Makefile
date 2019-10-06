@@ -1,4 +1,4 @@
-DEPENDENCIES := libuv egl glesv2 wayland-client
+DEPENDENCIES := libuv egl glesv2 wayland-client neatvnc
 
 EXEC := wayvnc
 
@@ -33,4 +33,4 @@ install: $(EXEC)
 proto_clean:
 	make -C protocols clean
 
-clean: proto_clean
+clean: #proto_clean

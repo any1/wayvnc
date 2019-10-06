@@ -17,6 +17,7 @@ struct renderer {
 };
 
 int renderer_init(struct renderer* self, uint32_t width, uint32_t height);
+void renderer_destroy(struct renderer* self);
 
 int render_dmabuf_frame(struct renderer* self, struct dmabuf_frame* frame);
 
