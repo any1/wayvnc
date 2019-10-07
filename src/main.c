@@ -45,6 +45,9 @@ struct wayvnc {
 	uv_signal_t signal_handler;
 
 	struct nvnc* nvnc;
+
+	struct nvnc_fb* current_fb;
+	struct nvnc_fb* last_fb;
 };
 
 void on_capture_done(struct dmabuf_capture* capture);
@@ -310,6 +313,19 @@ int wayvnc_start_capture(struct wayvnc* self)
 	return 0;
 }
 
+void on_damage_check_done(struct pixman_region16* damage, void* userdata)
+{
+	struct wayvnc* self = userdata;
+
+	if (pixman_region_not_empty(damage))
+		nvnc_feed_frame(self->nvnc, self->current_fb, damage);
+
+	if (wayvnc_start_capture(self) < 0) {
+		log_error("Failed to start capture. Exiting...\n");
+		wayvnc_exit();
+	}
+}
+
 void wayvnc_process_frame(struct wayvnc* self, struct dmabuf_frame* frame)
 {
 	uint32_t format = fourcc_from_gl_format(self->renderer.read_format);
@@ -320,12 +336,22 @@ void wayvnc_process_frame(struct wayvnc* self, struct dmabuf_frame* frame)
 	render_dmabuf_frame(&self->renderer, frame);
 	render_copy_pixels(&self->renderer, addr, 0, frame->height);
 
+	if (self->last_fb)
+		nvnc_fb_unref(self->last_fb);
+
+	self->last_fb = self->current_fb;
+	self->current_fb = fb;
+
+	if (self->last_fb) {
+		nvnc_check_damage(self->current_fb, self->last_fb, 0, 0,
+				  frame->width, frame->height,
+				  on_damage_check_done, self);
+		return;
+	}
+
 	struct pixman_region16 damage;
 	pixman_region_init_rect(&damage, 0, 0, frame->width, frame->height);
-
-	nvnc_feed_frame(self->nvnc, fb, &damage);
-
-	nvnc_fb_unref(fb);
+	nvnc_feed_frame(self->nvnc, self->current_fb, &damage);
 	pixman_region_fini(&damage);
 
 	if (wayvnc_start_capture(self) < 0) {
@@ -359,7 +385,7 @@ void on_capture_done(struct dmabuf_capture* capture)
 
 int main(int argc, char* argv[])
 {
-	struct wayvnc self;
+	struct wayvnc self = { 0 };
 
 	if (init_wayland(&self) < 0) {
 		log_error("Failed to initialise wayland\n");
@@ -400,6 +426,9 @@ int main(int argc, char* argv[])
 
 	if (self.capture)
 		dmabuf_capture_stop(self.capture);
+
+	if (self.current_fb) nvnc_fb_unref(self.current_fb);
+	if (self.last_fb) nvnc_fb_unref(self.last_fb);
 
 	nvnc_close(self.nvnc);
 	renderer_destroy(&self.renderer);
