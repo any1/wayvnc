@@ -1,4 +1,4 @@
-DEPENDENCIES := libuv egl glesv2 wayland-client neatvnc
+DEPENDENCIES := libuv egl glesv2 wayland-client neatvnc pixman-1
 
 EXEC := wayvnc
 

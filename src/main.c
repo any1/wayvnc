@@ -11,6 +11,7 @@
 #include <wayland-client.h>
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
+#include <pixman.h>
 
 #include "wlr-export-dmabuf-unstable-v1.h"
 #include "render.h"
@@ -311,7 +312,21 @@ int wayvnc_start_capture(struct wayvnc* self)
 
 void wayvnc_process_frame(struct wayvnc* self, struct dmabuf_frame* frame)
 {
-	/* TODO */
+	uint32_t format = fourcc_from_gl_format(self->renderer.read_format);
+
+	struct nvnc_fb* fb = nvnc_fb_new(frame->width, frame->height, format);
+	void* addr = nvnc_fb_get_addr(fb);
+
+	render_dmabuf_frame(&self->renderer, frame);
+	render_copy_pixels(&self->renderer, addr, 0, frame->height);
+
+	struct pixman_region16 damage;
+	pixman_region_init_rect(&damage, 0, 0, frame->width, frame->height);
+
+	nvnc_feed_frame(self->nvnc, fb, &damage);
+
+	nvnc_fb_unref(fb);
+	pixman_region_fini(&damage);
 
 	if (wayvnc_start_capture(self) < 0) {
 		log_error("Failed to start capture. Exiting...\n");
