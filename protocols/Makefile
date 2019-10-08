@@ -2,7 +2,7 @@ WAYLAND_SCANNER ?= wayland-scanner
 
 PROTOCOLS := \
 	wlr-export-dmabuf-unstable-v1.xml \
-	wlr-output-management-unstable-v1.xml \
+	wlr-screencopy-unstable-v1.xml \
 
 SOURCES := $(PROTOCOLS:%.xml=build/%.c)
 HEADERS := $(PROTOCOLS:%.xml=build/%.h)

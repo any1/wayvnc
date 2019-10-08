@@ -30,6 +30,7 @@
 #include <pixman.h>
 
 #include "wlr-export-dmabuf-unstable-v1.h"
+#include "wlr-screencopy-unstable-v1.h"
 #include "render.h"
 #include "dmabuf.h"
 #include "strlcpy.h"
@@ -55,6 +56,9 @@ struct wayvnc {
 	struct zwlr_export_dmabuf_manager_v1* export_manager;
 	const struct output* selected_output;
 	struct dmabuf_capture* capture;
+
+	struct wl_shm* wl_shm;
+	struct zwlr_screencopy_manager_v1* screencopy_manager;
 
 	uv_poll_t wayland_poller;
 	uv_prepare_t flusher;
@@ -161,11 +165,25 @@ static void registry_add(void* data, struct wl_registry* registry,
 		return;
 	}
 
+	if (strcmp(interface, wl_shm_interface.name) == 0) {
+		self->wl_shm = wl_registry_bind(registry, id, &wl_shm_interface,
+						1);
+		return;
+	}
+
 	if (strcmp(interface, zwlr_export_dmabuf_manager_v1_interface.name) == 0) {
 		self->export_manager =
 			wl_registry_bind(registry, id,
 					 &zwlr_export_dmabuf_manager_v1_interface,
-					 version);
+					 1);
+		return;
+	}
+
+	if (strcmp(interface, zwlr_screencopy_manager_v1_interface.name) == 0) {
+		self->screencopy_manager =
+			wl_registry_bind(registry, id,
+					 &zwlr_screencopy_manager_v1_interface,
+					 2);
 		return;
 	}
 }

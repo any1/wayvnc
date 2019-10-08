@@ -7,11 +7,14 @@ SOURCES := \
 	src/render.c \
 	src/dmabuf.c \
 	src/strlcpy.c \
+	src/shm.c \
+	src/screencopy.c \
 
 include common.mk
 
 PROTOCOLS := \
 	$(BUILD_DIR)/proto-wlr-export-dmabuf-unstable-v1.o \
+	$(BUILD_DIR)/proto-wlr-screencopy-unstable-v1.o \
 
 VERSION=0.0.0
 
