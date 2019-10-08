@@ -19,8 +19,7 @@ ifndef DONT_STRIP
 	INSTALL_STRIP := -s --strip-program=$(STRIP)
 endif
 
-protocols/build/%.c:
-	make -C protocols
+all: $(BUILD_DIR)/$(EXEC) | proto
 
 $(BUILD_DIR)/%.o: src/%.c | $(BUILD_DIR) ; $(CC_OBJ)
 $(BUILD_DIR)/proto-%.o: protocols/build/%.c | $(BUILD_DIR) ; $(CC_OBJ)
@@ -30,8 +29,12 @@ $(BUILD_DIR)/$(EXEC): $(OBJECTS) $(PROTOCOLS) | $(BUILD_DIR) ; $(LINK_EXE)
 install: $(EXEC)
 	install $(INSTALL_STRIP) -Dt $(DESTDIR)$(PREFIX)/bin $(BUILD_DIR)/$(EXEC)
 
+.PHONY: proto
+proto:
+	make -C protocols
+
 .PHONY: proto_clean
 proto_clean:
 	make -C protocols clean
 
-clean: #proto_clean
+clean: proto_clean
