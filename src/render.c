@@ -20,6 +20,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <assert.h>
+#include <wayland-client.h>
 
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
@@ -52,6 +53,24 @@
 #define X(type, name) type name;
 	X_GL_EXTENSIONS
 #undef X
+
+GLenum gl_format_from_wl_shm(GLuint* result, enum wl_shm_format format)
+{
+	switch (format) {
+	case WL_SHM_FORMAT_ARGB8888:
+	case WL_SHM_FORMAT_XRGB8888:
+		*result = GL_BGRA_EXT;
+		return 0;
+	case WL_SHM_FORMAT_ABGR8888:
+	case WL_SHM_FORMAT_XBGR8888:
+		*result = GL_RGBA;
+		return 0;
+	default:
+		break;
+	}
+
+	return -1;
+}
 
 static inline void* gl_load_single_extension(const char* name)
 {
@@ -161,6 +180,14 @@ static const char dmabuf_fragment_src[] =
 "#extension GL_OES_EGL_image_external: require\n\n"
 "precision mediump float;\n"
 "uniform samplerExternalOES u_tex;\n"
+"varying vec2 v_texture;\n"
+"void main() {\n"
+"    gl_FragColor = texture2D(u_tex, v_texture);\n"
+"}\n";
+
+static const char texture_fragment_src[] =
+"precision mediump float;\n"
+"uniform sampler2D u_tex;\n"
 "varying vec2 v_texture;\n"
 "void main() {\n"
 "    gl_FragColor = texture2D(u_tex, v_texture);\n"
@@ -317,7 +344,10 @@ int renderer_init(struct renderer* self, uint32_t width, uint32_t height)
 				      dmabuf_fragment_src) < 0)
 		goto shader_failure;
 
-	glUseProgram(self->dmabuf_shader_program);
+	if (gl_compile_shader_program(&self->texture_shader_program,
+				      dmabuf_vertex_src,
+				      texture_fragment_src) < 0)
+		goto shader_failure;
 
 	self->width = width;
 	self->height = height;
@@ -392,11 +422,38 @@ int render_dmabuf_frame(struct renderer* self, struct dmabuf_frame* frame)
 	glBindTexture(GL_TEXTURE_EXTERNAL_OES, tex);
 	glEGLImageTargetTexture2DOES(GL_TEXTURE_EXTERNAL_OES, image);
 
+	glUseProgram(self->dmabuf_shader_program);
 	gl_render();
 
 	glBindTexture(GL_TEXTURE_2D, 0);
 	glDeleteTextures(1, &tex);
 	eglDestroyImageKHR(self->display, image);
+
+	return 0;
+}
+
+int render_framebuffer(struct renderer* self, const void* addr, uint32_t format,
+		       uint32_t width, uint32_t height, uint32_t stride)
+{
+	GLuint tex;
+	glGenTextures(1, &tex);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, tex);
+
+	GLenum gl_format;
+	if (gl_format_from_wl_shm(&gl_format, format) < 0)
+		return -1;
+
+	glPixelStorei(GL_UNPACK_ROW_LENGTH_EXT, stride / 4);
+	glTexImage2D(GL_TEXTURE_2D, 0, self->read_format, width, height, 0,
+		     gl_format, GL_UNSIGNED_BYTE, addr);
+	glPixelStorei(GL_UNPACK_ROW_LENGTH_EXT, 0);
+
+	glUseProgram(self->texture_shader_program);
+	gl_render();
+
+	glBindTexture(GL_TEXTURE_2D, 0);
+	glDeleteTextures(1, &tex);
 
 	return 0;
 }
