@@ -148,25 +148,27 @@ static int gl_load_shader(GLuint* dst, const char* source, GLenum type)
 	return 0;
 }
 
-static int gl_compile_shader_program(GLuint* dst)
-{
-	static const char vertex_src[] =
-	"attribute vec2 pos;\n"
-	"attribute vec2 texture;\n"
-	"varying vec2 v_texture;\n"
-	"void main() {\n"
-	"    v_texture = vec2(texture.s, 1.0 - texture.t);\n"
-	"    gl_Position = vec4(pos, 0, 1);\n"
-	"}\n";
+static const char dmabuf_vertex_src[] =
+"attribute vec2 pos;\n"
+"attribute vec2 texture;\n"
+"varying vec2 v_texture;\n"
+"void main() {\n"
+"    v_texture = vec2(texture.s, 1.0 - texture.t);\n"
+"    gl_Position = vec4(pos, 0, 1);\n"
+"}\n";
 
-	static const char fragment_src[] =
-	"#extension GL_OES_EGL_image_external: require\n\n"
-	"precision mediump float;\n"
-	"uniform samplerExternalOES u_tex;\n"
-	"varying vec2 v_texture;\n"
-	"void main() {\n"
-	"    gl_FragColor = texture2D(u_tex, v_texture);\n"
-	"}\n";
+static const char dmabuf_fragment_src[] =
+"#extension GL_OES_EGL_image_external: require\n\n"
+"precision mediump float;\n"
+"uniform samplerExternalOES u_tex;\n"
+"varying vec2 v_texture;\n"
+"void main() {\n"
+"    gl_FragColor = texture2D(u_tex, v_texture);\n"
+"}\n";
+
+static int gl_compile_shader_program(GLuint* dst, const char* vertex_src,
+				     const char* fragment_src)
+{
 
 	int rc = -1;
 	GLuint vertex, fragment;
@@ -244,7 +246,7 @@ void renderer_destroy(struct renderer* self)
 {
 	eglDestroySurface(self->display, self->surface);
 	eglDestroyContext(self->display, self->context);
-	glDeleteProgram(self->shader_program);
+	glDeleteProgram(self->dmabuf_shader_program);
 }
 
 int renderer_init(struct renderer* self, uint32_t width, uint32_t height)
@@ -310,10 +312,12 @@ int renderer_init(struct renderer* self, uint32_t width, uint32_t height)
 	if (gl_load_late_extensions() < 0)
 		goto late_extension_failure;
 
-	if (gl_compile_shader_program(&self->shader_program) < 0)
+	if (gl_compile_shader_program(&self->dmabuf_shader_program,
+				      dmabuf_vertex_src,
+				      dmabuf_fragment_src) < 0)
 		goto shader_failure;
 
-	glUseProgram(self->shader_program);
+	glUseProgram(self->dmabuf_shader_program);
 
 	self->width = width;
 	self->height = height;

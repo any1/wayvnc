@@ -25,7 +25,7 @@ struct renderer {
 	EGLDisplay display;
 	EGLSurface surface;
 	EGLContext context;
-	GLuint shader_program;
+	GLuint dmabuf_shader_program;
 	uint32_t width;
 	uint32_t height;
 	GLint read_format;
