@@ -53,12 +53,12 @@ struct wayvnc {
 	struct wl_list outputs;
 
 	struct renderer renderer;
-	struct zwlr_export_dmabuf_manager_v1* export_manager;
 	const struct output* selected_output;
-	struct dmabuf_capture* capture;
 
 	struct wl_shm* wl_shm;
 	struct zwlr_screencopy_manager_v1* screencopy_manager;
+
+	struct dmabuf_capture dmabuf_backend;
 
 	uv_poll_t wayland_poller;
 	uv_prepare_t flusher;
@@ -172,7 +172,7 @@ static void registry_add(void* data, struct wl_registry* registry,
 	}
 
 	if (strcmp(interface, zwlr_export_dmabuf_manager_v1_interface.name) == 0) {
-		self->export_manager =
+		self->dmabuf_backend.manager =
 			wl_registry_bind(registry, id,
 					 &zwlr_export_dmabuf_manager_v1_interface,
 					 1);
@@ -205,7 +205,7 @@ static void registry_remove(void* data, struct wl_registry* registry,
 void wayvnc_destroy(struct wayvnc* self)
 {
 	output_list_destroy(&self->outputs);
-	zwlr_export_dmabuf_manager_v1_destroy(self->export_manager);
+	zwlr_export_dmabuf_manager_v1_destroy(self->dmabuf_backend.manager);
 	wl_display_disconnect(self->display);
 }
 
@@ -231,11 +231,14 @@ static int init_wayland(struct wayvnc* self)
 	wl_display_roundtrip(self->display);
 	wl_display_dispatch(self->display);
 
-	if (!self->export_manager) {
+	if (!self->dmabuf_backend.manager) {
 		log_error("Compositor does not support %s.\n",
 			   zwlr_export_dmabuf_manager_v1_interface.name);
 		goto export_manager_failure;
 	}
+
+	self->dmabuf_backend.on_done = on_capture_done;
+	self->dmabuf_backend.userdata = self;
 
 	return 0;
 
@@ -252,6 +255,7 @@ int wayvnc_select_first_output(struct wayvnc* self)
 
 	wl_list_for_each(out, &self->outputs, link) {
 		self->selected_output = out;
+		self->dmabuf_backend.output = out->wl_output;
 		return 0;
 	}
 
@@ -336,15 +340,7 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port)
 
 int wayvnc_start_capture(struct wayvnc* self)
 {
-	self->capture = dmabuf_capture_start(self->export_manager, false,
-					     self->selected_output->wl_output,
-					     on_capture_done);
-	if (!self->capture)
-		return -1;
-
-	self->capture->userdata = self;
-
-	return 0;
+	return dmabuf_capture_start(&self->dmabuf_backend);
 }
 
 void on_damage_check_done(struct pixman_region16* damage, void* userdata)
@@ -399,6 +395,8 @@ void on_capture_done(struct dmabuf_capture* capture)
 	struct wayvnc* self = capture->userdata;
 
 	switch (capture->status) {
+	case DMABUF_CAPTURE_IN_PROGRESS:
+		break;
 	case DMABUF_CAPTURE_FATAL:
 		log_error("Fatal error while capturing. Exiting...\n");
 		wayvnc_exit();
@@ -454,12 +452,9 @@ int main(int argc, char* argv[])
 	if (wayvnc_start_capture(&self) < 0)
 		goto capture_failure;
 
-	self.capture->userdata = &self;
-
 	uv_run(uv_default_loop(), UV_RUN_DEFAULT);
 
-	if (self.capture)
-		dmabuf_capture_stop(self.capture);
+	dmabuf_capture_stop(&self.dmabuf_backend);
 
 	if (self.current_fb) nvnc_fb_unref(self.current_fb);
 	if (self.last_fb) nvnc_fb_unref(self.last_fb);

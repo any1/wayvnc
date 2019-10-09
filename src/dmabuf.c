@@ -19,15 +19,16 @@
 #include <assert.h>
 #include <wayland-client.h>
 
+#include "logging.h"
 #include "dmabuf.h"
 #include "wlr-export-dmabuf-unstable-v1.h"
 
 void dmabuf_capture_stop(struct dmabuf_capture* self)
 {
-	if (self->zwlr_frame)
+	if (self->zwlr_frame) {
 		zwlr_export_dmabuf_frame_v1_destroy(self->zwlr_frame);
-
-	free(self);
+		self->zwlr_frame = NULL;
+	}
 }
 
 static void dmabuf_frame_start(void* data,
@@ -75,10 +76,10 @@ static void dmabuf_frame_ready(void* data,
 {
 	struct dmabuf_capture* self = data;
 
+	dmabuf_capture_stop(self);
+
 	self->status = DMABUF_CAPTURE_DONE;
 	self->on_done(self);
-
-	dmabuf_capture_stop(self);
 }
 
 static void dmabuf_frame_cancel(void* data,
@@ -89,22 +90,13 @@ static void dmabuf_frame_cancel(void* data,
 
 	self->status = reason == ZWLR_EXPORT_DMABUF_FRAME_V1_CANCEL_REASON_PERMANENT
 		     ? DMABUF_CAPTURE_FATAL : DMABUF_CAPTURE_DONE;
-	self->on_done(self);
 
 	dmabuf_capture_stop(self);
+	self->on_done(self);
 }
 
-struct dmabuf_capture*
-dmabuf_capture_start(struct zwlr_export_dmabuf_manager_v1* manager,
-		     bool overlay_cursor, struct wl_output* output,
-		     void (*on_done)(struct dmabuf_capture*))
+int dmabuf_capture_start(struct dmabuf_capture* self)
 {
-	struct dmabuf_capture* self = calloc(1, sizeof(*self));
-	if (!self)
-		return NULL;
-
-	self->on_done = on_done;
-
 	static const struct zwlr_export_dmabuf_frame_v1_listener
 	dmabuf_frame_listener = {
 		.frame = dmabuf_frame_start,
@@ -114,14 +106,16 @@ dmabuf_capture_start(struct zwlr_export_dmabuf_manager_v1* manager,
 	};
 
 	self->zwlr_frame =
-		zwlr_export_dmabuf_manager_v1_capture_output(manager,
-							    overlay_cursor,
-							    output);
+		zwlr_export_dmabuf_manager_v1_capture_output(self->manager,
+							     self->overlay_cursor,
+							     self->output);
 	if (!self->zwlr_frame)
-		return NULL;
+		return -1;
+
+	self->status = DMABUF_CAPTURE_IN_PROGRESS;
 
 	zwlr_export_dmabuf_frame_v1_add_listener(self->zwlr_frame,
 			&dmabuf_frame_listener, self);
 
-	return self;
+	return 0;
 }
