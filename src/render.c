@@ -268,10 +268,10 @@ int renderer_init(struct renderer* self, uint32_t width, uint32_t height)
 
 	static const EGLint cfg_attr[] = {
 		EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
-		EGL_ALPHA_SIZE, 0,
-		EGL_BLUE_SIZE, 1,
-		EGL_GREEN_SIZE, 1,
-		EGL_RED_SIZE, 1,
+		EGL_ALPHA_SIZE, 8,
+		EGL_BLUE_SIZE, 8,
+		EGL_GREEN_SIZE, 8,
+		EGL_RED_SIZE, 8,
 		EGL_NONE
 	};
 
