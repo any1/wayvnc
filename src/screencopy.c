@@ -70,6 +70,8 @@ static void screencopy_buffer(void* data,
 		screencopy_stop(self);
 		self->on_done(self);
 	}
+
+	zwlr_screencopy_frame_v1_copy(self->frame, self->buffer);
 }
 
 static void screencopy_flags(void* data,
