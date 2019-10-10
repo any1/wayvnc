@@ -20,9 +20,19 @@
 #include <stdbool.h>
 #include <sys/mman.h>
 #include <wayland-client.h>
+#include <libdrm/drm_fourcc.h>
 
 #include "shm.h"
 #include "screencopy.h"
+
+static uint32_t fourcc_from_wl_shm(enum wl_shm_format in)
+{
+	switch (in) {
+	case WL_SHM_FORMAT_ARGB8888: return DRM_FORMAT_ARGB8888;
+	case WL_SHM_FORMAT_XRGB8888: return DRM_FORMAT_XRGB8888;
+	default: return in;
+	}
+}
 
 static int screencopy_buffer_init(struct screencopy* self,
 				  enum wl_shm_format format, uint32_t width,
@@ -66,8 +76,10 @@ mmap_failure:
 	return -1;
 }
 
-void screencopy_stop(struct screencopy* self)
+static void screencopy_stop(struct frame_capture* fc)
 {
+	struct screencopy* self = (void*)fc;
+
 	if (self->frame) {
 		zwlr_screencopy_frame_v1_destroy(self->frame);
 		self->frame = NULL;
@@ -82,15 +94,16 @@ static void screencopy_buffer(void* data,
 	struct screencopy* self = data;
 
 	if (screencopy_buffer_init(self, format, width, height, stride) < 0) {
-		self->status = SCREENCOPY_STATUS_FATAL;
-		screencopy_stop(self);
-		self->on_done(self);
+		self->frame_capture.status = CAPTURE_FATAL;
+		screencopy_stop(&self->frame_capture);
+		self->frame_capture.on_done(&self->frame_capture);
 	}
 
-	self->format = format;
-	self->width = width;
-	self->height = height;
-	self->stride = stride;
+	self->frame_capture.frame_info.fourcc_format =
+		fourcc_from_wl_shm(format);
+	self->frame_capture.frame_info.width = width;
+	self->frame_capture.frame_info.height = height;
+	self->frame_capture.frame_info.stride = stride;
 
 	zwlr_screencopy_frame_v1_copy_with_damage(self->frame, self->buffer);
 }
@@ -115,18 +128,21 @@ static void screencopy_ready(void* data,
 	(void)nsec;
 
 	struct screencopy* self = data;
-	screencopy_stop(self);
-	self->status = SCREENCOPY_STATUS_DONE;
-	self->on_done(self);
+
+	screencopy_stop(&self->frame_capture);
+
+	self->frame_capture.status = CAPTURE_DONE;
+	self->frame_capture.on_done(&self->frame_capture);
 }
 
 static void screencopy_failed(void* data,
 			      struct zwlr_screencopy_frame_v1* frame)
 {
 	struct screencopy* self = data;
-	screencopy_stop(self);
-	self->status = SCREENCOPY_STATUS_FAILED;
-	self->on_done(self);
+
+	screencopy_stop(&self->frame_capture);
+	self->frame_capture.status = CAPTURE_FAILED;
+	self->frame_capture.on_done(&self->frame_capture);
 }
 
 static void screencopy_damage(void* data,
@@ -136,14 +152,16 @@ static void screencopy_damage(void* data,
 {
 	struct screencopy* self = data;
 
-	self->damage.x = x;
-	self->damage.y = y;
-	self->damage.width = width;
-	self->damage.height = height;
+	self->frame_capture.damage_hint.x = x;
+	self->frame_capture.damage_hint.y = y;
+	self->frame_capture.damage_hint.width = width;
+	self->frame_capture.damage_hint.height = height;
 }
 
-int screencopy_start(struct screencopy* self)
+static int screencopy_start(struct frame_capture* fc)
 {
+	struct screencopy* self = (void*)fc;
+
 	static const struct zwlr_screencopy_frame_v1_listener frame_listener = {
 		.buffer = screencopy_buffer,
 		.flags = screencopy_flags,
@@ -154,14 +172,20 @@ int screencopy_start(struct screencopy* self)
 
 	self->frame =
 		zwlr_screencopy_manager_v1_capture_output(self->manager, 
-							  self->overlay_cursor, 
-							  self->output);
+							  fc->overlay_cursor,
+							  fc->wl_output);
 	if (!self->frame)
 		return -1;
 
 	zwlr_screencopy_frame_v1_add_listener(self->frame, &frame_listener,
 					      self);
 
-	self->status = SCREENCOPY_STATUS_CAPTURING;
+	fc->status = CAPTURE_IN_PROGRESS;
 	return 0;
+}
+
+void screencopy_init(struct screencopy* self)
+{
+	self->frame_capture.backend.start = screencopy_start;
+	self->frame_capture.backend.stop = screencopy_stop;
 }

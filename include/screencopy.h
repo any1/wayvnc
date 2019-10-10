@@ -2,6 +2,7 @@
 
 #include <stdbool.h>
 #include "wlr-screencopy-unstable-v1.h"
+#include "frame-capture.h"
 
 struct zwlr_screencopy_manager_v1;
 struct zwlr_screencopy_frame_v1;
@@ -17,6 +18,8 @@ enum screencopy_status {
 };
 
 struct screencopy {
+	struct frame_capture frame_capture;
+
 	struct wl_shm* wl_shm;
 	struct wl_buffer* buffer;
 
@@ -25,26 +28,6 @@ struct screencopy {
 
 	struct zwlr_screencopy_manager_v1* manager;
 	struct zwlr_screencopy_frame_v1* frame;
-
-	bool overlay_cursor;
-	struct wl_output* output;
-	enum screencopy_status status;
-	void (*on_done)(struct screencopy*);
-
-	enum wl_shm_format format;
-	uint32_t width;
-	uint32_t height;
-	uint32_t stride;
-
-        struct {
-                uint32_t x;
-                uint32_t y;
-                uint32_t width;
-                uint32_t height;
-        } damage;
-
-	void* userdata;
 };
 
-int screencopy_start(struct screencopy* self);
-void screencopy_stop(struct screencopy* self);
+void screencopy_init(struct screencopy* self);

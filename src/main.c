@@ -58,6 +58,7 @@ struct wayvnc {
 
 	struct dmabuf_capture dmabuf_backend;
 	struct screencopy screencopy_backend;
+	struct frame_capture* capture_backend;
 
 	uv_poll_t wayland_poller;
 	uv_prepare_t flusher;
@@ -73,7 +74,7 @@ struct wayvnc {
 };
 
 void on_capture_done(struct dmabuf_capture* capture);
-void on_screencopy_done(struct screencopy* capture);
+void on_screencopy_done(struct frame_capture* capture);
 
 static void output_handle_geometry(void* data, struct wl_output* wl_output,
 				   int32_t x, int32_t y, int32_t phys_width,
@@ -243,8 +244,8 @@ static int init_wayland(struct wayvnc* self)
 	self->dmabuf_backend.on_done = on_capture_done;
 	self->dmabuf_backend.userdata = self;
 
-	self->screencopy_backend.on_done = on_screencopy_done;
-	self->screencopy_backend.userdata = self;
+	self->screencopy_backend.frame_capture.on_done = on_screencopy_done;
+	self->screencopy_backend.frame_capture.userdata = self;
 
 	return 0;
 
@@ -262,7 +263,8 @@ int wayvnc_select_first_output(struct wayvnc* self)
 	wl_list_for_each(out, &self->outputs, link) {
 		self->selected_output = out;
 		self->dmabuf_backend.output = out->wl_output;
-		self->screencopy_backend.output = out->wl_output;
+		self->screencopy_backend.frame_capture.wl_output
+			= out->wl_output;
 		return 0;
 	}
 
@@ -359,7 +361,7 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port)
 
 int wayvnc_start_capture(struct wayvnc* self)
 {
-	return screencopy_start(&self->screencopy_backend);
+	return frame_capture_start(self->capture_backend);
 //	return dmabuf_capture_start(&self->dmabuf_backend);
 }
 
@@ -388,10 +390,10 @@ void wayvnc_update_vnc(struct wayvnc* self, struct nvnc_fb* fb)
 	self->current_fb = fb;
 
 	if (self->last_fb) {
-		uint32_t hint_x = self->screencopy_backend.damage.x;
-		uint32_t hint_y = self->screencopy_backend.damage.y;
-		uint32_t hint_width = self->screencopy_backend.damage.width;
-		uint32_t hint_height = self->screencopy_backend.damage.height;
+		uint32_t hint_x = self->capture_backend->damage_hint.x;
+		uint32_t hint_y = self->capture_backend->damage_hint.y;
+		uint32_t hint_width = self->capture_backend->damage_hint.width;
+		uint32_t hint_height = self->capture_backend->damage_hint.height;
 
 		nvnc_check_damage(self->current_fb, self->last_fb, hint_x,
 				  hint_y, hint_width, hint_height,
@@ -428,9 +430,10 @@ void wayvnc_process_screen(struct wayvnc* self)
 	uint32_t format = fourcc_from_gl_format(self->renderer.read_format);
 
 	void* pixels = self->screencopy_backend.pixels;
-	uint32_t width = self->screencopy_backend.width;
-	uint32_t height = self->screencopy_backend.height;
-	uint32_t stride = self->screencopy_backend.stride;
+
+	uint32_t width = self->capture_backend->frame_info.width;
+	uint32_t height = self->capture_backend->frame_info.height;
+	uint32_t stride = self->capture_backend->frame_info.stride;
 
 	struct nvnc_fb* fb = nvnc_fb_new(width, height, format);
 	void* addr = nvnc_fb_get_addr(fb);
@@ -468,24 +471,26 @@ void on_capture_done(struct dmabuf_capture* capture)
 	}
 }
 
-void on_screencopy_done(struct screencopy* capture)
+void on_screencopy_done(struct frame_capture* capture)
 {
 	struct wayvnc* self = capture->userdata;
 
 	switch (capture->status) {
-	case SCREENCOPY_STATUS_CAPTURING:
+	case CAPTURE_STOPPED:
 		break;
-	case SCREENCOPY_STATUS_FATAL:
+	case CAPTURE_IN_PROGRESS:
+		break;
+	case CAPTURE_FATAL:
 		log_error("Fatal error while capturing. Exiting...\n");
 		wayvnc_exit();
 		break;
-	case SCREENCOPY_STATUS_FAILED:
+	case CAPTURE_FAILED:
 		if (wayvnc_start_capture(self) < 0) {
 			log_error("Failed to start capture. Exiting...\n");
 			wayvnc_exit();
 		}
 		break;
-	case SCREENCOPY_STATUS_DONE:
+	case CAPTURE_DONE:
 		self->n_frames++;
 		wayvnc_process_screen(self);
 		break;
@@ -525,6 +530,9 @@ int main(int argc, char* argv[])
 
 	if (init_nvnc(&self, "0.0.0.0", 5900) < 0)
 		goto nvnc_failure;
+
+	screencopy_init(&self.screencopy_backend);
+	self.capture_backend = &self.screencopy_backend.frame_capture;
 
 	if (wayvnc_start_capture(&self) < 0)
 		goto capture_failure;
