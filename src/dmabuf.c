@@ -23,8 +23,10 @@
 #include "dmabuf.h"
 #include "wlr-export-dmabuf-unstable-v1.h"
 
-void dmabuf_capture_stop(struct dmabuf_capture* self)
+static void dmabuf_capture_stop(struct frame_capture* fc)
 {
+	struct dmabuf_capture* self = (void*)fc;
+
 	if (self->zwlr_frame) {
 		zwlr_export_dmabuf_frame_v1_destroy(self->zwlr_frame);
 		self->zwlr_frame = NULL;
@@ -41,6 +43,7 @@ static void dmabuf_frame_start(void* data,
 			       uint32_t num_objects)
 {
 	struct dmabuf_capture* self = data;
+	struct frame_capture* fc = data;
 
 	uint64_t mod = ((uint64_t)mod_high << 32) | (uint64_t)mod_low;
 
@@ -53,6 +56,11 @@ static void dmabuf_frame_start(void* data,
 	self->frame.plane[1].modifier = mod;
 	self->frame.plane[2].modifier = mod;
 	self->frame.plane[3].modifier = mod;
+
+	fc->damage_hint.x = 0;
+	fc->damage_hint.y = 0;
+	fc->damage_hint.width = width;
+	fc->damage_hint.height = height;
 }
 
 static void dmabuf_frame_object(void* data,
@@ -62,6 +70,7 @@ static void dmabuf_frame_object(void* data,
 				uint32_t plane_index)
 {
 	struct dmabuf_capture* self = data;
+	struct frame_capture* fc = data;
 
 	self->frame.plane[plane_index].fd = fd;
 	self->frame.plane[plane_index].size = size;
@@ -75,28 +84,31 @@ static void dmabuf_frame_ready(void* data,
 			       uint32_t tv_nsec)
 {
 	struct dmabuf_capture* self = data;
+	struct frame_capture* fc = data;
 
-	dmabuf_capture_stop(self);
+	dmabuf_capture_stop(fc);
 
-	self->status = DMABUF_CAPTURE_DONE;
-	self->on_done(self);
+	fc->status = CAPTURE_DONE;
+	fc->on_done(fc);
 }
 
 static void dmabuf_frame_cancel(void* data,
 				struct zwlr_export_dmabuf_frame_v1* frame,
 				uint32_t reason)
 {
-	struct dmabuf_capture* self = data;
+	struct frame_capture* fc = data;
 
-	self->status = reason == ZWLR_EXPORT_DMABUF_FRAME_V1_CANCEL_REASON_PERMANENT
-		     ? DMABUF_CAPTURE_FATAL : DMABUF_CAPTURE_DONE;
+	fc->status = reason == ZWLR_EXPORT_DMABUF_FRAME_V1_CANCEL_REASON_PERMANENT
+		     ? CAPTURE_FATAL : CAPTURE_FAILED;
 
-	dmabuf_capture_stop(self);
-	self->on_done(self);
+	dmabuf_capture_stop(fc);
+	fc->on_done(fc);
 }
 
-int dmabuf_capture_start(struct dmabuf_capture* self)
+static int dmabuf_capture_start(struct frame_capture* fc)
 {
+	struct dmabuf_capture* self = (void*)fc;
+
 	static const struct zwlr_export_dmabuf_frame_v1_listener
 	dmabuf_frame_listener = {
 		.frame = dmabuf_frame_start,
@@ -107,15 +119,21 @@ int dmabuf_capture_start(struct dmabuf_capture* self)
 
 	self->zwlr_frame =
 		zwlr_export_dmabuf_manager_v1_capture_output(self->manager,
-							     self->overlay_cursor,
-							     self->output);
+							     fc->overlay_cursor,
+							     fc->wl_output);
 	if (!self->zwlr_frame)
 		return -1;
 
-	self->status = DMABUF_CAPTURE_IN_PROGRESS;
+	fc->status = CAPTURE_IN_PROGRESS;
 
 	zwlr_export_dmabuf_frame_v1_add_listener(self->zwlr_frame,
 			&dmabuf_frame_listener, self);
 
 	return 0;
+}
+
+void dmabuf_capture_init(struct dmabuf_capture* self)
+{
+	self->fc.backend.start = dmabuf_capture_start;
+	self->fc.backend.stop = dmabuf_capture_stop;
 }

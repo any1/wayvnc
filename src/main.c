@@ -73,8 +73,7 @@ struct wayvnc {
 	uint32_t n_frames;
 };
 
-void on_capture_done(struct dmabuf_capture* capture);
-void on_screencopy_done(struct frame_capture* capture);
+void on_capture_done(struct frame_capture* capture);
 
 static void output_handle_geometry(void* data, struct wl_output* wl_output,
 				   int32_t x, int32_t y, int32_t phys_width,
@@ -241,10 +240,10 @@ static int init_wayland(struct wayvnc* self)
 		goto export_manager_failure;
 	}
 
-	self->dmabuf_backend.on_done = on_capture_done;
-	self->dmabuf_backend.userdata = self;
+	self->dmabuf_backend.fc.on_done = on_capture_done;
+	self->dmabuf_backend.fc.userdata = self;
 
-	self->screencopy_backend.frame_capture.on_done = on_screencopy_done;
+	self->screencopy_backend.frame_capture.on_done = on_capture_done;
 	self->screencopy_backend.frame_capture.userdata = self;
 
 	return 0;
@@ -262,7 +261,7 @@ int wayvnc_select_first_output(struct wayvnc* self)
 
 	wl_list_for_each(out, &self->outputs, link) {
 		self->selected_output = out;
-		self->dmabuf_backend.output = out->wl_output;
+		self->dmabuf_backend.fc.wl_output = out->wl_output;
 		self->screencopy_backend.frame_capture.wl_output
 			= out->wl_output;
 		return 0;
@@ -412,9 +411,10 @@ void wayvnc_update_vnc(struct wayvnc* self, struct nvnc_fb* fb)
 	}
 }
 
-void wayvnc_process_frame(struct wayvnc* self, struct dmabuf_frame* frame)
+void wayvnc_process_frame(struct wayvnc* self)
 {
 	uint32_t format = fourcc_from_gl_format(self->renderer.read_format);
+	struct dmabuf_frame* frame = &self->dmabuf_backend.frame;
 
 	struct nvnc_fb* fb = nvnc_fb_new(frame->width, frame->height, format);
 	void* addr = nvnc_fb_get_addr(fb);
@@ -445,33 +445,7 @@ void wayvnc_process_screen(struct wayvnc* self)
 	wayvnc_update_vnc(self, fb);
 }
 
-void on_capture_done(struct dmabuf_capture* capture)
-{
-	struct wayvnc* self = capture->userdata;
-
-	switch (capture->status) {
-	case DMABUF_CAPTURE_IN_PROGRESS:
-		break;
-	case DMABUF_CAPTURE_FATAL:
-		log_error("Fatal error while capturing. Exiting...\n");
-		wayvnc_exit();
-		break;
-	case DMABUF_CAPTURE_CANCELLED:
-		if (wayvnc_start_capture(self) < 0) {
-			log_error("Failed to start capture. Exiting...\n");
-			wayvnc_exit();
-		}
-		break;
-	case DMABUF_CAPTURE_DONE:
-		self->n_frames++;
-		wayvnc_process_frame(self, &capture->frame);
-		break;
-	case DMABUF_CAPTURE_UNSPEC:
-		abort();
-	}
-}
-
-void on_screencopy_done(struct frame_capture* capture)
+void on_capture_done(struct frame_capture* capture)
 {
 	struct wayvnc* self = capture->userdata;
 
@@ -492,7 +466,10 @@ void on_screencopy_done(struct frame_capture* capture)
 		break;
 	case CAPTURE_DONE:
 		self->n_frames++;
-		wayvnc_process_screen(self);
+		if (self->capture_backend == (struct frame_capture*)&self->screencopy_backend)
+			wayvnc_process_screen(self);
+		else
+			wayvnc_process_frame(self);
 		break;
 	}
 }
@@ -532,7 +509,8 @@ int main(int argc, char* argv[])
 		goto nvnc_failure;
 
 	screencopy_init(&self.screencopy_backend);
-	self.capture_backend = &self.screencopy_backend.frame_capture;
+	dmabuf_capture_init(&self.dmabuf_backend);
+	self.capture_backend = &self.dmabuf_backend.fc;
 
 	if (wayvnc_start_capture(&self) < 0)
 		goto capture_failure;
