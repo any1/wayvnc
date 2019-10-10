@@ -388,8 +388,14 @@ void wayvnc_update_vnc(struct wayvnc* self, struct nvnc_fb* fb)
 	self->current_fb = fb;
 
 	if (self->last_fb) {
-		nvnc_check_damage(self->current_fb, self->last_fb, 0, 0,
-				  width, height, on_damage_check_done, self);
+		uint32_t hint_x = self->screencopy_backend.damage.x;
+		uint32_t hint_y = self->screencopy_backend.damage.y;
+		uint32_t hint_width = self->screencopy_backend.damage.width;
+		uint32_t hint_height = self->screencopy_backend.damage.height;
+
+		nvnc_check_damage(self->current_fb, self->last_fb, hint_x,
+				  hint_y, hint_width, hint_height,
+				  on_damage_check_done, self);
 		return;
 	}
 

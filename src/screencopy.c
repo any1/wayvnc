@@ -92,7 +92,7 @@ static void screencopy_buffer(void* data,
 	self->height = height;
 	self->stride = stride;
 
-	zwlr_screencopy_frame_v1_copy(self->frame, self->buffer);
+	zwlr_screencopy_frame_v1_copy_with_damage(self->frame, self->buffer);
 }
 
 static void screencopy_flags(void* data,
@@ -136,7 +136,10 @@ static void screencopy_damage(void* data,
 {
 	struct screencopy* self = data;
 
-	/* TODO */
+	self->damage.x = x;
+	self->damage.y = y;
+	self->damage.width = width;
+	self->damage.height = height;
 }
 
 int screencopy_start(struct screencopy* self)
