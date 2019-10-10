@@ -19,6 +19,10 @@ enum screencopy_status {
 struct screencopy {
 	struct wl_shm* wl_shm;
 	struct wl_buffer* buffer;
+
+	void* pixels;
+	size_t bufsize;
+
 	struct zwlr_screencopy_manager_v1* manager;
 	struct zwlr_screencopy_frame_v1* frame;
 
@@ -26,4 +30,14 @@ struct screencopy {
 	struct wl_output* output;
 	enum screencopy_status status;
 	void (*on_done)(struct screencopy*);
+
+	enum wl_shm_format format;
+	uint32_t width;
+	uint32_t height;
+	uint32_t stride;
+
+	void* userdata;
 };
+
+int screencopy_start(struct screencopy* self);
+void screencopy_stop(struct screencopy* self);

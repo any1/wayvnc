@@ -33,6 +33,7 @@
 #include "wlr-screencopy-unstable-v1.h"
 #include "render.h"
 #include "dmabuf.h"
+#include "screencopy.h"
 #include "strlcpy.h"
 #include "logging.h"
 
@@ -55,22 +56,24 @@ struct wayvnc {
 	struct renderer renderer;
 	const struct output* selected_output;
 
-	struct wl_shm* wl_shm;
-	struct zwlr_screencopy_manager_v1* screencopy_manager;
-
 	struct dmabuf_capture dmabuf_backend;
+	struct screencopy screencopy_backend;
 
 	uv_poll_t wayland_poller;
 	uv_prepare_t flusher;
 	uv_signal_t signal_handler;
+	uv_timer_t performance_timer;
 
 	struct nvnc* nvnc;
 
 	struct nvnc_fb* current_fb;
 	struct nvnc_fb* last_fb;
+
+	uint32_t n_frames;
 };
 
 void on_capture_done(struct dmabuf_capture* capture);
+void on_screencopy_done(struct screencopy* capture);
 
 static void output_handle_geometry(void* data, struct wl_output* wl_output,
 				   int32_t x, int32_t y, int32_t phys_width,
@@ -166,8 +169,8 @@ static void registry_add(void* data, struct wl_registry* registry,
 	}
 
 	if (strcmp(interface, wl_shm_interface.name) == 0) {
-		self->wl_shm = wl_registry_bind(registry, id, &wl_shm_interface,
-						1);
+		self->screencopy_backend.wl_shm
+			= wl_registry_bind(registry, id, &wl_shm_interface, 1);
 		return;
 	}
 
@@ -180,7 +183,7 @@ static void registry_add(void* data, struct wl_registry* registry,
 	}
 
 	if (strcmp(interface, zwlr_screencopy_manager_v1_interface.name) == 0) {
-		self->screencopy_manager =
+		self->screencopy_backend.manager =
 			wl_registry_bind(registry, id,
 					 &zwlr_screencopy_manager_v1_interface,
 					 2);
@@ -240,6 +243,9 @@ static int init_wayland(struct wayvnc* self)
 	self->dmabuf_backend.on_done = on_capture_done;
 	self->dmabuf_backend.userdata = self;
 
+	self->screencopy_backend.on_done = on_screencopy_done;
+	self->screencopy_backend.userdata = self;
+
 	return 0;
 
 export_manager_failure:
@@ -256,6 +262,7 @@ int wayvnc_select_first_output(struct wayvnc* self)
 	wl_list_for_each(out, &self->outputs, link) {
 		self->selected_output = out;
 		self->dmabuf_backend.output = out->wl_output;
+		self->screencopy_backend.output = out->wl_output;
 		return 0;
 	}
 
@@ -290,6 +297,14 @@ void on_signal(uv_signal_t* handle, int signo)
 	wayvnc_exit();
 }
 
+void on_performance_tick(uv_timer_t* handle)
+{
+	struct wayvnc* self = wl_container_of(handle, self, performance_timer);
+
+	printf("%"PRIu32" FPS\n", self->n_frames);
+	self->n_frames = 0;
+}
+
 int init_main_loop(struct wayvnc* self)
 {
 	uv_loop_t* loop = uv_default_loop();
@@ -303,6 +318,10 @@ int init_main_loop(struct wayvnc* self)
 
 	uv_signal_init(loop, &self->signal_handler);
 	uv_signal_start(&self->signal_handler, on_signal, SIGINT);
+
+	uv_timer_init(loop, &self->performance_timer);
+	uv_timer_start(&self->performance_timer, on_performance_tick, 1000,
+		       1000);
 
 	return 0;
 }
@@ -340,7 +359,8 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port)
 
 int wayvnc_start_capture(struct wayvnc* self)
 {
-	return dmabuf_capture_start(&self->dmabuf_backend);
+	return screencopy_start(&self->screencopy_backend);
+//	return dmabuf_capture_start(&self->dmabuf_backend);
 }
 
 void on_damage_check_done(struct pixman_region16* damage, void* userdata)
@@ -349,6 +369,34 @@ void on_damage_check_done(struct pixman_region16* damage, void* userdata)
 
 	if (pixman_region_not_empty(damage))
 		nvnc_feed_frame(self->nvnc, self->current_fb, damage);
+
+	if (wayvnc_start_capture(self) < 0) {
+		log_error("Failed to start capture. Exiting...\n");
+		wayvnc_exit();
+	}
+}
+
+void wayvnc_update_vnc(struct wayvnc* self, struct nvnc_fb* fb)
+{
+	uint32_t width = nvnc_fb_get_width(fb);
+	uint32_t height = nvnc_fb_get_height(fb);
+
+	if (self->last_fb)
+		nvnc_fb_unref(self->last_fb);
+
+	self->last_fb = self->current_fb;
+	self->current_fb = fb;
+
+	if (self->last_fb) {
+		nvnc_check_damage(self->current_fb, self->last_fb, 0, 0,
+				  width, height, on_damage_check_done, self);
+		return;
+	}
+
+	struct pixman_region16 damage;
+	pixman_region_init_rect(&damage, 0, 0, width, height);
+	nvnc_feed_frame(self->nvnc, self->current_fb, &damage);
+	pixman_region_fini(&damage);
 
 	if (wayvnc_start_capture(self) < 0) {
 		log_error("Failed to start capture. Exiting...\n");
@@ -366,28 +414,26 @@ void wayvnc_process_frame(struct wayvnc* self, struct dmabuf_frame* frame)
 	render_dmabuf_frame(&self->renderer, frame);
 	render_copy_pixels(&self->renderer, addr, 0, frame->height);
 
-	if (self->last_fb)
-		nvnc_fb_unref(self->last_fb);
+	wayvnc_update_vnc(self, fb);
+}
 
-	self->last_fb = self->current_fb;
-	self->current_fb = fb;
+void wayvnc_process_screen(struct wayvnc* self)
+{
+	uint32_t format = fourcc_from_gl_format(self->renderer.read_format);
 
-	if (self->last_fb) {
-		nvnc_check_damage(self->current_fb, self->last_fb, 0, 0,
-				  frame->width, frame->height,
-				  on_damage_check_done, self);
-		return;
-	}
+	void* pixels = self->screencopy_backend.pixels;
+	uint32_t width = self->screencopy_backend.width;
+	uint32_t height = self->screencopy_backend.height;
+	uint32_t stride = self->screencopy_backend.stride;
 
-	struct pixman_region16 damage;
-	pixman_region_init_rect(&damage, 0, 0, frame->width, frame->height);
-	nvnc_feed_frame(self->nvnc, self->current_fb, &damage);
-	pixman_region_fini(&damage);
+	struct nvnc_fb* fb = nvnc_fb_new(width, height, format);
+	void* addr = nvnc_fb_get_addr(fb);
 
-	if (wayvnc_start_capture(self) < 0) {
-		log_error("Failed to start capture. Exiting...\n");
-		wayvnc_exit();
-	}
+	render_framebuffer(&self->renderer, pixels, format, width, height,
+			   stride);
+	render_copy_pixels(&self->renderer, addr, 0, height);
+
+	wayvnc_update_vnc(self, fb);
 }
 
 void on_capture_done(struct dmabuf_capture* capture)
@@ -408,10 +454,35 @@ void on_capture_done(struct dmabuf_capture* capture)
 		}
 		break;
 	case DMABUF_CAPTURE_DONE:
+		self->n_frames++;
 		wayvnc_process_frame(self, &capture->frame);
 		break;
 	case DMABUF_CAPTURE_UNSPEC:
 		abort();
+	}
+}
+
+void on_screencopy_done(struct screencopy* capture)
+{
+	struct wayvnc* self = capture->userdata;
+
+	switch (capture->status) {
+	case SCREENCOPY_STATUS_CAPTURING:
+		break;
+	case SCREENCOPY_STATUS_FATAL:
+		log_error("Fatal error while capturing. Exiting...\n");
+		wayvnc_exit();
+		break;
+	case SCREENCOPY_STATUS_FAILED:
+		if (wayvnc_start_capture(self) < 0) {
+			log_error("Failed to start capture. Exiting...\n");
+			wayvnc_exit();
+		}
+		break;
+	case SCREENCOPY_STATUS_DONE:
+		self->n_frames++;
+		wayvnc_process_screen(self);
+		break;
 	}
 }
 
@@ -454,7 +525,7 @@ int main(int argc, char* argv[])
 
 	uv_run(uv_default_loop(), UV_RUN_DEFAULT);
 
-	dmabuf_capture_stop(&self.dmabuf_backend);
+//	dmabuf_capture_stop(&self.dmabuf_backend);
 
 	if (self.current_fb) nvnc_fb_unref(self.current_fb);
 	if (self.last_fb) nvnc_fb_unref(self.last_fb);

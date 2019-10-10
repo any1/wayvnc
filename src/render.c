@@ -54,22 +54,13 @@
 	X_GL_EXTENSIONS
 #undef X
 
-GLenum gl_format_from_wl_shm(GLuint* result, enum wl_shm_format format)
+int gl_format_from_wl_shm(GLenum* result, enum wl_shm_format format)
 {
-	switch (format) {
-	case WL_SHM_FORMAT_ARGB8888:
-	case WL_SHM_FORMAT_XRGB8888:
-		*result = GL_BGRA_EXT;
-		return 0;
-	case WL_SHM_FORMAT_ABGR8888:
-	case WL_SHM_FORMAT_XBGR8888:
-		*result = GL_RGBA;
-		return 0;
-	default:
-		break;
-	}
+	*result = GL_BGRA_EXT;
 
-	return -1;
+	// TODO: Actually detect the format
+
+	return 0;
 }
 
 static inline void* gl_load_single_extension(const char* name)
@@ -183,6 +174,15 @@ static const char dmabuf_fragment_src[] =
 "varying vec2 v_texture;\n"
 "void main() {\n"
 "    gl_FragColor = texture2D(u_tex, v_texture);\n"
+"}\n";
+
+static const char texture_vertex_src[] =
+"attribute vec2 pos;\n"
+"attribute vec2 texture;\n"
+"varying vec2 v_texture;\n"
+"void main() {\n"
+"    v_texture = texture;\n"
+"    gl_Position = vec4(pos, 0, 1);\n"
 "}\n";
 
 static const char texture_fragment_src[] =
@@ -345,7 +345,7 @@ int renderer_init(struct renderer* self, uint32_t width, uint32_t height)
 		goto shader_failure;
 
 	if (gl_compile_shader_program(&self->texture_shader_program,
-				      dmabuf_vertex_src,
+				      texture_vertex_src,
 				      texture_fragment_src) < 0)
 		goto shader_failure;
 
@@ -447,6 +447,7 @@ int render_framebuffer(struct renderer* self, const void* addr, uint32_t format,
 	glPixelStorei(GL_UNPACK_ROW_LENGTH_EXT, stride / 4);
 	glTexImage2D(GL_TEXTURE_2D, 0, self->read_format, width, height, 0,
 		     gl_format, GL_UNSIGNED_BYTE, addr);
+	glGenerateMipmap(GL_TEXTURE_2D);
 	glPixelStorei(GL_UNPACK_ROW_LENGTH_EXT, 0);
 
 	glUseProgram(self->texture_shader_program);

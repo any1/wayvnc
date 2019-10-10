@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <stdbool.h>
+#include <sys/mman.h>
 #include <wayland-client.h>
 
 #include "shm.h"
@@ -36,18 +37,33 @@ static int screencopy_buffer_init(struct screencopy* self,
 	if (fd < 0)
 		return -1;
 
+	void* addr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	if (!addr)
+		goto mmap_failure;
+
 	struct wl_shm_pool* pool = wl_shm_create_pool(self->wl_shm, fd, size);
-	close(fd);
 	if (!pool)
-		return -1;
+		goto shm_failure;
 
 	struct wl_buffer* buffer =
 		wl_shm_pool_create_buffer(pool, 0, width, height, stride,
 					  format);
 	wl_shm_pool_destroy(pool);
+	if (!buffer)
+		goto shm_failure;
 
 	self->buffer = buffer;
+	self->pixels = addr;
+	self->bufsize = size;
+
+	close(fd);
 	return 0;
+
+shm_failure:
+	munmap(addr, size);
+mmap_failure:
+	close(fd);
+	return -1;
 }
 
 void screencopy_stop(struct screencopy* self)
@@ -70,6 +86,11 @@ static void screencopy_buffer(void* data,
 		screencopy_stop(self);
 		self->on_done(self);
 	}
+
+	self->format = format;
+	self->width = width;
+	self->height = height;
+	self->stride = stride;
 
 	zwlr_screencopy_frame_v1_copy(self->frame, self->buffer);
 }

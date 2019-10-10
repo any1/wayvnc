@@ -37,6 +37,8 @@ int renderer_init(struct renderer* self, uint32_t width, uint32_t height);
 void renderer_destroy(struct renderer* self);
 
 int render_dmabuf_frame(struct renderer* self, struct dmabuf_frame* frame);
+int render_framebuffer(struct renderer* self, const void* addr, uint32_t format,
+		       uint32_t width, uint32_t height, uint32_t stride);
 
 /* Copy a horizontal stripe from the GL frame into a pixel buffer */
 void render_copy_pixels(struct renderer* self, void* dst, uint32_t y,
