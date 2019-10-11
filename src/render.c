@@ -271,9 +271,13 @@ void gl_render(void)
 
 void renderer_destroy(struct renderer* self)
 {
+	glDeleteProgram(self->dmabuf_shader_program);
+	glDeleteProgram(self->texture_shader_program);
+	eglMakeCurrent(self->display, EGL_NO_SURFACE, EGL_NO_SURFACE,
+		       EGL_NO_CONTEXT);
 	eglDestroySurface(self->display, self->surface);
 	eglDestroyContext(self->display, self->context);
-	glDeleteProgram(self->dmabuf_shader_program);
+	eglTerminate(self->display);
 }
 
 int renderer_init(struct renderer* self, uint32_t width, uint32_t height)
