@@ -19,6 +19,8 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <unistd.h>
+#include <getopt.h>
 #include <assert.h>
 #include <inttypes.h>
 #include <neatvnc.h>
@@ -36,6 +38,12 @@
 #include "screencopy.h"
 #include "strlcpy.h"
 #include "logging.h"
+
+enum frame_capture_backend_type {
+	FRAME_CAPTURE_BACKEND_NONE = 0,
+	FRAME_CAPTURE_BACKEND_SCREENCOPY,
+	FRAME_CAPTURE_BACKEND_DMABUF,
+};
 
 struct output {
 	struct wl_output* wl_output;
@@ -74,6 +82,18 @@ struct wayvnc {
 };
 
 void on_capture_done(struct frame_capture* capture);
+
+static enum frame_capture_backend_type
+frame_capture_backend_from_string(const char* str)
+{
+	if (strcmp(str, "screencopy") == 0)
+		return FRAME_CAPTURE_BACKEND_SCREENCOPY;
+
+	if (strcmp(str, "dmabuf") == 0)
+		return FRAME_CAPTURE_BACKEND_DMABUF;
+
+	return FRAME_CAPTURE_BACKEND_NONE;
+}
 
 static void output_handle_geometry(void* data, struct wl_output* wl_output,
 				   int32_t x, int32_t y, int32_t phys_width,
@@ -474,9 +494,56 @@ void on_capture_done(struct frame_capture* capture)
 	}
 }
 
+int wayvnc_usage(FILE* stream, int rc)
+{
+	static const char* usage =
+"Usage: wayvnc [options]\n"
+"\n"
+"    -c,--frame-capturing=screencopy|dmabuf    Select frame capturing backend.\n"
+"    -h,--help                                 Get help (this text).\n"
+"\n";
+
+	fprintf(stream, "%s", usage);
+
+	return rc;
+}
+
 int main(int argc, char* argv[])
 {
 	struct wayvnc self = { 0 };
+
+	enum frame_capture_backend_type fcbackend =
+		FRAME_CAPTURE_BACKEND_DMABUF;
+
+	static const char* shortopts = "c:h";
+
+	static const struct option longopts[] = {
+		{ "frame-capturing", required_argument, NULL, 'c' },
+		{ "help", no_argument, NULL, 'h' },
+		{ NULL, 0, NULL, 0 }
+	};
+
+	while (1) {
+		int c = getopt_long(argc, argv, shortopts, longopts, NULL);
+		if (c < 0)
+			break;
+
+		switch (c) {
+		case 'c':
+			fcbackend = frame_capture_backend_from_string(optarg);
+			if (fcbackend == FRAME_CAPTURE_BACKEND_NONE) {
+				fprintf(stderr, "Invalid backend: %s\n\n",
+					optarg);
+
+				return wayvnc_usage(stderr, 1);
+			}
+			break;
+		case 'h':
+			return wayvnc_usage(stdout, 0);
+		default:
+			return wayvnc_usage(stderr, 1);
+		}
+	}
 
 	if (init_wayland(&self) < 0) {
 		log_error("Failed to initialise wayland\n");
@@ -510,14 +577,27 @@ int main(int argc, char* argv[])
 
 	screencopy_init(&self.screencopy_backend);
 	dmabuf_capture_init(&self.dmabuf_backend);
-	self.capture_backend = &self.dmabuf_backend.fc;
+
+	switch (fcbackend) {
+	case FRAME_CAPTURE_BACKEND_SCREENCOPY:
+		self.capture_backend = &self.screencopy_backend.frame_capture;
+		break;
+	case FRAME_CAPTURE_BACKEND_DMABUF:
+		self.capture_backend = &self.dmabuf_backend.fc;
+		break;
+	case FRAME_CAPTURE_BACKEND_NONE:
+		abort();
+		break;
+	}
 
 	if (wayvnc_start_capture(&self) < 0)
 		goto capture_failure;
 
 	uv_run(uv_default_loop(), UV_RUN_DEFAULT);
 
-//	dmabuf_capture_stop(&self.dmabuf_backend);
+	uv_loop_close(uv_default_loop());
+
+	frame_capture_stop(self.capture_backend);
 
 	if (self.current_fb) nvnc_fb_unref(self.current_fb);
 	if (self.last_fb) nvnc_fb_unref(self.last_fb);
@@ -525,6 +605,7 @@ int main(int argc, char* argv[])
 	nvnc_close(self.nvnc);
 	renderer_destroy(&self.renderer);
 	wayvnc_destroy(&self);
+
 	return 0;
 
 capture_failure:
