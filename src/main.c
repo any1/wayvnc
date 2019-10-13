@@ -204,21 +204,6 @@ failure:
 	return -1;
 }
 
-int wayvnc_select_first_output(struct wayvnc* self)
-{
-	struct output* out;
-
-	wl_list_for_each(out, &self->outputs, link) {
-		self->selected_output = out;
-		self->dmabuf_backend.fc.wl_output = out->wl_output;
-		self->screencopy_backend.frame_capture.wl_output
-			= out->wl_output;
-		return 0;
-	}
-
-	return -1;
-}
-
 void on_wayland_event(uv_poll_t* handle, int status, int event)
 {
 	struct wayvnc* self = wl_container_of(handle, self, wayland_poller);
@@ -441,13 +426,15 @@ int main(int argc, char* argv[])
 {
 	struct wayvnc self = { 0 };
 
+	int output_id = -1;
 	enum frame_capture_backend_type fcbackend =
 		FRAME_CAPTURE_BACKEND_DMABUF;
 
-	static const char* shortopts = "c:h";
+	static const char* shortopts = "c:o:h";
 
 	static const struct option longopts[] = {
 		{ "frame-capturing", required_argument, NULL, 'c' },
+		{ "output", required_argument, NULL, 'o' },
 		{ "help", no_argument, NULL, 'h' },
 		{ NULL, 0, NULL, 0 }
 	};
@@ -466,6 +453,9 @@ int main(int argc, char* argv[])
 
 				return wayvnc_usage(stderr, 1);
 			}
+			break;
+		case 'o':
+			output_id = atoi(optarg);
 			break;
 		case 'h':
 			return wayvnc_usage(stdout, 0);
@@ -486,11 +476,23 @@ int main(int argc, char* argv[])
 		printf("%"PRIu32": Make: %s. Model: %s\n", out->id, out->make,
 		       out->model);
 
-	/* TODO: Allow selecting output */
-	if (wayvnc_select_first_output(&self) < 0) {
+	if (output_id >= 0) {
+		out = output_find_by_id(&self.outputs, output_id);
+		if (!out) {
+			log_error("No such output\n");
+			goto failure;
+		}
+	}
+
+	out = output_first(&self.outputs);
+	if (!out) {
 		log_error("No output found\n");
 		goto failure;
 	}
+
+	self.selected_output = out;
+	self.dmabuf_backend.fc.wl_output = out->wl_output;
+	self.screencopy_backend.frame_capture.wl_output = out->wl_output;
 
 	if (renderer_init(&self.renderer, self.selected_output->width,
 			  self.selected_output->height) < 0) {

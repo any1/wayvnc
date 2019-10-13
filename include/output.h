@@ -30,3 +30,5 @@ struct output {
 struct output* output_new(struct wl_output* wl_output, uint32_t id);
 void output_destroy(struct output* output);
 void output_list_destroy(struct wl_list* list);
+struct output* output_find_by_id(struct wl_list* list, uint32_t id);
+struct output* output_first(struct wl_list* list);
