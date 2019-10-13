@@ -45,6 +45,7 @@ sources = [
 	'src/strlcpy.c',
 	'src/shm.c',
 	'src/screencopy.c',
+	'src/output.c',
 ]
 
 dependencies = [

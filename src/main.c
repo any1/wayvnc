@@ -38,22 +38,12 @@
 #include "screencopy.h"
 #include "strlcpy.h"
 #include "logging.h"
+#include "output.h"
 
 enum frame_capture_backend_type {
 	FRAME_CAPTURE_BACKEND_NONE = 0,
 	FRAME_CAPTURE_BACKEND_SCREENCOPY,
 	FRAME_CAPTURE_BACKEND_DMABUF,
-};
-
-struct output {
-	struct wl_output* wl_output;
-	struct wl_list link;
-
-	uint32_t id;
-	uint32_t width;
-	uint32_t height;
-	char make[256];
-	char model[256];
 };
 
 struct wayvnc {
@@ -95,53 +85,6 @@ frame_capture_backend_from_string(const char* str)
 	return FRAME_CAPTURE_BACKEND_NONE;
 }
 
-static void output_handle_geometry(void* data, struct wl_output* wl_output,
-				   int32_t x, int32_t y, int32_t phys_width,
-				   int32_t phys_height, int32_t subpixel,
-				   const char* make, const char* model,
-				   int32_t transform)
-{
-	struct output* output = data;
-
-	strlcpy(output->make, make, sizeof(output->make));
-	strlcpy(output->model, model, sizeof(output->make));
-}
-
-static void output_handle_mode(void* data, struct wl_output* wl_output,
-			       uint32_t flags, int32_t width, int32_t height,
-			       int32_t refresh)
-{
-	struct output* output = data;
-
-	if (!(flags & WL_OUTPUT_MODE_CURRENT))
-		return;
-
-	output->width = width;
-	output->height = height;
-}
-
-static void output_handle_done(void* data, struct wl_output* wl_output)
-{
-}
-
-static void output_handle_scale(void* data, struct wl_output* wl_output,
-				int32_t factor)
-{
-}
-
-static const struct wl_output_listener output_listener = {
-	.geometry = output_handle_geometry,
-	.mode = output_handle_mode,
-	.done = output_handle_done,
-	.scale = output_handle_scale,
-};
-
-void output_destroy(struct output* output)
-{
-	wl_output_destroy(output->wl_output);
-	free(output);
-}
-
 struct output* wayvnc_output_find(struct wayvnc* self, uint32_t id)
 {
 	struct output* output;
@@ -153,17 +96,6 @@ struct output* wayvnc_output_find(struct wayvnc* self, uint32_t id)
 	return NULL;
 }
 
-void output_list_destroy(struct wl_list* list)
-{
-	struct output* output;
-	struct output* tmp;
-
-	wl_list_for_each_safe(output, tmp, list, link) {
-		wl_list_remove(&output->link);
-		output_destroy(output);
-	}
-}
-
 static void registry_add(void* data, struct wl_registry* registry,
 			 uint32_t id, const char* interface,
 			 uint32_t version)
@@ -171,19 +103,16 @@ static void registry_add(void* data, struct wl_registry* registry,
 	struct wayvnc* self = data;
 
 	if (strcmp(interface, wl_output_interface.name) == 0) {
-		struct output* output = calloc(1, sizeof(*output));
-		if (!output) {
-			log_error("OOM\n");
+		struct wl_output* wl_output =
+			wl_registry_bind(registry, id, &wl_output_interface,
+					 version);
+		if (!wl_output)
 			return;
-		}
 
-		output->id = id;
-		output->wl_output = wl_registry_bind(registry, id,
-						     &wl_output_interface,
-						     version);
+		struct output* output = output_new(wl_output, id);
+		if (!output)
+			return;
 
-		wl_output_add_listener(output->wl_output, &output_listener,
-				       output);
 		wl_list_insert(&self->outputs, &output->link);
 		return;
 	}
