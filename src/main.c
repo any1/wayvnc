@@ -295,7 +295,6 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port)
 int wayvnc_start_capture(struct wayvnc* self)
 {
 	return frame_capture_start(self->capture_backend);
-//	return dmabuf_capture_start(&self->dmabuf_backend);
 }
 
 void on_damage_check_done(struct pixman_region16* damage, void* userdata)
