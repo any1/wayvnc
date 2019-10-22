@@ -2,7 +2,7 @@
 <protocol name="wlr_screencopy_unstable_v1">
   <copyright>
     Copyright © 2018 Simon Ser
-    Copyright © 2019 Marel Iceland ehf.
+    Copyright © 2019 Andri Yngvason
 
     Permission is hereby granted, free of charge, to any person obtaining a
     copy of this software and associated documentation files (the "Software"),
@@ -177,6 +177,7 @@
       </description>
     </request>
 
+    <!-- Version 2 additions -->
     <request name="copy_with_damage" since="2">
       <description summary="copy the frame when it's damaged">
         Same as copy, except it waits until there is damage to copy.
