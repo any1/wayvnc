@@ -271,6 +271,9 @@ void gl_render(void)
 
 void renderer_destroy(struct renderer* self)
 {
+	if (self->last_texture)
+		glDeleteTextures(1, &self->last_texture);
+
 	glDeleteProgram(self->dmabuf_shader_program);
 	glDeleteProgram(self->texture_shader_program);
 	eglMakeCurrent(self->display, EGL_NO_SURFACE, EGL_NO_SURFACE,
@@ -429,8 +432,11 @@ int render_dmabuf_frame(struct renderer* self, struct dmabuf_frame* frame)
 	glUseProgram(self->dmabuf_shader_program);
 	gl_render();
 
+	if (self->last_texture)
+		glDeleteTextures(1, &self->last_texture);
+	self->last_texture = tex;
+
 	glBindTexture(GL_TEXTURE_2D, 0);
-	glDeleteTextures(1, &tex);
 	eglDestroyImageKHR(self->display, image);
 
 	return 0;
@@ -457,8 +463,11 @@ int render_framebuffer(struct renderer* self, const void* addr, uint32_t format,
 	glUseProgram(self->texture_shader_program);
 	gl_render();
 
+	if (self->last_texture)
+		glDeleteTextures(1, &self->last_texture);
+	self->last_texture = tex;
+
 	glBindTexture(GL_TEXTURE_2D, 0);
-	glDeleteTextures(1, &tex);
 
 	return 0;
 }

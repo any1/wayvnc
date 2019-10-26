@@ -25,6 +25,7 @@ struct renderer {
 	EGLDisplay display;
 	EGLSurface surface;
 	EGLContext context;
+	GLuint last_texture;
 	GLuint dmabuf_shader_program;
 	GLuint texture_shader_program;
 	uint32_t width;
