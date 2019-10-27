@@ -201,10 +201,66 @@ static const char texture_fragment_src[] =
 "    gl_FragColor = texture2D(u_tex, v_texture);\n"
 "}\n";
 
+static char* read_file(const char* path)
+{
+	FILE* stream = fopen(path, "r");
+	if (!stream)
+		return NULL;
+
+	size_t size = 4096;
+	size_t rsize = 0;
+
+	char* contents = malloc(size);
+	if (!contents)
+		goto alloc_failure;
+
+	while (1) {
+		rsize += fread(contents + rsize, 1, size - rsize, stream);
+		if (rsize < size)
+			break;
+
+		size *= 2;
+		contents = realloc(contents, size);
+		if (!contents)
+			goto read_failure;
+	}
+
+	if (ferror(stream))
+		goto read_failure;
+
+	if (rsize == size) {
+		contents = realloc(contents, size + 1);
+		if (!contents)
+			goto read_failure;
+	}
+
+	contents[rsize] = '\0';
+
+	fclose(stream);
+	return contents;
+
+read_failure:
+	free(contents);
+alloc_failure:
+	fclose(stream);
+	return NULL;
+}
+
+static int gl_load_shader_from_file(GLuint* dst, const char* path, GLenum type)
+{
+	char* source = read_file(path);
+	if (!source)
+		return -1;
+
+	int rc = gl_load_shader(dst, source, type);
+
+	free(source);
+	return rc;
+}
+
 static int gl_compile_shader_program(GLuint* dst, const char* vertex_src,
 				     const char* fragment_src)
 {
-
 	int rc = -1;
 	GLuint vertex, fragment;
 
