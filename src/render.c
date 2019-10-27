@@ -166,41 +166,6 @@ static int gl_load_shader(GLuint* dst, const char* source, GLenum type)
 	return 0;
 }
 
-static const char dmabuf_vertex_src[] =
-"attribute vec2 pos;\n"
-"attribute vec2 texture;\n"
-"varying vec2 v_texture;\n"
-"void main() {\n"
-"    v_texture = vec2(texture.s, 1.0 - texture.t);\n"
-"    gl_Position = vec4(pos, 0, 1);\n"
-"}\n";
-
-static const char dmabuf_fragment_src[] =
-"#extension GL_OES_EGL_image_external: require\n\n"
-"precision mediump float;\n"
-"uniform samplerExternalOES u_tex;\n"
-"varying vec2 v_texture;\n"
-"void main() {\n"
-"    gl_FragColor = texture2D(u_tex, v_texture);\n"
-"}\n";
-
-static const char texture_vertex_src[] =
-"attribute vec2 pos;\n"
-"attribute vec2 texture;\n"
-"varying vec2 v_texture;\n"
-"void main() {\n"
-"    v_texture = texture;\n"
-"    gl_Position = vec4(pos, 0, 1);\n"
-"}\n";
-
-static const char texture_fragment_src[] =
-"precision mediump float;\n"
-"uniform sampler2D u_tex;\n"
-"varying vec2 v_texture;\n"
-"void main() {\n"
-"    gl_FragColor = texture2D(u_tex, v_texture);\n"
-"}\n";
-
 static char* read_file(const char* path)
 {
 	FILE* stream = fopen(path, "r");
@@ -258,16 +223,17 @@ static int gl_load_shader_from_file(GLuint* dst, const char* path, GLenum type)
 	return rc;
 }
 
-static int gl_compile_shader_program(GLuint* dst, const char* vertex_src,
-				     const char* fragment_src)
+static int gl_compile_shader_program(GLuint* dst, const char* vertex_path,
+				     const char* fragment_path)
 {
 	int rc = -1;
 	GLuint vertex, fragment;
 
-	if (gl_load_shader(&vertex, vertex_src, GL_VERTEX_SHADER) < 0)
+	if (gl_load_shader_from_file(&vertex, vertex_path, GL_VERTEX_SHADER) < 0)
 		return -1;
 
-	if (gl_load_shader(&fragment, fragment_src, GL_FRAGMENT_SHADER) < 0)
+	if (gl_load_shader_from_file(&fragment, fragment_path,
+				     GL_FRAGMENT_SHADER) < 0)
 		goto fragment_failure;
 
 	GLuint program = glCreateProgram();
@@ -408,13 +374,13 @@ int renderer_init(struct renderer* self, uint32_t width, uint32_t height)
 		goto late_extension_failure;
 
 	if (gl_compile_shader_program(&self->dmabuf_shader_program,
-				      dmabuf_vertex_src,
-				      dmabuf_fragment_src) < 0)
+				      "shaders/dmabuf-vertex.glsl",
+				      "shaders/dmabuf-fragment.glsl") < 0)
 		goto shader_failure;
 
 	if (gl_compile_shader_program(&self->texture_shader_program,
-				      texture_vertex_src,
-				      texture_fragment_src) < 0)
+				      "shaders/texture-vertex.glsl",
+				      "shaders/texture-fragment.glsl") < 0)
 		goto shader_failure;
 
 	self->width = width;
