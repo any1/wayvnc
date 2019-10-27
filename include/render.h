@@ -18,6 +18,7 @@
 
 #include <GLES2/gl2.h>
 #include <EGL/egl.h>
+#include <pixman.h>
 
 struct dmabuf_frame;
 
@@ -28,10 +29,12 @@ struct renderer {
 	GLuint last_texture;
 	GLuint dmabuf_shader_program;
 	GLuint texture_shader_program;
+	GLuint damage_shader_program;
 	uint32_t width;
 	uint32_t height;
 	GLint read_format;
 	GLint read_type;
+	struct pixman_region16 current_damage;
 };
 
 int renderer_init(struct renderer* self, uint32_t width, uint32_t height);
@@ -44,3 +47,5 @@ int render_framebuffer(struct renderer* self, const void* addr, uint32_t format,
 /* Copy a horizontal stripe from the GL frame into a pixel buffer */
 void render_copy_pixels(struct renderer* self, void* dst, uint32_t y,
                         uint32_t height);
+
+void render_check_damage(struct renderer* self, GLenum target, GLuint tex);

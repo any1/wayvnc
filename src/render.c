@@ -281,10 +281,14 @@ void renderer_destroy(struct renderer* self)
 	eglDestroySurface(self->display, self->surface);
 	eglDestroyContext(self->display, self->context);
 	eglTerminate(self->display);
+
+	pixman_region_fini(&self->current_damage);
 }
 
 int renderer_init(struct renderer* self, uint32_t width, uint32_t height)
 {
+	pixman_region_init(&self->current_damage);
+
 	if (!eglBindAPI(EGL_OPENGL_ES_API))
 		return -1;
 
@@ -430,6 +434,7 @@ int render_dmabuf_frame(struct renderer* self, struct dmabuf_frame* frame)
 	glEGLImageTargetTexture2DOES(GL_TEXTURE_EXTERNAL_OES, image);
 
 	glUseProgram(self->dmabuf_shader_program);
+	glViewport(0, 0, self->width, self->height);
 	gl_render();
 
 	if (self->last_texture)
@@ -460,7 +465,10 @@ int render_framebuffer(struct renderer* self, const void* addr, uint32_t format,
 	glGenerateMipmap(GL_TEXTURE_2D);
 	glPixelStorei(GL_UNPACK_ROW_LENGTH_EXT, 0);
 
+	render_check_damage(self, GL_TEXTURE_2D, tex);
+
 	glUseProgram(self->texture_shader_program);
+	glViewport(0, 0, self->width, self->height);
 	gl_render();
 
 	if (self->last_texture)
@@ -479,4 +487,41 @@ void render_copy_pixels(struct renderer* self, void* dst, uint32_t y,
 
 	glReadPixels(0, y, self->width, height, self->read_format,
 		    self->read_type, dst);
+}
+
+void render_check_damage(struct renderer* self, GLenum target, GLuint tex)
+{
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(target, tex);
+
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(target, self->last_texture);
+
+	// TODO: Create this damage shader program
+	glUseProgram(self->damage_shader_program);
+
+	int width = self->width / 32;
+	int height = self->height / 32;
+
+	uint32_t* buffer = malloc(width * height * 4);
+	if (!buffer)
+		return;
+
+	glViewport(0, 0, width, height);
+	gl_render();
+
+	glReadPixels(0, 0, width, height, self->read_format, self->read_type,
+		     buffer);
+
+	struct pixman_region16* damage = &self->current_damage;
+	pixman_region_clear(damage);
+
+	for (int y = 0; y < height; ++y)
+		for (int x = 0; x < width; ++x)
+			if (buffer[y * width + x])
+				pixman_region_union_rect(damage, damage,
+							 x * 32, y * 32,
+							 32, 32);
+
+	free(buffer);
 }
