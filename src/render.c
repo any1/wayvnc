@@ -34,6 +34,11 @@
 
 #define MAYBE_UNUSED __attribute__((unused))
 
+enum {
+	ATTR_INDEX_POS = 0,
+	ATTR_INDEX_TEXTURE,
+};
+
 #define XSTR(s) STR(s)
 #define STR(s) #s
 
@@ -241,8 +246,8 @@ static int gl_compile_shader_program(GLuint* dst, const char* vertex_path,
 	glAttachShader(program, vertex);
 	glAttachShader(program, fragment);
 
-	glBindAttribLocation(program, 0, "pos");
-	glBindAttribLocation(program, 1, "texture");
+	glBindAttribLocation(program, ATTR_INDEX_POS, "pos");
+	glBindAttribLocation(program, ATTR_INDEX_TEXTURE, "texture");
 
 	glLinkProgram(program);
 
@@ -287,8 +292,10 @@ void gl_render(void)
 
 	gl_clear();
 
-	glVertexAttribPointer (0, 2, GL_FLOAT, GL_FALSE, 0, s_vertices);
-	glVertexAttribPointer (1, 2, GL_FLOAT, GL_FALSE, 0, s_positions);
+	glVertexAttribPointer(ATTR_INDEX_POS, 2, GL_FLOAT, GL_FALSE, 0,
+			      s_vertices);
+	glVertexAttribPointer(ATTR_INDEX_TEXTURE, 2, GL_FLOAT, GL_FALSE, 0,
+			      s_positions);
 
 	glEnableVertexAttribArray(0);
 	glEnableVertexAttribArray(1);
@@ -457,6 +464,7 @@ int render_dmabuf_frame(struct renderer* self, struct dmabuf_frame* frame)
 	glEGLImageTargetTexture2DOES(GL_TEXTURE_EXTERNAL_OES, image);
 
 	glUseProgram(self->dmabuf_shader_program);
+	glUniform1i(glGetUniformLocation(self->dmabuf_shader_program, "u_tex"), 0);
 	gl_render();
 
 	glBindTexture(GL_TEXTURE_2D, 0);
@@ -485,6 +493,7 @@ int render_framebuffer(struct renderer* self, const void* addr, uint32_t format,
 	glPixelStorei(GL_UNPACK_ROW_LENGTH_EXT, 0);
 
 	glUseProgram(self->texture_shader_program);
+	glUniform1i(glGetUniformLocation(self->texture_shader_program, "u_tex"), 0);
 	gl_render();
 
 	glBindTexture(GL_TEXTURE_2D, 0);
