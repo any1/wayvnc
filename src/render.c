@@ -270,7 +270,7 @@ void gl_clear(void)
 	glClear(GL_COLOR_BUFFER_BIT);
 }
 
-void gl_render(void)
+void gl_render(struct renderer* self)
 {
 	static const GLfloat s_vertices[4][2] = {
 		{ -1.0, 1.0 },
@@ -288,8 +288,13 @@ void gl_render(void)
 
 	gl_clear();
 
-	glVertexAttribPointer (0, 2, GL_FLOAT, GL_FALSE, 0, s_vertices);
-	glVertexAttribPointer (1, 2, GL_FLOAT, GL_FALSE, 0, s_positions);
+	glVertexAttribPointer(ATTR_INDEX_POS, 2, GL_FLOAT, GL_FALSE, 0,
+			      s_vertices);
+	glVertexAttribPointer(ATTR_INDEX_TEXTURE, 2, GL_FLOAT, GL_FALSE, 0,
+			      s_positions);
+
+	glVertexAttrib1f(ATTR_INDEX_WIDTH, self->width);
+	glVertexAttrib1f(ATTR_INDEX_HEIGHT, self->height);
 
 	glEnableVertexAttribArray(0);
 	glEnableVertexAttribArray(1);
@@ -466,7 +471,7 @@ int render_dmabuf_frame(struct renderer* self, struct dmabuf_frame* frame)
 
 	glUseProgram(self->dmabuf_shader_program);
 	glViewport(0, 0, self->width, self->height);
-	gl_render();
+	gl_render(self);
 
 	if (self->last_texture)
 		glDeleteTextures(1, &self->last_texture);
@@ -500,7 +505,7 @@ int render_framebuffer(struct renderer* self, const void* addr, uint32_t format,
 
 	glUseProgram(self->texture_shader_program);
 	glViewport(0, 0, self->width, self->height);
-	gl_render();
+	gl_render(self);
 
 	if (self->last_texture)
 		glDeleteTextures(1, &self->last_texture);
@@ -539,7 +544,7 @@ void render_check_damage(struct renderer* self, GLenum target, GLuint tex)
 		return;
 
 	glViewport(0, 0, width, height);
-	gl_render();
+	gl_render(self);
 
 	glReadPixels(0, 0, width, height, self->read_format, self->read_type,
 		     buffer);
