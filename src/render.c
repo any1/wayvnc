@@ -192,6 +192,14 @@ static char* read_file(const char* path)
 	if (ferror(stream))
 		goto read_failure;
 
+	if (rsize == size) {
+		contents = realloc(contents, size + 1);
+		if (!contents)
+			goto read_failure;
+	}
+
+	contents[rsize] = '\0';
+
 	fclose(stream);
 	return contents;
 
