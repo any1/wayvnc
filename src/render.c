@@ -33,6 +33,13 @@
 
 #define MAYBE_UNUSED __attribute__((unused))
 
+enum {
+	ATTR_INDEX_POS = 0,
+	ATTR_INDEX_TEXTURE,
+	ATTR_INDEX_WIDTH,
+	ATTR_INDEX_HEIGHT,
+};
+
 #define XSTR(s) STR(s)
 #define STR(s) #s
 
@@ -225,8 +232,10 @@ static int gl_compile_shader_program(GLuint* dst, const char* vertex_path,
 	glAttachShader(program, vertex);
 	glAttachShader(program, fragment);
 
-	glBindAttribLocation(program, 0, "pos");
-	glBindAttribLocation(program, 1, "texture");
+	glBindAttribLocation(program, ATTR_INDEX_POS, "pos");
+	glBindAttribLocation(program, ATTR_INDEX_TEXTURE, "texture");
+	glBindAttribLocation(program, ATTR_INDEX_WIDTH, "width");
+	glBindAttribLocation(program, ATTR_INDEX_HEIGHT, "height");
 
 	glLinkProgram(program);
 
