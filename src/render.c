@@ -312,6 +312,7 @@ void renderer_destroy(struct renderer* self)
 
 	glDeleteProgram(self->dmabuf_shader_program);
 	glDeleteProgram(self->texture_shader_program);
+	glDeleteProgram(self->damage_shader_program);
 	eglMakeCurrent(self->display, EGL_NO_SURFACE, EGL_NO_SURFACE,
 		       EGL_NO_CONTEXT);
 	eglDestroySurface(self->display, self->surface);
@@ -394,6 +395,11 @@ int renderer_init(struct renderer* self, uint32_t width, uint32_t height)
 	if (gl_compile_shader_program(&self->texture_shader_program,
 				      "shaders/texture-vertex.glsl",
 				      "shaders/texture-fragment.glsl") < 0)
+		goto shader_failure;
+
+	if (gl_compile_shader_program(&self->damage_shader_program,
+				      "shaders/texture-damage-vertex.glsl",
+				      "shaders/texture-damage-fragment.glsl") < 0)
 		goto shader_failure;
 
 	self->width = width;
@@ -554,7 +560,7 @@ void render_check_damage(struct renderer* self, GLenum target, GLuint tex)
 
 	for (int y = 0; y < height; ++y)
 		for (int x = 0; x < width; ++x)
-			if (buffer[y * width + x])
+			if (buffer[y * width + x] & 0xff00)
 				pixman_region_union_rect(damage, damage,
 							 x * 32, y * 32,
 							 32, 32);
