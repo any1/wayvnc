@@ -476,6 +476,8 @@ int render_dmabuf_frame(struct renderer* self, struct dmabuf_frame* frame)
 	glEGLImageTargetTexture2DOES(GL_TEXTURE_EXTERNAL_OES, image);
 
 	glUseProgram(self->dmabuf_shader_program);
+	glUniform1i(glGetUniformLocation(self->dmabuf_shader_program, "u_tex"), 0);
+
 	glViewport(0, 0, self->width, self->height);
 	gl_render(self);
 
@@ -501,15 +503,21 @@ int render_framebuffer(struct renderer* self, const void* addr, uint32_t format,
 	if (gl_format_from_wl_shm(&gl_format, format) < 0)
 		return -1;
 
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
 	glPixelStorei(GL_UNPACK_ROW_LENGTH_EXT, stride / 4);
 	glTexImage2D(GL_TEXTURE_2D, 0, self->read_format, width, height, 0,
 		     gl_format, GL_UNSIGNED_BYTE, addr);
-	glGenerateMipmap(GL_TEXTURE_2D);
 	glPixelStorei(GL_UNPACK_ROW_LENGTH_EXT, 0);
 
 	render_check_damage(self, GL_TEXTURE_2D, tex);
 
 	glUseProgram(self->texture_shader_program);
+	glUniform1i(glGetUniformLocation(self->texture_shader_program, "u_tex"), 0);
+
 	glViewport(0, 0, self->width, self->height);
 	gl_render(self);
 
@@ -539,8 +547,10 @@ void render_check_damage(struct renderer* self, GLenum target, GLuint tex)
 	glActiveTexture(GL_TEXTURE1);
 	glBindTexture(target, self->last_texture);
 
-	// TODO: Create this damage shader program
 	glUseProgram(self->damage_shader_program);
+
+	glUniform1i(glGetUniformLocation(self->damage_shader_program, "tex0"), 0);
+	glUniform1i(glGetUniformLocation(self->damage_shader_program, "tex1"), 1);
 
 	int width = self->width / 32;
 	int height = self->height / 32;
