@@ -46,6 +46,7 @@ sources = [
 	'src/shm.c',
 	'src/screencopy.c',
 	'src/output.c',
+	'src/pointer.c',
 ]
 
 dependencies = [

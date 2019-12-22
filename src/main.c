@@ -33,12 +33,14 @@
 
 #include "wlr-export-dmabuf-unstable-v1.h"
 #include "wlr-screencopy-unstable-v1.h"
+#include "wlr-virtual-pointer-unstable-v1.h"
 #include "render.h"
 #include "dmabuf.h"
 #include "screencopy.h"
 #include "strlcpy.h"
 #include "logging.h"
 #include "output.h"
+#include "pointer.h"
 
 enum frame_capture_backend_type {
 	FRAME_CAPTURE_BACKEND_NONE = 0,
@@ -57,6 +59,7 @@ struct wayvnc {
 	struct dmabuf_capture dmabuf_backend;
 	struct screencopy screencopy_backend;
 	struct frame_capture* capture_backend;
+	struct pointer pointer_backend;
 
 	uv_poll_t wayland_poller;
 	uv_prepare_t flusher;
@@ -138,6 +141,14 @@ static void registry_add(void* data, struct wl_registry* registry,
 					 2);
 		return;
 	}
+
+	if (strcmp(interface, zwlr_virtual_pointer_manager_v1_interface.name) == 0) {
+		self->pointer_backend.manager =
+			wl_registry_bind(registry, id,
+					 &zwlr_virtual_pointer_manager_v1_interface,
+					 1);
+		return;
+	}
 }
 
 static void registry_remove(void* data, struct wl_registry* registry,
@@ -157,7 +168,11 @@ static void registry_remove(void* data, struct wl_registry* registry,
 void wayvnc_destroy(struct wayvnc* self)
 {
 	output_list_destroy(&self->outputs);
-	zwlr_export_dmabuf_manager_v1_destroy(self->dmabuf_backend.manager);
+	zwlr_virtual_pointer_manager_v1_destroy(self->pointer_backend.manager);
+	if (self->dmabuf_backend.manager) {
+		pointer_destroy(&self->pointer_backend);
+		zwlr_export_dmabuf_manager_v1_destroy(self->dmabuf_backend.manager);
+	}
 	wl_display_disconnect(self->display);
 }
 
@@ -194,6 +209,14 @@ static int init_wayland(struct wayvnc* self)
 
 	self->screencopy_backend.frame_capture.on_done = on_capture_done;
 	self->screencopy_backend.frame_capture.userdata = self;
+
+	if (self->pointer_backend.manager) {
+		self->pointer_backend.vnc = self->nvnc;
+		pointer_init(&self->pointer_backend);
+	} else {
+		log_error("Compositor does not support %s.\n",
+			  zwlr_virtual_pointer_manager_v1_interface.name);
+	}
 
 	return 0;
 
@@ -271,6 +294,17 @@ uint32_t fourcc_from_gl_format(uint32_t format)
 	return DRM_FORMAT_INVALID;
 }
 
+static void on_pointer_event(struct nvnc_client* client, uint16_t x, uint16_t y,
+			     enum nvnc_button_mask button_mask)
+{
+	// TODO: Have a seat per client
+
+	struct nvnc* nvnc = nvnc_get_server(client);
+	struct wayvnc* wayvnc = nvnc_get_userdata(nvnc);
+
+	pointer_set(&wayvnc->pointer_backend, x, y, button_mask);
+}
+
 int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port)
 {
 	self->nvnc = nvnc_open(addr, port);
@@ -288,6 +322,9 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port)
 			    self->selected_output->width,
 			    self->selected_output->height,
 			    format);
+
+	if (self->pointer_backend.manager)
+		nvnc_set_pointer_fn(self->nvnc, on_pointer_event);
 
 	return 0;
 }
@@ -492,6 +529,12 @@ int main(int argc, char* argv[])
 	self.selected_output = out;
 	self.dmabuf_backend.fc.wl_output = out->wl_output;
 	self.screencopy_backend.frame_capture.wl_output = out->wl_output;
+
+	if (self.pointer_backend.manager) {
+		self.pointer_backend.width = out->width;
+		self.pointer_backend.height = out->height;
+	}
+
 
 	if (renderer_init(&self.renderer, self.selected_output->width,
 			  self.selected_output->height) < 0) {
