@@ -464,7 +464,7 @@ int main(int argc, char* argv[])
 
 	int output_id = -1;
 	enum frame_capture_backend_type fcbackend =
-		FRAME_CAPTURE_BACKEND_DMABUF;
+		FRAME_CAPTURE_BACKEND_SCREENCOPY;
 
 	static const char* shortopts = "c:o:h";
 
