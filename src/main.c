@@ -34,6 +34,7 @@
 #include "wlr-export-dmabuf-unstable-v1.h"
 #include "wlr-screencopy-unstable-v1.h"
 #include "wlr-virtual-pointer-unstable-v1.h"
+#include "virtual-keyboard-unstable-v1.h"
 #include "render.h"
 #include "dmabuf.h"
 #include "screencopy.h"
@@ -41,6 +42,7 @@
 #include "logging.h"
 #include "output.h"
 #include "pointer.h"
+#include "keyboard.h"
 
 enum frame_capture_backend_type {
 	FRAME_CAPTURE_BACKEND_NONE = 0,
@@ -52,6 +54,9 @@ struct wayvnc {
 	struct wl_display* display;
 	struct wl_registry* registry;
 	struct wl_list outputs;
+	struct wl_seat* seat;
+
+	struct zwp_virtual_keyboard_manager_v1* keyboard_manager;
 
 	struct renderer renderer;
 	const struct output* selected_output;
@@ -60,6 +65,7 @@ struct wayvnc {
 	struct screencopy screencopy_backend;
 	struct frame_capture* capture_backend;
 	struct pointer pointer_backend;
+	struct keyboard keyboard_backend;
 
 	uv_poll_t wayland_poller;
 	uv_prepare_t flusher;
@@ -149,6 +155,20 @@ static void registry_add(void* data, struct wl_registry* registry,
 					 1);
 		return;
 	}
+
+	if (strcmp(interface, wl_seat_interface.name) == 0) {
+		self->seat =
+			wl_registry_bind(registry, id, &wl_seat_interface, 7);
+		return;
+	}
+
+	if (strcmp(interface, zwp_virtual_keyboard_manager_v1_interface.name) == 0) {
+		self->keyboard_manager =
+			wl_registry_bind(registry, id,
+			                 &zwp_virtual_keyboard_manager_v1_interface,
+			                 1);
+		return;
+	}
 }
 
 static void registry_remove(void* data, struct wl_registry* registry,
@@ -168,6 +188,8 @@ static void registry_remove(void* data, struct wl_registry* registry,
 void wayvnc_destroy(struct wayvnc* self)
 {
 	output_list_destroy(&self->outputs);
+	zwp_virtual_keyboard_v1_destroy(self->keyboard_backend.virtual_keyboard);
+	zwp_virtual_keyboard_manager_v1_destroy(self->keyboard_manager);
 	zwlr_virtual_pointer_manager_v1_destroy(self->pointer_backend.manager);
 	if (self->dmabuf_backend.manager) {
 		pointer_destroy(&self->pointer_backend);
@@ -217,6 +239,15 @@ static int init_wayland(struct wayvnc* self)
 		log_error("Compositor does not support %s.\n",
 			  zwlr_virtual_pointer_manager_v1_interface.name);
 	}
+
+	assert(self->seat);
+	assert(self->keyboard_manager);
+
+	self->keyboard_backend.virtual_keyboard =
+		zwp_virtual_keyboard_manager_v1_create_virtual_keyboard(
+			self->keyboard_manager, self->seat);
+
+	keyboard_init(&self->keyboard_backend);
 
 	return 0;
 
@@ -305,6 +336,15 @@ static void on_pointer_event(struct nvnc_client* client, uint16_t x, uint16_t y,
 	pointer_set(&wayvnc->pointer_backend, x, y, button_mask);
 }
 
+static void on_key_event(struct nvnc_client* client, uint32_t symbol,
+                         bool is_pressed)
+{
+	struct nvnc* nvnc = nvnc_get_server(client);
+	struct wayvnc* wayvnc = nvnc_get_userdata(nvnc);
+
+	keyboard_feed(&wayvnc->keyboard_backend, symbol, is_pressed);
+}
+
 int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port)
 {
 	self->nvnc = nvnc_open(addr, port);
@@ -325,6 +365,9 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port)
 
 	if (self->pointer_backend.manager)
 		nvnc_set_pointer_fn(self->nvnc, on_pointer_event);
+
+	if (self->keyboard_backend.virtual_keyboard)
+		nvnc_set_key_fn(self->nvnc, on_key_event);
 
 	return 0;
 }

@@ -21,6 +21,7 @@ pixman = dependency('pixman-1')
 libuv = dependency('libuv')
 egl = dependency('egl')
 glesv2 = dependency('glesv2')
+xkbcommon = dependency('xkbcommon')
 wayland_client = dependency('wayland-client')
 
 neatvnc_project = subproject(
@@ -47,6 +48,7 @@ sources = [
 	'src/screencopy.c',
 	'src/output.c',
 	'src/pointer.c',
+	'src/keyboard.c',
 ]
 
 dependencies = [
@@ -57,6 +59,7 @@ dependencies = [
 	glesv2,
 	wayland_client,
 	neatvnc,
+	xkbcommon,
 	client_protos,
 ]
 
