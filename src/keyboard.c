@@ -12,6 +12,10 @@
  * LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
  * OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
  * PERFORMANCE OF THIS SOFTWARE.
+ *
+ * Acknowledgements: Reading Josef Gajdusek's wvnc code helped me understand
+ * how to use the xkbcommon API to interface with the wayland virtual keyboard
+ * interface.
  */
 
 #include <stdlib.h>
