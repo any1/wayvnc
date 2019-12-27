@@ -273,7 +273,6 @@ void prepare_for_poll(uv_prepare_t* handle)
 void on_uv_walk(uv_handle_t* handle, void* arg)
 {
 	uv_unref(handle);
-	uv_close(handle, NULL);
 }
 
 void wayvnc_exit(void)
