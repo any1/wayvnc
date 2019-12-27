@@ -90,12 +90,17 @@ static void dmabuf_frame_ready(void* data,
 
 	fc->status = CAPTURE_DONE;
 	fc->on_done(fc);
+
+	for (size_t i = 0; i < self->frame.n_planes; ++i)
+		close(self->frame.plane[i].fd);
+
 }
 
 static void dmabuf_frame_cancel(void* data,
 				struct zwlr_export_dmabuf_frame_v1* frame,
 				uint32_t reason)
 {
+	struct dmabuf_capture* self = data;
 	struct frame_capture* fc = data;
 
 	fc->status = reason == ZWLR_EXPORT_DMABUF_FRAME_V1_CANCEL_REASON_PERMANENT
@@ -103,6 +108,9 @@ static void dmabuf_frame_cancel(void* data,
 
 	dmabuf_capture_stop(fc);
 	fc->on_done(fc);
+
+	for (size_t i = 0; i < self->frame.n_planes; ++i)
+		close(self->frame.plane[i].fd);
 }
 
 static int dmabuf_capture_start(struct frame_capture* fc)
