@@ -26,6 +26,7 @@
 #include <neatvnc.h>
 #include <uv.h>
 #include <libdrm/drm_fourcc.h>
+#include <wayland-client-protocol.h>
 #include <wayland-client.h>
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
@@ -188,13 +189,22 @@ static void registry_remove(void* data, struct wl_registry* registry,
 void wayvnc_destroy(struct wayvnc* self)
 {
 	output_list_destroy(&self->outputs);
+
+	wl_seat_destroy(self->seat);
+	wl_shm_destroy(self->screencopy_backend.wl_shm);
+
 	zwp_virtual_keyboard_v1_destroy(self->keyboard_backend.virtual_keyboard);
 	zwp_virtual_keyboard_manager_v1_destroy(self->keyboard_manager);
+	keyboard_destroy(&self->keyboard_backend);
+
 	zwlr_virtual_pointer_manager_v1_destroy(self->pointer_backend.manager);
-	if (self->dmabuf_backend.manager) {
-		pointer_destroy(&self->pointer_backend);
+	pointer_destroy(&self->pointer_backend);
+
+	zwlr_screencopy_manager_v1_destroy(self->screencopy_backend.manager);
+
+	if (self->dmabuf_backend.manager)
 		zwlr_export_dmabuf_manager_v1_destroy(self->dmabuf_backend.manager);
-	}
+
 	wl_display_disconnect(self->display);
 }
 
@@ -619,6 +629,7 @@ int main(int argc, char* argv[])
 
 	nvnc_close(self.nvnc);
 	renderer_destroy(&self.renderer);
+	screencopy_destroy(&self.screencopy_backend);
 	wayvnc_destroy(&self);
 
 	return 0;

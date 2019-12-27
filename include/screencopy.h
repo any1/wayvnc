@@ -31,3 +31,4 @@ struct screencopy {
 };
 
 void screencopy_init(struct screencopy* self);
+void screencopy_destroy(struct screencopy* self);

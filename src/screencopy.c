@@ -19,6 +19,7 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <sys/mman.h>
+#include <wayland-client-protocol.h>
 #include <wayland-client.h>
 #include <libdrm/drm_fourcc.h>
 
@@ -188,4 +189,9 @@ void screencopy_init(struct screencopy* self)
 {
 	self->frame_capture.backend.start = screencopy_start;
 	self->frame_capture.backend.stop = screencopy_stop;
+}
+
+void screencopy_destroy(struct screencopy* self)
+{
+	wl_buffer_destroy(self->buffer);
 }
