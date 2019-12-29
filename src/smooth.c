@@ -21,8 +21,8 @@
 
 double smooth(struct smooth* self, double input)
 {
-	double now = gettime_s();
-	double dt = now - self->last_time;
+	uint64_t now = gettime_us();
+	double dt = (now - self->last_time) * 1.0e-6;
 	self->last_time = now;
 
 	double factor = 1.0 - exp(-dt / self->time_constant);

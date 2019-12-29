@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <stdint.h>
+
 /*
  * This is an exponential smoothing filter with a time constant.
  *
@@ -27,7 +29,7 @@
 struct smooth {
 	double time_constant;
 
-	double last_time;
+	uint64_t last_time;
 	double last_result;
 };
 

@@ -1,11 +1,11 @@
 #include <time.h>
 #include <stdint.h>
 
-static inline double gettime_s(void)
+static inline uint64_t gettime_us(void)
 {
 	struct timespec ts = { 0 };
 	clock_gettime(CLOCK_MONOTONIC, &ts);
-	return (double)ts.tv_sec + (double)ts.tv_nsec / 1.0e-9;
+	return ts.tv_sec * 1000000ULL + (double)ts.tv_nsec / 1000ULL;
 }
 
 static inline uint32_t gettime_ms(void)
