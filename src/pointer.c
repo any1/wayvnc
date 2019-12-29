@@ -17,18 +17,11 @@
 #include <stdint.h>
 #include <wayland-client-protocol.h>
 #include <wayland-client.h>
-#include <time.h>
 #include <linux/input-event-codes.h>
 
 #include "pointer.h"
 #include "wlr-virtual-pointer-unstable-v1.h"
-
-static inline uint32_t gettime_ms(void)
-{
-	struct timespec ts = { 0 };
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-	return ts.tv_sec * 1000UL + ts.tv_nsec / 1000000UL;
-}
+#include "time-util.h"
 
 int pointer_init(struct pointer* self)
 {

@@ -15,20 +15,13 @@
  */
 
 #include "smooth.h"
+#include "time-util.h"
 
 #include <math.h>
-#include <time.h>
-
-static inline double smooth__gettime(void)
-{
-	struct timespec ts = { 0 };
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-	return (double)ts.tv_sec + (double)ts.tv_nsec / 1.0e-9;
-}
 
 double smooth(struct smooth* self, double input)
 {
-	double now = smooth__gettime();
+	double now = gettime_s();
 	double dt = now - self->last_time;
 	self->last_time = now;
 
