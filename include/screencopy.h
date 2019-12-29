@@ -1,8 +1,11 @@
 #pragma once
 
 #include <stdbool.h>
+#include <uv.h>
+
 #include "wlr-screencopy-unstable-v1.h"
 #include "frame-capture.h"
+#include "smooth.h"
 
 struct zwlr_screencopy_manager_v1;
 struct zwlr_screencopy_frame_v1;
@@ -28,6 +31,13 @@ struct screencopy {
 
 	struct zwlr_screencopy_manager_v1* manager;
 	struct zwlr_screencopy_frame_v1* frame;
+
+	uint64_t last_time;
+
+	struct smooth rate_filter;
+	double rate;
+	uv_timer_t timer;
+	bool is_rate_limited;
 };
 
 void screencopy_init(struct screencopy* self);

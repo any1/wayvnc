@@ -22,9 +22,16 @@
 #include <wayland-client-protocol.h>
 #include <wayland-client.h>
 #include <libdrm/drm_fourcc.h>
+#include <uv.h>
 
 #include "shm.h"
 #include "screencopy.h"
+#include "time-util.h"
+
+#define RATE_FILTER_TIME_CONSTANT 1.0 // s
+
+#define RATE_LIMIT 20.0 // Hz
+#define RATE_LIMIT_HYSTERISIS 5.0 // Hz
 
 static uint32_t fourcc_from_wl_shm(enum wl_shm_format in)
 {
@@ -134,6 +141,17 @@ static void screencopy_ready(void* data,
 
 	self->frame_capture.status = CAPTURE_DONE;
 	self->frame_capture.on_done(&self->frame_capture);
+
+	uint64_t t = gettime_us();
+	double dt = (t - self->last_time) * 1.0e-6;
+	self->last_time = t;
+
+	self->rate = smooth(&self->rate_filter, 1.0 / dt);
+
+	if (self->rate > RATE_LIMIT + RATE_LIMIT_HYSTERISIS)
+		self->is_rate_limited = true;
+	else if (self->rate < RATE_LIMIT - RATE_LIMIT_HYSTERISIS)
+		self->is_rate_limited = false;
 }
 
 static void screencopy_failed(void* data,
@@ -159,7 +177,7 @@ static void screencopy_damage(void* data,
 	self->frame_capture.damage_hint.height = height;
 }
 
-static int screencopy_start(struct frame_capture* fc)
+static int screencopy__start_capture(struct frame_capture* fc)
 {
 	struct screencopy* self = (void*)fc;
 
@@ -185,13 +203,54 @@ static int screencopy_start(struct frame_capture* fc)
 	return 0;
 }
 
+static void screencopy__poll(uv_timer_t* timer)
+{
+	struct screencopy* self = wl_container_of(timer, self, timer);
+	struct frame_capture* fc = (struct frame_capture*)self;
+
+	screencopy__start_capture(fc);
+}
+
+static int screencopy__start_capture_limited(struct frame_capture* fc)
+{
+	struct screencopy* self = (void*)fc;
+
+	uint64_t now = gettime_us();
+	double dt = (now - self->last_time) * 1.0e-6;
+	double time_left = (.5 / RATE_LIMIT - dt) * 1.0e3;
+
+	if (time_left < 0)
+		return screencopy__start_capture(fc);
+
+	if (uv_timer_start(&self->timer, screencopy__poll, time_left, 0) < 0)
+		return -1;
+
+	fc->status = CAPTURE_IN_PROGRESS;
+	return 0;
+}
+
+static int screencopy_start(struct frame_capture* fc)
+{
+	struct screencopy* self = (void*)fc;
+
+	if (fc->status == CAPTURE_IN_PROGRESS)
+		return -1;
+
+	return self->is_rate_limited ? screencopy__start_capture_limited(fc)
+	                             : screencopy__start_capture(fc);
+}
+
 void screencopy_init(struct screencopy* self)
 {
+	uv_timer_init(uv_default_loop(), &self->timer);
+	self->rate_filter.time_constant = RATE_FILTER_TIME_CONSTANT;
+
 	self->frame_capture.backend.start = screencopy_start;
 	self->frame_capture.backend.stop = screencopy_stop;
 }
 
 void screencopy_destroy(struct screencopy* self)
 {
+	uv_timer_stop(&self->timer);
 	wl_buffer_destroy(self->buffer);
 }

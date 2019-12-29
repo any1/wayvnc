@@ -49,6 +49,7 @@ sources = [
 	'src/output.c',
 	'src/pointer.c',
 	'src/keyboard.c',
+	'src/smooth.c',
 ]
 
 dependencies = [
