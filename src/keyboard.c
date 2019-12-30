@@ -111,14 +111,15 @@ void keyboard_dump_lookup_table(const struct keyboard* self)
 	}
 }
 
-int keyboard_init(struct keyboard* self)
+int keyboard_init(struct keyboard* self, const char* layout)
 {
 	self->context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
 	if (!self->context)
 		return -1;
 
-	// TODO: Allow the user to specify the layout
-	self->keymap = xkb_keymap_new_from_names(self->context, NULL, 0);
+	struct xkb_rule_names rule_names = { .layout = layout };
+
+	self->keymap = xkb_keymap_new_from_names(self->context, &rule_names, 0);
 	if (!self->keymap)
 		goto keymap_failure;
 

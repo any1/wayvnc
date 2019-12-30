@@ -79,6 +79,8 @@ struct wayvnc {
 	struct nvnc_fb* last_fb;
 
 	uint32_t n_frames;
+
+	const char* kb_layout;
 };
 
 void on_capture_done(struct frame_capture* capture);
@@ -257,7 +259,7 @@ static int init_wayland(struct wayvnc* self)
 		zwp_virtual_keyboard_manager_v1_create_virtual_keyboard(
 			self->keyboard_manager, self->seat);
 
-	keyboard_init(&self->keyboard_backend);
+	keyboard_init(&self->keyboard_backend, self->kb_layout);
 
 	return 0;
 
@@ -502,6 +504,7 @@ int wayvnc_usage(FILE* stream, int rc)
 "Usage: wayvnc [options]\n"
 "\n"
 "    -c,--frame-capturing=screencopy|dmabuf    Select frame capturing backend.\n"
+"    -k,--keyboard=<layout>                    Select keyboard layout.\n"
 "    -h,--help                                 Get help (this text).\n"
 "\n";
 
@@ -518,11 +521,12 @@ int main(int argc, char* argv[])
 	enum frame_capture_backend_type fcbackend =
 		FRAME_CAPTURE_BACKEND_SCREENCOPY;
 
-	static const char* shortopts = "c:o:h";
+	static const char* shortopts = "c:o:k:h";
 
 	static const struct option longopts[] = {
 		{ "frame-capturing", required_argument, NULL, 'c' },
 		{ "output", required_argument, NULL, 'o' },
+		{ "keyboard", required_argument, NULL, 'k' },
 		{ "help", no_argument, NULL, 'h' },
 		{ NULL, 0, NULL, 0 }
 	};
@@ -544,6 +548,9 @@ int main(int argc, char* argv[])
 			break;
 		case 'o':
 			output_id = atoi(optarg);
+			break;
+		case 'k':
+			self.kb_layout = optarg;
 			break;
 		case 'h':
 			return wayvnc_usage(stdout, 0);

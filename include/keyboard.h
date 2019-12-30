@@ -35,6 +35,6 @@ struct keyboard {
 	struct table_entry* lookup_table;
 };
 
-int keyboard_init(struct keyboard* self);
+int keyboard_init(struct keyboard* self, const char* layout);
 void keyboard_destroy(struct keyboard* self);
 void keyboard_feed(struct keyboard* self, xkb_keysym_t symbol, bool is_pressed);
