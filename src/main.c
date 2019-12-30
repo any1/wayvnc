@@ -504,6 +504,7 @@ int wayvnc_usage(FILE* stream, int rc)
 "Usage: wayvnc [options]\n"
 "\n"
 "    -c,--frame-capturing=screencopy|dmabuf    Select frame capturing backend.\n"
+"    -o,--output=<id>                          Select output to capture.\n"
 "    -k,--keyboard=<layout>                    Select keyboard layout.\n"
 "    -h,--help                                 Get help (this text).\n"
 "\n";
@@ -577,12 +578,12 @@ int main(int argc, char* argv[])
 			log_error("No such output\n");
 			goto failure;
 		}
-	}
-
-	out = output_first(&self.outputs);
-	if (!out) {
-		log_error("No output found\n");
-		goto failure;
+	} else {
+		out = output_first(&self.outputs);
+		if (!out) {
+			log_error("No output found\n");
+			goto failure;
+		}
 	}
 
 	self.selected_output = out;
