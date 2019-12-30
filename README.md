@@ -12,7 +12,6 @@ This is a VNC server for wlroots based Wayland compositors.
  * neatvnc
  * OpenGL ES V2.0
  * pixman
- * sway
 
 ### Build Dependencies
  * GCC
