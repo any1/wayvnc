@@ -1,10 +1,9 @@
-# wayvnc (Beta)
+# wayvnc
 
 ## Introduction
 This is a VNC server for wlroots based Wayland compositors.
 
 ## Building
-
 ### Runtime Dependencies
  * EGL
  * libuv
@@ -33,7 +32,18 @@ meson build --buildtype=release
 ninja -C build
 ```
 
+## Running
 Wayvnc can be run from the build directory like so:
 ```
 ./build/wayvnc
 ```
+
+:radioactive: The server only accepts connections from localhost by default. To
+accept connections via any interface, set the address to `0.0.0.0` like this:
+```
+./build/wayvnc 0.0.0.0
+```
+
+:warning: Do not do this on a public network or the internet. Wayvnc does not
+support any kind of encryption or password protection. A good way to protect
+your VNC connection is to use SSH tunneling while listening on localhost.
