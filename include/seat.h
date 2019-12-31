@@ -17,25 +17,19 @@
 #pragma once
 
 #include <stdint.h>
-#include <neatvnc.h>
-#include "wlr-virtual-pointer-unstable-v1.h"
+#include <wayland-client.h>
 
-struct pointer {
-	struct nvnc* vnc;
-	struct zwlr_virtual_pointer_manager_v1* manager;
-	struct zwlr_virtual_pointer_v1* pointer;
+struct seat {
+	struct wl_seat* wl_seat;
+	struct wl_list link;
 
-	enum nvnc_button_mask current_mask;
-
-	uint32_t current_x;
-	uint32_t current_y;
-
-	uint32_t width;
-	uint32_t height;
+	uint32_t capabilities;
+	char name[256];
 };
 
-int pointer_init(struct pointer* self, struct wl_seat* seat);
-void pointer_destroy(struct pointer* self);
+struct seat* seat_new(struct wl_seat* wl_seat);
+void seat_destroy(struct seat* self);
+void seat_list_destroy(struct wl_list* list);
 
-void pointer_set(struct pointer* self, uint32_t x, uint32_t y,
-		 enum nvnc_button_mask button_mask);
+struct seat* seat_find_by_name(struct wl_list* list, const char* name);
+struct seat* seat_first(struct wl_list* list);

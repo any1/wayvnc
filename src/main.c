@@ -44,6 +44,7 @@
 #include "output.h"
 #include "pointer.h"
 #include "keyboard.h"
+#include "seat.h"
 
 #define DEFAULT_ADDRESS "127.0.0.1"
 #define DEFAULT_PORT 5900
@@ -58,12 +59,13 @@ struct wayvnc {
 	struct wl_display* display;
 	struct wl_registry* registry;
 	struct wl_list outputs;
-	struct wl_seat* seat;
+	struct wl_list seats;
 
 	struct zwp_virtual_keyboard_manager_v1* keyboard_manager;
 
 	struct renderer renderer;
 	const struct output* selected_output;
+	const struct seat* selected_seat;
 
 	struct dmabuf_capture dmabuf_backend;
 	struct screencopy screencopy_backend;
@@ -163,8 +165,18 @@ static void registry_add(void* data, struct wl_registry* registry,
 	}
 
 	if (strcmp(interface, wl_seat_interface.name) == 0) {
-		self->seat =
+		struct wl_seat* wl_seat =
 			wl_registry_bind(registry, id, &wl_seat_interface, 7);
+		if (!wl_seat)
+			return;
+
+		struct seat* seat = seat_new(wl_seat);
+		if (!seat) {
+			wl_seat_destroy(wl_seat);
+			return;
+		}
+
+		wl_list_insert(&self->seats, &seat->link);
 		return;
 	}
 
@@ -194,8 +206,8 @@ static void registry_remove(void* data, struct wl_registry* registry,
 void wayvnc_destroy(struct wayvnc* self)
 {
 	output_list_destroy(&self->outputs);
+	seat_list_destroy(&self->seats);
 
-	wl_seat_destroy(self->seat);
 	wl_shm_destroy(self->screencopy_backend.wl_shm);
 
 	zwp_virtual_keyboard_v1_destroy(self->keyboard_backend.virtual_keyboard);
@@ -225,6 +237,7 @@ static int init_wayland(struct wayvnc* self)
 		return -1;
 
 	wl_list_init(&self->outputs);
+	wl_list_init(&self->seats);
 
 	self->registry = wl_display_get_registry(self->display);
 	if (!self->registry)
@@ -246,23 +259,6 @@ static int init_wayland(struct wayvnc* self)
 
 	self->screencopy_backend.frame_capture.on_done = on_capture_done;
 	self->screencopy_backend.frame_capture.userdata = self;
-
-	if (self->pointer_backend.manager) {
-		self->pointer_backend.vnc = self->nvnc;
-		pointer_init(&self->pointer_backend);
-	} else {
-		log_error("Compositor does not support %s.\n",
-			  zwlr_virtual_pointer_manager_v1_interface.name);
-	}
-
-	assert(self->seat);
-	assert(self->keyboard_manager);
-
-	self->keyboard_backend.virtual_keyboard =
-		zwp_virtual_keyboard_manager_v1_create_virtual_keyboard(
-			self->keyboard_manager, self->seat);
-
-	keyboard_init(&self->keyboard_backend, self->kb_layout);
 
 	return 0;
 
@@ -509,6 +505,7 @@ int wayvnc_usage(FILE* stream, int rc)
 "    -c,--frame-capturing=screencopy|dmabuf    Select frame capturing backend.\n"
 "    -o,--output=<id>                          Select output to capture.\n"
 "    -k,--keyboard=<layout>                    Select keyboard layout.\n"
+"    -s,--seat=<name>                          Select seat by name.\n"
 "    -h,--help                                 Get help (this text).\n"
 "\n";
 
@@ -527,13 +524,15 @@ int main(int argc, char* argv[])
 	int output_id = -1;
 	enum frame_capture_backend_type fcbackend =
 		FRAME_CAPTURE_BACKEND_SCREENCOPY;
+	const char* seat_name = NULL;
 
-	static const char* shortopts = "c:o:k:h";
+	static const char* shortopts = "c:o:k:s:h";
 
 	static const struct option longopts[] = {
 		{ "frame-capturing", required_argument, NULL, 'c' },
 		{ "output", required_argument, NULL, 'o' },
 		{ "keyboard", required_argument, NULL, 'k' },
+		{ "seat", required_argument, NULL, 's' },
 		{ "help", no_argument, NULL, 'h' },
 		{ NULL, 0, NULL, 0 }
 	};
@@ -558,6 +557,9 @@ int main(int argc, char* argv[])
 			break;
 		case 'k':
 			self.kb_layout = optarg;
+			break;
+		case 's':
+			seat_name = optarg;
 			break;
 		case 'h':
 			return wayvnc_usage(stdout, 0);
@@ -600,7 +602,23 @@ int main(int argc, char* argv[])
 		}
 	}
 
+	struct seat* seat;
+	if (seat_name) {
+		seat = seat_find_by_name(&self.seats, seat_name);
+		if (!seat) {
+			log_error("No such seat\n");
+			goto failure;
+		}
+	} else {
+		seat = seat_first(&self.seats);
+		if (!seat) {
+			log_error("No seat found\n");
+			goto failure;
+		}
+	}
+
 	self.selected_output = out;
+	self.selected_seat = seat;
 	self.dmabuf_backend.fc.wl_output = out->wl_output;
 	self.screencopy_backend.frame_capture.wl_output = out->wl_output;
 
@@ -609,6 +627,22 @@ int main(int argc, char* argv[])
 		self.pointer_backend.height = out->height;
 	}
 
+	assert(self.keyboard_manager);
+
+	self.keyboard_backend.virtual_keyboard =
+		zwp_virtual_keyboard_manager_v1_create_virtual_keyboard(
+			self.keyboard_manager, self.selected_seat->wl_seat);
+
+	keyboard_init(&self.keyboard_backend, self.kb_layout);
+
+	if (self.pointer_backend.manager) {
+		self.pointer_backend.vnc = self.nvnc;
+		pointer_init(&self.pointer_backend, self.selected_seat->wl_seat);
+	} else {
+		log_error("Compositor does not support %s.\n",
+			  zwlr_virtual_pointer_manager_v1_interface.name);
+		goto failure;
+	}
 
 	if (renderer_init(&self.renderer, self.selected_output->width,
 			  self.selected_output->height) < 0) {
