@@ -45,6 +45,9 @@
 #include "pointer.h"
 #include "keyboard.h"
 
+#define DEFAULT_ADDRESS "127.0.0.1"
+#define DEFAULT_PORT 5900
+
 enum frame_capture_backend_type {
 	FRAME_CAPTURE_BACKEND_NONE = 0,
 	FRAME_CAPTURE_BACKEND_SCREENCOPY,
@@ -501,7 +504,7 @@ void on_capture_done(struct frame_capture* capture)
 int wayvnc_usage(FILE* stream, int rc)
 {
 	static const char* usage =
-"Usage: wayvnc [options]\n"
+"Usage: wayvnc [options] [address [port]]\n"
 "\n"
 "    -c,--frame-capturing=screencopy|dmabuf    Select frame capturing backend.\n"
 "    -o,--output=<id>                          Select output to capture.\n"
@@ -517,6 +520,9 @@ int wayvnc_usage(FILE* stream, int rc)
 int main(int argc, char* argv[])
 {
 	struct wayvnc self = { 0 };
+
+	const char* address = DEFAULT_ADDRESS;
+	int port = DEFAULT_PORT;
 
 	int output_id = -1;
 	enum frame_capture_backend_type fcbackend =
@@ -559,6 +565,14 @@ int main(int argc, char* argv[])
 			return wayvnc_usage(stderr, 1);
 		}
 	}
+
+	int n_args = argc - optind;
+
+	if (n_args >= 1)
+		address = argv[optind];
+
+	if (n_args >= 2)
+		port = atoi(argv[optind + 1]);
 
 	if (init_wayland(&self) < 0) {
 		log_error("Failed to initialise wayland\n");
@@ -605,7 +619,7 @@ int main(int argc, char* argv[])
 	if (init_main_loop(&self) < 0)
 		goto main_loop_failure;
 
-	if (init_nvnc(&self, "0.0.0.0", 5900) < 0)
+	if (init_nvnc(&self, address, port) < 0)
 		goto nvnc_failure;
 
 	screencopy_init(&self.screencopy_backend);
