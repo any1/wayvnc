@@ -53,16 +53,22 @@ static void pointer_set_button_mask(struct pointer* self, uint32_t t,
 		zwlr_virtual_pointer_v1_button(self->pointer, t, BTN_RIGHT,
 					       !!(mask & NVNC_BUTTON_RIGHT));
 
+	int axis = WL_POINTER_AXIS_VERTICAL_SCROLL;
+
+	/* I arrived at the magical value of 15 by connecting a mouse with a
+	 * scroll wheel and viewing the output of wev.
+	 */
+
 	if ((diff & NVNC_SCROLL_UP) && !(mask & NVNC_SCROLL_UP))
-		zwlr_virtual_pointer_v1_axis(self->pointer, t,
-					     WL_POINTER_AXIS_VERTICAL_SCROLL,
-					     1);
+		zwlr_virtual_pointer_v1_axis_discrete(self->pointer, t, axis,
+		                                      wl_fixed_from_int(-15),
+		                                      -1);
 
 	if ((diff & NVNC_SCROLL_DOWN) && !(mask & NVNC_SCROLL_DOWN))
-		zwlr_virtual_pointer_v1_axis(self->pointer, t,
-					     WL_POINTER_AXIS_VERTICAL_SCROLL,
-					     1);
-	
+		zwlr_virtual_pointer_v1_axis_discrete(self->pointer, t, axis,
+		                                      wl_fixed_from_int(15),
+		                                      1);
+
 	self->current_mask = mask;
 }
 
@@ -81,4 +87,6 @@ void pointer_set(struct pointer* self, uint32_t x, uint32_t y,
 
 	if (button_mask != self->current_mask)
 		pointer_set_button_mask(self, t, button_mask);
+
+	zwlr_virtual_pointer_v1_frame(self->pointer);
 }
