@@ -33,10 +33,11 @@
 struct table_entry {
 	xkb_keysym_t symbol;
 	xkb_keycode_t code;
+	int level;
 };
 
 static void append_entry(struct keyboard* self, xkb_keysym_t symbol,
-                         xkb_keycode_t code)
+                         xkb_keycode_t code, int level)
 {
 	if (self->lookup_table_size <= self->lookup_table_length) {
 		size_t new_size = self->lookup_table_size * 2;
@@ -54,6 +55,7 @@ static void append_entry(struct keyboard* self, xkb_keysym_t symbol,
 
 	entry->symbol = symbol;
 	entry->code = code;
+	entry->level = level;
 }
 
 static void key_iter(struct xkb_keymap* map, xkb_keycode_t code, void* userdata)
@@ -69,11 +71,22 @@ static void key_iter(struct xkb_keymap* map, xkb_keycode_t code, void* userdata)
 				                                 &symbols);
 
 		for (size_t sym_idx = 0; sym_idx < n_syms; sym_idx++)
-			append_entry(self, symbols[sym_idx], code);
+			append_entry(self, symbols[sym_idx], code, level);
 	}
 }
 
 static int compare_symbols(const void* a, const void* b)
+{
+	const struct table_entry* x = a;
+	const struct table_entry* y = b;
+
+	if (x->symbol == y->symbol)
+		return x->level < y->level ? -1 : x->level > y->level;
+
+	return x->symbol < y->symbol ? -1 : x->symbol > y->symbol;
+}
+
+static int compare_symbols2(const void* a, const void* b)
 {
 	const struct table_entry* x = a;
 	const struct table_entry* y = b;
@@ -104,10 +117,14 @@ void keyboard_dump_lookup_table(const struct keyboard* self)
 	for (size_t i = 0; i < self->lookup_table_length; i++) {
 		struct table_entry* entry = &self->lookup_table[i];
 
+		char sym_name[256];
+		xkb_keysym_get_name(entry->symbol, sym_name, sizeof(sym_name));
+
 		const char* code_name =
 			xkb_keymap_key_get_name(self->keymap, entry->code);
 
-		printf("%x\t%s\n", entry->symbol, code_name);
+		printf("%d (%s) @ %d\t%s\n", entry->symbol, sym_name,
+		       entry->level, code_name);
 	}
 }
 
@@ -117,7 +134,10 @@ int keyboard_init(struct keyboard* self, const char* layout)
 	if (!self->context)
 		return -1;
 
-	struct xkb_rule_names rule_names = { .layout = layout };
+	struct xkb_rule_names rule_names = {
+		.layout = layout,
+		.model = "pc105",
+	};
 
 	self->keymap = xkb_keymap_new_from_names(self->context, &rule_names, 0);
 	if (!self->keymap)
@@ -129,6 +149,8 @@ int keyboard_init(struct keyboard* self, const char* layout)
 
 	if (create_lookup_table(self) < 0)
 		goto table_failure;
+
+	keyboard_dump_lookup_table(self);
 
 	char* keymap_string =
 		xkb_keymap_get_as_string(self->keymap,
@@ -176,14 +198,22 @@ void keyboard_destroy(struct keyboard* self)
 	xkb_context_unref(self->context);
 }
 
-xkb_keycode_t keyboard_find_keycode(const struct keyboard* self,
-                                    xkb_keysym_t symbol)
+struct table_entry* keyboard_find_symbol(const struct keyboard* self,
+                                         xkb_keysym_t symbol)
 {
-	struct table_entry* entry =
-		bsearch(&symbol, self->lookup_table, self->lookup_table_length,
-                        sizeof(*self->lookup_table), compare_symbols);
+	struct table_entry cmp = { .symbol = symbol };
 
-	return entry ? entry->code : XKB_KEYCODE_INVALID;
+	struct table_entry* entry =
+		bsearch(&cmp, self->lookup_table, self->lookup_table_length,
+		        sizeof(*self->lookup_table), compare_symbols2);
+
+	if (!entry)
+		return NULL;
+
+	while (entry != self->lookup_table && (entry - 1)->symbol == symbol)
+		--entry;
+
+	return entry;
 }
 
 static void keyboard_apply_mods(struct keyboard* self, xkb_keycode_t code,
@@ -215,16 +245,30 @@ static void keyboard_apply_mods(struct keyboard* self, xkb_keycode_t code,
 
 void keyboard_feed(struct keyboard* self, xkb_keysym_t symbol, bool is_pressed)
 {
-	xkb_keycode_t code = keyboard_find_keycode(self, symbol);
-	if (code == XKB_KEYCODE_INVALID)
+	struct table_entry* entry = keyboard_find_symbol(self, symbol);
+	if (!entry)
 		return; // TODO: Notify the user about this
 
-	// TODO: Handle errors
-	zwp_virtual_keyboard_v1_key(self->virtual_keyboard, 0, code - 8,
-	                            is_pressed ? WL_KEYBOARD_KEY_STATE_PRESSED
-	                                       : WL_KEYBOARD_KEY_STATE_RELEASED);
+	while (1) {
+		int layout, level;
+
+		layout = xkb_state_key_get_layout(self->state, entry->code);
+		level = xkb_state_key_get_level(self->state, entry->code, layout);
+
+		if (entry->level == level)
+			break;
+
+		// TODO: Add out of bounds check
+		if ((++entry)->symbol != symbol)
+			return; // TODO: Notify the user about this
+	}
 
 	// TODO: This could cause some synchronisation problems with other
 	// keyboards in the seat.
-	keyboard_apply_mods(self, code, is_pressed);
+	keyboard_apply_mods(self, entry->code, is_pressed);
+
+	// TODO: Handle errors
+	zwp_virtual_keyboard_v1_key(self->virtual_keyboard, 0, entry->code - 8,
+	                            is_pressed ? WL_KEYBOARD_KEY_STATE_PRESSED
+	                                       : WL_KEYBOARD_KEY_STATE_RELEASED);
 }
