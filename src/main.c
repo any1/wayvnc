@@ -217,7 +217,8 @@ void wayvnc_destroy(struct wayvnc* self)
 	zwlr_virtual_pointer_manager_v1_destroy(self->pointer_backend.manager);
 	pointer_destroy(&self->pointer_backend);
 
-	zwlr_screencopy_manager_v1_destroy(self->screencopy_backend.manager);
+	if (self->screencopy_backend.manager)
+		zwlr_screencopy_manager_v1_destroy(self->screencopy_backend.manager);
 
 	if (self->dmabuf_backend.manager)
 		zwlr_export_dmabuf_manager_v1_destroy(self->dmabuf_backend.manager);
@@ -248,10 +249,9 @@ static int init_wayland(struct wayvnc* self)
 	wl_display_roundtrip(self->display);
 	wl_display_dispatch(self->display);
 
-	if (!self->dmabuf_backend.manager) {
-		log_error("Compositor does not support %s.\n",
-			   zwlr_export_dmabuf_manager_v1_interface.name);
-		goto export_manager_failure;
+	if (!self->dmabuf_backend.manager && !self->screencopy_backend.manager) {
+		log_error("Compositor supports neither screencopy nor export-dmabuf! Exiting.\n");
+		goto failure;
 	}
 
 	self->dmabuf_backend.fc.on_done = on_capture_done;
@@ -262,8 +262,6 @@ static int init_wayland(struct wayvnc* self)
 
 	return 0;
 
-export_manager_failure:
-	output_list_destroy(&self->outputs);
 failure:
 	wl_display_disconnect(self->display);
 	return -1;
@@ -522,8 +520,7 @@ int main(int argc, char* argv[])
 	int port = DEFAULT_PORT;
 
 	int output_id = -1;
-	enum frame_capture_backend_type fcbackend =
-		FRAME_CAPTURE_BACKEND_SCREENCOPY;
+	enum frame_capture_backend_type fcbackend = FRAME_CAPTURE_BACKEND_NONE;
 	const char* seat_name = NULL;
 
 	static const char* shortopts = "c:o:k:s:h";
@@ -656,18 +653,36 @@ int main(int argc, char* argv[])
 	if (init_nvnc(&self, address, port) < 0)
 		goto nvnc_failure;
 
-	screencopy_init(&self.screencopy_backend);
-	dmabuf_capture_init(&self.dmabuf_backend);
+	if (self.screencopy_backend.manager)
+		screencopy_init(&self.screencopy_backend);
+
+	if (self.dmabuf_backend.manager)
+		dmabuf_capture_init(&self.dmabuf_backend);
 
 	switch (fcbackend) {
 	case FRAME_CAPTURE_BACKEND_SCREENCOPY:
+		if (!self.screencopy_backend.manager) {
+			log_error("screencopy is not supported by compositor\n");
+			goto capture_failure;
+		}
+
 		self.capture_backend = &self.screencopy_backend.frame_capture;
 		break;
 	case FRAME_CAPTURE_BACKEND_DMABUF:
+		if (!self.screencopy_backend.manager) {
+			log_error("export-dmabuf is not supported by compositor\n");
+			goto capture_failure;
+		}
+
 		self.capture_backend = &self.dmabuf_backend.fc;
 		break;
 	case FRAME_CAPTURE_BACKEND_NONE:
-		abort();
+		if (self.screencopy_backend.manager)
+			self.capture_backend = &self.screencopy_backend.frame_capture;
+		else if (self.dmabuf_backend.manager)
+			self.capture_backend = &self.dmabuf_backend.fc;
+		else
+			goto capture_failure;
 		break;
 	}
 

@@ -252,5 +252,7 @@ void screencopy_init(struct screencopy* self)
 void screencopy_destroy(struct screencopy* self)
 {
 	uv_timer_stop(&self->timer);
-	wl_buffer_destroy(self->buffer);
+
+	if (self->buffer)
+		wl_buffer_destroy(self->buffer);
 }
