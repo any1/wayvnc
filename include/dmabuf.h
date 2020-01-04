@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 Andri Yngvason
+ * Copyright (c) 2019 - 2020 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -18,6 +18,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <uv.h>
 #include "frame-capture.h"
 
 struct zwlr_export_dmabuf_manager_v1;
@@ -47,6 +48,9 @@ struct dmabuf_capture {
 	struct zwlr_export_dmabuf_manager_v1* manager;
 	struct zwlr_export_dmabuf_frame_v1* zwlr_frame;
 	struct dmabuf_frame frame;
+
+	uint64_t last_time;
+	uv_timer_t timer;
 };
 
 void dmabuf_capture_init(struct dmabuf_capture* self);

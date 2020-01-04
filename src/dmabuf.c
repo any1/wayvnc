@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 Andri Yngvason
+ * Copyright (c) 2019 - 2020 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -18,14 +18,33 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <wayland-client.h>
+#include <uv.h>
+#include <wayland-util.h>
 
+#include "frame-capture.h"
 #include "logging.h"
 #include "dmabuf.h"
 #include "wlr-export-dmabuf-unstable-v1.h"
+#include "time-util.h"
+
+#define RATE_LIMIT 20.0 // Hz
+
+static void dmabuf_close_fds(struct dmabuf_capture* self)
+{
+	for (size_t i = 0; i < self->frame.n_planes; ++i)
+		close(self->frame.plane[i].fd);
+
+	self->frame.n_planes = 0;
+}
 
 static void dmabuf_capture_stop(struct frame_capture* fc)
 {
 	struct dmabuf_capture* self = (void*)fc;
+
+	if (uv_timer_stop(&self->timer))
+		dmabuf_close_fds(self);
+
+	fc->status = CAPTURE_STOPPED;
 
 	if (self->zwlr_frame) {
 		zwlr_export_dmabuf_frame_v1_destroy(self->zwlr_frame);
@@ -44,6 +63,9 @@ static void dmabuf_frame_start(void* data,
 {
 	struct dmabuf_capture* self = data;
 	struct frame_capture* fc = data;
+
+	uv_timer_stop(&self->timer);
+	dmabuf_close_fds(self);
 
 	uint64_t mod = ((uint64_t)mod_high << 32) | (uint64_t)mod_low;
 
@@ -70,12 +92,27 @@ static void dmabuf_frame_object(void* data,
 				uint32_t plane_index)
 {
 	struct dmabuf_capture* self = data;
-	struct frame_capture* fc = data;
 
 	self->frame.plane[plane_index].fd = fd;
 	self->frame.plane[plane_index].size = size;
 	self->frame.plane[plane_index].offset = offset;
 	self->frame.plane[plane_index].pitch = stride;
+}
+
+static void dmabuf_timer_ready(uv_timer_t* timer)
+{
+	struct dmabuf_capture* self = wl_container_of(timer, self, timer);
+	struct frame_capture* fc = (struct frame_capture*)self;
+
+	if (fc->status != CAPTURE_IN_PROGRESS)
+		return;
+
+	self->last_time = gettime_us();
+
+	fc->status = CAPTURE_DONE;
+	fc->on_done(fc);
+
+	dmabuf_close_fds(self);
 }
 
 static void dmabuf_frame_ready(void* data,
@@ -88,12 +125,22 @@ static void dmabuf_frame_ready(void* data,
 
 	dmabuf_capture_stop(fc);
 
+	uint64_t now = gettime_us();
+	double dt = (now - self->last_time) * 1.0e-6;
+	double time_left = (1.0 / RATE_LIMIT - dt) * 1.0e3;
+
+	if (time_left >= 0.0) {
+		uv_timer_start(&self->timer, dmabuf_timer_ready, time_left, 0);
+		frame_capture_start(fc);
+		return;
+	}
+
+	self->last_time = now;
+
 	fc->status = CAPTURE_DONE;
 	fc->on_done(fc);
 
-	for (size_t i = 0; i < self->frame.n_planes; ++i)
-		close(self->frame.plane[i].fd);
-
+	dmabuf_close_fds(self);
 }
 
 static void dmabuf_frame_cancel(void* data,
@@ -103,14 +150,13 @@ static void dmabuf_frame_cancel(void* data,
 	struct dmabuf_capture* self = data;
 	struct frame_capture* fc = data;
 
+	dmabuf_capture_stop(fc);
 	fc->status = reason == ZWLR_EXPORT_DMABUF_FRAME_V1_CANCEL_REASON_PERMANENT
 		     ? CAPTURE_FATAL : CAPTURE_FAILED;
 
-	dmabuf_capture_stop(fc);
 	fc->on_done(fc);
 
-	for (size_t i = 0; i < self->frame.n_planes; ++i)
-		close(self->frame.plane[i].fd);
+	dmabuf_close_fds(self);
 }
 
 static int dmabuf_capture_start(struct frame_capture* fc)
@@ -142,6 +188,8 @@ static int dmabuf_capture_start(struct frame_capture* fc)
 
 void dmabuf_capture_init(struct dmabuf_capture* self)
 {
+	uv_timer_init(uv_default_loop(), &self->timer);
+
 	self->fc.backend.start = dmabuf_capture_start;
 	self->fc.backend.stop = dmabuf_capture_stop;
 }
