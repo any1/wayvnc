@@ -21,6 +21,7 @@
 #include <stdbool.h>
 #include <assert.h>
 #include <wayland-client.h>
+#include <libdrm/drm_fourcc.h>
 
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
@@ -54,13 +55,20 @@
 	X_GL_EXTENSIONS
 #undef X
 
-int gl_format_from_wl_shm(GLenum* result, enum wl_shm_format format)
+int gl_format_from_fourcc(GLenum* result, uint32_t format)
 {
-	*result = GL_BGRA_EXT;
+	switch (format) {
+	case DRM_FORMAT_XRGB8888:
+	case DRM_FORMAT_ARGB8888:
+		*result = GL_BGRA_EXT;
+		return 0;
+	case DRM_FORMAT_XBGR8888:
+	case DRM_FORMAT_ABGR8888:
+		*result = GL_RGBA;
+		return 0;
+	}
 
-	// TODO: Actually detect the format
-
-	return 0;
+	return -1;
 }
 
 static inline void* gl_load_single_extension(const char* name)
@@ -445,7 +453,7 @@ int render_framebuffer(struct renderer* self, const void* addr, uint32_t format,
 	glBindTexture(GL_TEXTURE_2D, tex);
 
 	GLenum gl_format;
-	if (gl_format_from_wl_shm(&gl_format, format) < 0)
+	if (gl_format_from_fourcc(&gl_format, format) < 0)
 		return -1;
 
 	glPixelStorei(GL_UNPACK_ROW_LENGTH_EXT, stride / 4);

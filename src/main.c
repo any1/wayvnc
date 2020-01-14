@@ -449,18 +449,20 @@ void wayvnc_process_frame(struct wayvnc* self)
 
 void wayvnc_process_screen(struct wayvnc* self)
 {
-	uint32_t format = fourcc_from_gl_format(self->renderer.read_format);
+	uint32_t renderer_format =
+		fourcc_from_gl_format(self->renderer.read_format);
 
 	void* pixels = self->screencopy_backend.pixels;
 
 	uint32_t width = self->capture_backend->frame_info.width;
 	uint32_t height = self->capture_backend->frame_info.height;
 	uint32_t stride = self->capture_backend->frame_info.stride;
+	uint32_t frame_format = self->capture_backend->frame_info.fourcc_format;
 
-	struct nvnc_fb* fb = nvnc_fb_new(width, height, format);
+	struct nvnc_fb* fb = nvnc_fb_new(width, height, renderer_format);
 	void* addr = nvnc_fb_get_addr(fb);
 
-	render_framebuffer(&self->renderer, pixels, format, width, height,
+	render_framebuffer(&self->renderer, pixels, frame_format, width, height,
 			   stride);
 	render_copy_pixels(&self->renderer, addr, 0, height);
 
