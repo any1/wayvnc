@@ -33,7 +33,11 @@ struct screencopy {
 	struct zwlr_screencopy_frame_v1* frame;
 
 	uint64_t last_time;
+	uint64_t start_time;
 	uv_timer_t timer;
+
+	struct smooth delay_smoother;
+	double delay;
 };
 
 void screencopy_init(struct screencopy* self);

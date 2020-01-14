@@ -26,9 +26,11 @@
 
 #include "shm.h"
 #include "screencopy.h"
+#include "smooth.h"
 #include "time-util.h"
 
 #define RATE_LIMIT 20.0 // Hz
+#define DELAY_SMOOTHER_TIME_CONSTANT 0.5 // s
 
 static uint32_t fourcc_from_wl_shm(enum wl_shm_format in)
 {
@@ -140,6 +142,9 @@ static void screencopy_ready(void* data,
 
 	self->last_time = gettime_us();
 
+	double delay = (self->last_time - self->start_time) * 1.0e-6;
+	self->delay = smooth(&self->delay_smoother, delay);
+
 	self->frame_capture.status = CAPTURE_DONE;
 	self->frame_capture.on_done(&self->frame_capture);
 }
@@ -179,6 +184,8 @@ static int screencopy__start_capture(struct frame_capture* fc)
 		.damage = screencopy_damage,
 	};
 
+	self->start_time = gettime_us();
+
 	self->frame =
 		zwlr_screencopy_manager_v1_capture_output(self->manager, 
 							  fc->overlay_cursor,
@@ -209,7 +216,7 @@ static int screencopy_start(struct frame_capture* fc)
 
 	uint64_t now = gettime_us();
 	double dt = (now - self->last_time) * 1.0e-6;
-	double time_left = (1.0 / RATE_LIMIT - dt) * 1.0e3;
+	double time_left = (1.0 / RATE_LIMIT - dt - self->delay) * 1.0e3;
 
 	fc->status = CAPTURE_IN_PROGRESS;
 
@@ -221,6 +228,9 @@ static int screencopy_start(struct frame_capture* fc)
 void screencopy_init(struct screencopy* self)
 {
 	uv_timer_init(uv_default_loop(), &self->timer);
+
+	self->delay_smoother.time_constant = DELAY_SMOOTHER_TIME_CONSTANT;
+
 	self->frame_capture.backend.start = screencopy_start;
 	self->frame_capture.backend.stop = screencopy_stop;
 }
