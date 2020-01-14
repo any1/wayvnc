@@ -28,10 +28,7 @@
 #include "screencopy.h"
 #include "time-util.h"
 
-#define RATE_FILTER_TIME_CONSTANT 1.0 // s
-
 #define RATE_LIMIT 20.0 // Hz
-#define RATE_LIMIT_HYSTERISIS 5.0 // Hz
 
 static uint32_t fourcc_from_wl_shm(enum wl_shm_format in)
 {
@@ -88,6 +85,8 @@ static void screencopy_stop(struct frame_capture* fc)
 {
 	struct screencopy* self = (void*)fc;
 
+	uv_timer_stop(&self->timer);
+
 	if (self->frame) {
 		zwlr_screencopy_frame_v1_destroy(self->frame);
 		self->frame = NULL;
@@ -139,19 +138,10 @@ static void screencopy_ready(void* data,
 
 	screencopy_stop(&self->frame_capture);
 
+	self->last_time = gettime_us();
+
 	self->frame_capture.status = CAPTURE_DONE;
 	self->frame_capture.on_done(&self->frame_capture);
-
-	uint64_t t = gettime_us();
-	double dt = (t - self->last_time) * 1.0e-6;
-	self->last_time = t;
-
-	self->rate = smooth(&self->rate_filter, 1.0 / dt);
-
-	if (self->rate > RATE_LIMIT + RATE_LIMIT_HYSTERISIS)
-		self->is_rate_limited = true;
-	else if (self->rate < RATE_LIMIT - RATE_LIMIT_HYSTERISIS)
-		self->is_rate_limited = false;
 }
 
 static void screencopy_failed(void* data,
@@ -199,7 +189,6 @@ static int screencopy__start_capture(struct frame_capture* fc)
 	zwlr_screencopy_frame_v1_add_listener(self->frame, &frame_listener,
 					      self);
 
-	fc->status = CAPTURE_IN_PROGRESS;
 	return 0;
 }
 
@@ -211,24 +200,6 @@ static void screencopy__poll(uv_timer_t* timer)
 	screencopy__start_capture(fc);
 }
 
-static int screencopy__start_capture_limited(struct frame_capture* fc)
-{
-	struct screencopy* self = (void*)fc;
-
-	uint64_t now = gettime_us();
-	double dt = (now - self->last_time) * 1.0e-6;
-	double time_left = (.5 / RATE_LIMIT - dt) * 1.0e3;
-
-	if (time_left < 0)
-		return screencopy__start_capture(fc);
-
-	if (uv_timer_start(&self->timer, screencopy__poll, time_left, 0) < 0)
-		return -1;
-
-	fc->status = CAPTURE_IN_PROGRESS;
-	return 0;
-}
-
 static int screencopy_start(struct frame_capture* fc)
 {
 	struct screencopy* self = (void*)fc;
@@ -236,15 +207,20 @@ static int screencopy_start(struct frame_capture* fc)
 	if (fc->status == CAPTURE_IN_PROGRESS)
 		return -1;
 
-	return self->is_rate_limited ? screencopy__start_capture_limited(fc)
-	                             : screencopy__start_capture(fc);
+	uint64_t now = gettime_us();
+	double dt = (now - self->last_time) * 1.0e-6;
+	double time_left = (1.0 / RATE_LIMIT - dt) * 1.0e3;
+
+	fc->status = CAPTURE_IN_PROGRESS;
+
+	return time_left > 0 ?
+		uv_timer_start(&self->timer, screencopy__poll, time_left, 0) :
+		screencopy__start_capture(fc);
 }
 
 void screencopy_init(struct screencopy* self)
 {
 	uv_timer_init(uv_default_loop(), &self->timer);
-	self->rate_filter.time_constant = RATE_FILTER_TIME_CONSTANT;
-
 	self->frame_capture.backend.start = screencopy_start;
 	self->frame_capture.backend.stop = screencopy_stop;
 }
