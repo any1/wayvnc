@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 Andri Yngvason
+ * Copyright (c) 2019 - 2020 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -102,17 +102,6 @@ frame_capture_backend_from_string(const char* str)
 	return FRAME_CAPTURE_BACKEND_NONE;
 }
 
-struct output* wayvnc_output_find(struct wayvnc* self, uint32_t id)
-{
-	struct output* output;
-
-	wl_list_for_each(output, &self->outputs, link)
-		if (output->id == id)
-			return output;
-
-	return NULL;
-}
-
 static void registry_add(void* data, struct wl_registry* registry,
 			 uint32_t id, const char* interface,
 			 uint32_t version)
@@ -194,7 +183,7 @@ static void registry_remove(void* data, struct wl_registry* registry,
 {
 	struct wayvnc* self = data;
 
-	struct output* out = wayvnc_output_find(self, id);
+	struct output* out = output_find_by_id(&self->outputs, id);
 	if (out) {
 		wl_list_remove(&out->link);
 		output_destroy(out);
