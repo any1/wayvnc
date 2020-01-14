@@ -44,13 +44,14 @@ static const struct wl_seat_listener seat_listener = {
 	.name = seat_name,
 };
 
-struct seat* seat_new(struct wl_seat* wl_seat)
+struct seat* seat_new(struct wl_seat* wl_seat, uint32_t id)
 {
 	struct seat* self = calloc(1, sizeof(*self));
 	if (!self)
 		return NULL;
 
 	self->wl_seat = wl_seat;
+	self->id = id;
 
 	wl_seat_add_listener(wl_seat, &seat_listener, self);
 
@@ -80,6 +81,17 @@ struct seat* seat_find_by_name(struct wl_list* list, const char* name)
 
 	wl_list_for_each(seat, list, link)
 		if (strcmp(seat->name, name) == 0)
+			return seat;
+
+	return NULL;
+}
+
+struct seat* seat_find_by_id(struct wl_list* list, uint32_t id)
+{
+	struct seat* seat;
+
+	wl_list_for_each(seat, list, link)
+		if (seat->id == id)
 			return seat;
 
 	return NULL;

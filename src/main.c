@@ -159,7 +159,7 @@ static void registry_add(void* data, struct wl_registry* registry,
 		if (!wl_seat)
 			return;
 
-		struct seat* seat = seat_new(wl_seat);
+		struct seat* seat = seat_new(wl_seat, id);
 		if (!seat) {
 			wl_seat_destroy(wl_seat);
 			return;
@@ -189,6 +189,18 @@ static void registry_remove(void* data, struct wl_registry* registry,
 		output_destroy(out);
 
 		/* TODO: If this is the selected output, exit */
+
+		return;
+	}
+
+	struct seat* seat = seat_find_by_id(&self->seats, id);
+	if (seat) {
+		wl_list_remove(&seat->link);
+		seat_destroy(seat);
+
+		/* TODO: If this is the selected seat, exit */
+
+		return;
 	}
 }
 
