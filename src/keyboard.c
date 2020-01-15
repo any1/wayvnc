@@ -34,6 +34,7 @@ struct table_entry {
 	xkb_keysym_t symbol;
 	xkb_keycode_t code;
 	int level;
+	bool is_pressed;
 };
 
 static void append_entry(struct keyboard* self, xkb_keysym_t symbol,
@@ -262,6 +263,11 @@ void keyboard_feed(struct keyboard* self, xkb_keysym_t symbol, bool is_pressed)
 		if ((++entry)->symbol != symbol)
 			return; // TODO: Notify the user about this
 	}
+
+	if (entry->is_pressed == is_pressed)
+		return;
+
+	entry->is_pressed = is_pressed;
 
 	// TODO: This could cause some synchronisation problems with other
 	// keyboards in the seat.
