@@ -23,6 +23,7 @@
 #include <getopt.h>
 #include <assert.h>
 #include <inttypes.h>
+#include <errno.h>
 #include <neatvnc.h>
 #include <uv.h>
 #include <libdrm/drm_fourcc.h>
@@ -403,6 +404,19 @@ static void on_key_event(struct nvnc_client* client, uint32_t symbol,
 	keyboard_feed(&wayvnc->keyboard_backend, symbol, is_pressed);
 }
 
+bool on_auth(const char* username, const char* password, void* ud)
+{
+	struct wayvnc* self = ud;
+
+	if (strcmp(username, self->cfg.username) != 0)
+		return false;
+
+	if (strcmp(password, self->cfg.password) != 0)
+		return false;
+
+	return true;
+}
+
 int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port)
 {
 	self->nvnc = nvnc_open(addr, port);
@@ -420,6 +434,10 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port)
 			    self->selected_output->width,
 			    self->selected_output->height,
 			    format);
+
+	if (self->cfg.enable_auth)
+		nvnc_enable_auth(self->nvnc, self->cfg.private_key_file,
+		                 self->cfg.certificate_file, on_auth, self);
 
 	if (self->pointer_manager)
 		nvnc_set_pointer_fn(self->nvnc, on_pointer_event);
@@ -565,6 +583,42 @@ int wayvnc_usage(FILE* stream, int rc)
 	return rc;
 }
 
+int check_cfg_sanity(struct cfg* cfg)
+{
+	if (cfg->enable_auth) {
+		int rc = 0;
+
+		if (!nvnc_has_auth()) {
+			log_error("Authentication can't be enabled because it was not selected during build\n");
+			return -1;
+		}
+
+		if (!cfg->certificate_file) {
+			log_error("Authentication enabled, but missing certificate_file\n");
+			rc = -1;
+		}
+
+		if (!cfg->private_key_file) {
+			log_error("Authentication enabled, but missing private_key_file\n");
+			rc = -1;
+		}
+
+		if (!cfg->username) {
+			log_error("Authentication enabled, but missing username\n");
+			rc = -1;
+		}
+
+		if (!cfg->password) {
+			log_error("Authentication enabled, but missing password\n");
+			rc = -1;
+		}
+
+		return rc;
+	}
+
+	return 0;
+}
+
 int main(int argc, char* argv[])
 {
 	struct wayvnc self = { 0 };
@@ -632,8 +686,9 @@ int main(int argc, char* argv[])
 	if (n_args >= 2)
 		port = atoi(argv[optind + 1]);
 
+	errno = 0;
 	int cfg_rc = cfg_load(&self.cfg, cfg_file);
-	if (cfg_file && cfg_rc != 0) {
+	if (cfg_rc != 0 && (cfg_file || errno != EEXIST)) {
 		if (cfg_rc > 0) {
 			log_error("Failed to load config. Error on line %d\n",
 			          cfg_rc);
@@ -643,6 +698,9 @@ int main(int argc, char* argv[])
 
 		return 1;
 	}
+
+	if (check_cfg_sanity(&self.cfg) < 0)
+		return 1;
 
 	if (cfg_rc == 0) {
 		if (!address) address = self.cfg.address;
