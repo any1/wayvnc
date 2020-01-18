@@ -45,6 +45,7 @@
 #include "pointer.h"
 #include "keyboard.h"
 #include "seat.h"
+#include "cfg.h"
 
 #define DEFAULT_ADDRESS "127.0.0.1"
 #define DEFAULT_PORT 5900
@@ -60,6 +61,7 @@ struct wayvnc {
 	struct wl_registry* registry;
 	struct wl_list outputs;
 	struct wl_list seats;
+	struct cfg cfg;
 
 	struct zwp_virtual_keyboard_manager_v1* keyboard_manager;
 
@@ -503,6 +505,7 @@ int wayvnc_usage(FILE* stream, int rc)
 	static const char* usage =
 "Usage: wayvnc [options] [address [port]]\n"
 "\n"
+"    -C,--config=<path>                        Select a config file.\n"
 "    -c,--frame-capturing=screencopy|dmabuf    Select frame capturing backend.\n"
 "    -o,--output=<id>                          Select output to capture.\n"
 "    -k,--keyboard=<layout>                    Select keyboard layout.\n"
@@ -519,16 +522,19 @@ int main(int argc, char* argv[])
 {
 	struct wayvnc self = { 0 };
 
-	const char* address = DEFAULT_ADDRESS;
-	int port = DEFAULT_PORT;
+	const char* cfg_file = NULL;
+
+	const char* address = NULL;
+	int port = 0;
 
 	int output_id = -1;
 	enum frame_capture_backend_type fcbackend = FRAME_CAPTURE_BACKEND_NONE;
 	const char* seat_name = NULL;
 
-	static const char* shortopts = "c:o:k:s:h";
+	static const char* shortopts = "Cc:o:k:s:h";
 
 	static const struct option longopts[] = {
+		{ "config", required_argument, NULL, 'C' },
 		{ "frame-capturing", required_argument, NULL, 'c' },
 		{ "output", required_argument, NULL, 'o' },
 		{ "keyboard", required_argument, NULL, 'k' },
@@ -543,6 +549,9 @@ int main(int argc, char* argv[])
 			break;
 
 		switch (c) {
+		case 'C':
+			cfg_file = optarg;
+			break;
 		case 'c':
 			fcbackend = frame_capture_backend_from_string(optarg);
 			if (fcbackend == FRAME_CAPTURE_BACKEND_NONE) {
@@ -575,6 +584,26 @@ int main(int argc, char* argv[])
 
 	if (n_args >= 2)
 		port = atoi(argv[optind + 1]);
+
+	int cfg_rc = cfg_load(&self.cfg, cfg_file);
+	if (cfg_file && cfg_rc != 0) {
+		if (cfg_rc > 0) {
+			log_error("Failed to load config. Error on line %d\n",
+			          cfg_rc);
+		} else {
+			log_error("Failed to load config. %m\n");
+		}
+
+		return 1;
+	}
+
+	if (cfg_rc == 0) {
+		if (!address) address = self.cfg.address;
+		if (!port) port = self.cfg.port;
+	}
+
+	if (!address) address = DEFAULT_ADDRESS;
+	if (!port) port = DEFAULT_PORT;
 
 	if (init_wayland(&self) < 0) {
 		log_error("Failed to initialise wayland\n");

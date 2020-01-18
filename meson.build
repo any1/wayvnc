@@ -51,6 +51,7 @@ sources = [
 	'src/keyboard.c',
 	'src/seat.c',
 	'src/smooth.c',
+	'src/cfg.c',
 ]
 
 dependencies = [
