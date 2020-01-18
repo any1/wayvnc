@@ -47,6 +47,31 @@ accept connections via any interface, set the address to `0.0.0.0` like this:
 ./build/wayvnc 0.0.0.0
 ```
 
-:warning: Do not do this on a public network or the internet. Wayvnc does not
-support any kind of encryption or password protection. A good way to protect
-your VNC connection is to use SSH tunneling while listening on localhost.
+:warning: Do not do this on a public network or the internet without
+user authentication enabled. The best way to protect your VNC connection is to
+use SSH tunneling while listening on localhost, but users can also be
+authenticated when connecting to Wayvnc.
+
+### Encryptions & Authentication
+You'll need a private X509 key and a certificate. A self signed key with a
+certificate can be generated like so:
+```
+openssl req -x509 -newkey rsa:4096 -sha256 -days 3650 -nodes \
+	-keyout key.pem -out cert.pem -subj /CN=localhost \
+	-addext subjectAltName=DNS:localhost,DNS:localhost,IP:127.0.0.1
+```
+Replace `localhost` and `127.0.0.1` in the command above with your public facing
+host name and IP address, respectively, or just keep them as is if you're
+testing locally.
+
+Create a config with the authentication info and load it using the `--config`
+command line option or place it at the default location
+`$HOME/.config/wayvnc/config`.
+```
+address=0.0.0.0
+enable_auth=true
+username=luser
+password=p455w0rd
+private_key_file=/path/to/key.pem
+certificate_file=/path/to/cert.pem
+```
