@@ -259,8 +259,10 @@ void keyboard_feed(struct keyboard* self, xkb_keysym_t symbol, bool is_pressed)
 		if (entry->level == level)
 			break;
 
-		// TODO: Add out of bounds check
-		if ((++entry)->symbol != symbol)
+		if (++entry >= &self->lookup_table[self->lookup_table_length])
+			return; // TODO: Notify the user about this
+
+		if (entry->symbol != symbol)
 			return; // TODO: Notify the user about this
 	}
 
