@@ -23,12 +23,14 @@
 #include <stdbool.h>
 #include <string.h>
 #include <wayland-client-protocol.h>
+#include <xkbcommon/xkbcommon-keysyms.h>
 #include <xkbcommon/xkbcommon.h>
 #include <wayland-client.h>
 
 #include "virtual-keyboard-unstable-v1.h"
 #include "keyboard.h"
 #include "shm.h"
+#include "logging.h"
 
 struct table_entry {
 	xkb_keysym_t symbol;
@@ -57,6 +59,7 @@ static void append_entry(struct keyboard* self, xkb_keysym_t symbol,
 	entry->symbol = symbol;
 	entry->code = code;
 	entry->level = level;
+	entry->is_pressed = false;
 }
 
 static void key_iter(struct xkb_keymap* map, xkb_keycode_t code, void* userdata)
@@ -113,20 +116,23 @@ static int create_lookup_table(struct keyboard* self)
 	return 0;
 }
 
+static void keyboard__dump_entry(const struct keyboard* self,
+                                 const struct table_entry* entry)
+{
+	char sym_name[256];
+	xkb_keysym_get_name(entry->symbol, sym_name, sizeof(sym_name));
+
+	const char* code_name =
+		xkb_keymap_key_get_name(self->keymap, entry->code);
+
+	log_debug("symbol=%s level=%d code=%s %s\n", sym_name, entry->level,
+	          code_name, entry->is_pressed ? "pressed" : "released");
+}
+
 void keyboard_dump_lookup_table(const struct keyboard* self)
 {
-	for (size_t i = 0; i < self->lookup_table_length; i++) {
-		struct table_entry* entry = &self->lookup_table[i];
-
-		char sym_name[256];
-		xkb_keysym_get_name(entry->symbol, sym_name, sizeof(sym_name));
-
-		const char* code_name =
-			xkb_keymap_key_get_name(self->keymap, entry->code);
-
-		printf("%d (%s) @ %d\t%s\n", entry->symbol, sym_name,
-		       entry->level, code_name);
-	}
+	for (size_t i = 0; i < self->lookup_table_length; i++)
+		keyboard__dump_entry(self, &self->lookup_table[i]);
 }
 
 int keyboard_init(struct keyboard* self, const char* layout)
@@ -244,13 +250,35 @@ static void keyboard_apply_mods(struct keyboard* self, xkb_keycode_t code,
 	                                  latched, locked, group);
 }
 
+bool keyboard_symbol_is_mod(xkb_keysym_t symbol)
+{
+	switch (symbol) {
+	case XKB_KEY_Shift_L:
+	case XKB_KEY_Shift_R:
+	case XKB_KEY_Control_L:
+	case XKB_KEY_Caps_Lock:
+	case XKB_KEY_Shift_Lock:
+	case XKB_KEY_Meta_L:
+	case XKB_KEY_Meta_R:
+	case XKB_KEY_Alt_L:
+	case XKB_KEY_Alt_R:
+	case XKB_KEY_Super_L:
+	case XKB_KEY_Super_R:
+	case XKB_KEY_Hyper_L:
+	case XKB_KEY_Hyper_R:
+		return true;
+	}
+
+	return false;
+}
+
 void keyboard_feed(struct keyboard* self, xkb_keysym_t symbol, bool is_pressed)
 {
 	struct table_entry* entry = keyboard_find_symbol(self, symbol);
 	if (!entry)
 		return; // TODO: Notify the user about this
 
-	while (1) {
+	while (!keyboard_symbol_is_mod(symbol)) {
 		int layout, level;
 
 		layout = xkb_state_key_get_layout(self->state, entry->code);
@@ -270,6 +298,10 @@ void keyboard_feed(struct keyboard* self, xkb_keysym_t symbol, bool is_pressed)
 		return;
 
 	entry->is_pressed = is_pressed;
+
+#ifndef NDEBUG
+	keyboard__dump_entry(self, entry);
+#endif
 
 	// TODO: This could cause some synchronisation problems with other
 	// keyboards in the seat.
