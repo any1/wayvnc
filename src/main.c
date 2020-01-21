@@ -90,6 +90,7 @@ struct wayvnc {
 	const char* kb_layout;
 };
 
+void wayvnc_exit(void);
 void on_capture_done(struct frame_capture* capture);
 
 static enum frame_capture_backend_type
@@ -272,6 +273,12 @@ failure:
 
 void on_wayland_event(uv_poll_t* handle, int status, int event)
 {
+	if (event & UV_DISCONNECT) {
+		log_error("The compositor is gone. Exiting...\n");
+		wayvnc_exit();
+		return;
+	}
+
 	struct wayvnc* self = wl_container_of(handle, self, wayland_poller);
 	wl_display_dispatch(self->display);
 }
@@ -311,7 +318,8 @@ int init_main_loop(struct wayvnc* self)
 
 	uv_poll_init(loop, &self->wayland_poller,
 		     wl_display_get_fd(self->display));
-	uv_poll_start(&self->wayland_poller, UV_READABLE, on_wayland_event);
+	uv_poll_start(&self->wayland_poller, UV_READABLE | UV_DISCONNECT,
+	              on_wayland_event);
 
 	uv_prepare_init(loop, &self->flusher);
 	uv_prepare_start(&self->flusher, prepare_for_poll);
