@@ -12,7 +12,6 @@ buildtype = get_option('buildtype')
 
 c_args = [
 	'-D_GNU_SOURCE',
-	'-fvisibility=hidden',
 ]
 
 if buildtype == 'release' or buildtype == 'plain'
