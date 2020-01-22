@@ -8,10 +8,18 @@ project(
 	],
 )
 
-add_project_arguments([
+buildtype = get_option('buildtype')
+
+c_args = [
 	'-D_GNU_SOURCE',
 	'-fvisibility=hidden',
-], language: 'c')
+]
+
+if buildtype == 'release' or buildtype == 'plain'
+	c_args += '-DNDEBUG'
+endif
+
+add_project_arguments(c_args, language: 'c')
 
 cc = meson.get_compiler('c')
 
