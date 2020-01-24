@@ -36,6 +36,7 @@
 #include "wlr-screencopy-unstable-v1.h"
 #include "wlr-virtual-pointer-unstable-v1.h"
 #include "virtual-keyboard-unstable-v1.h"
+#include "xdg-output-unstable-v1.h"
 #include "render.h"
 #include "dmabuf.h"
 #include "screencopy.h"
@@ -63,6 +64,7 @@ struct wayvnc {
 	struct wl_list seats;
 	struct cfg cfg;
 
+	struct zxdg_output_manager_v1* xdg_output_manager;
 	struct zwp_virtual_keyboard_manager_v1* keyboard_manager;
 
 	struct renderer renderer;
@@ -123,6 +125,13 @@ static void registry_add(void* data, struct wl_registry* registry,
 			return;
 
 		wl_list_insert(&self->outputs, &output->link);
+		return;
+	}
+
+	if (strcmp(interface, zxdg_output_manager_v1_interface.name) == 0) {
+		self->xdg_output_manager =
+			wl_registry_bind(registry, id,
+			                 &zxdg_output_manager_v1_interface, 3);
 		return;
 	}
 
@@ -212,6 +221,8 @@ void wayvnc_destroy(struct wayvnc* self)
 	output_list_destroy(&self->outputs);
 	seat_list_destroy(&self->seats);
 
+	zxdg_output_manager_v1_destroy(self->xdg_output_manager);
+
 	wl_shm_destroy(self->screencopy_backend.wl_shm);
 
 	zwp_virtual_keyboard_v1_destroy(self->keyboard_backend.virtual_keyboard);
@@ -250,8 +261,8 @@ static int init_wayland(struct wayvnc* self)
 
 	wl_registry_add_listener(self->registry, &registry_listener, self);
 
-	wl_display_roundtrip(self->display);
 	wl_display_dispatch(self->display);
+	wl_display_roundtrip(self->display);
 
 	if (!self->dmabuf_backend.manager && !self->screencopy_backend.manager) {
 		log_error("Compositor supports neither screencopy nor export-dmabuf! Exiting.\n");
@@ -263,6 +274,18 @@ static int init_wayland(struct wayvnc* self)
 
 	self->screencopy_backend.frame_capture.on_done = on_capture_done;
 	self->screencopy_backend.frame_capture.userdata = self;
+
+	struct output* output;
+	wl_list_for_each(output, &self->outputs, link) {
+		struct zxdg_output_v1* xdg_output =
+			zxdg_output_manager_v1_get_xdg_output(
+				self->xdg_output_manager, output->wl_output);
+
+		output_set_xdg_output(output, xdg_output);
+	}
+
+	wl_display_dispatch(self->display);
+	wl_display_roundtrip(self->display);
 
 	return 0;
 

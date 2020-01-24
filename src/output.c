@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 Andri Yngvason
+ * Copyright (c) 2019 - 2020 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -23,6 +23,8 @@
 #include "strlcpy.h"
 #include "logging.h"
 
+#include "xdg-output-unstable-v1.h"
+
 static void output_handle_geometry(void* data, struct wl_output* wl_output,
 				   int32_t x, int32_t y, int32_t phys_width,
 				   int32_t phys_height, int32_t subpixel,
@@ -32,20 +34,13 @@ static void output_handle_geometry(void* data, struct wl_output* wl_output,
 	struct output* output = data;
 
 	strlcpy(output->make, make, sizeof(output->make));
-	strlcpy(output->model, model, sizeof(output->make));
+	strlcpy(output->model, model, sizeof(output->model));
 }
 
 static void output_handle_mode(void* data, struct wl_output* wl_output,
 			       uint32_t flags, int32_t width, int32_t height,
 			       int32_t refresh)
 {
-	struct output* output = data;
-
-	if (!(flags & WL_OUTPUT_MODE_CURRENT))
-		return;
-
-	output->width = width;
-	output->height = height;
 }
 
 static void output_handle_done(void* data, struct wl_output* wl_output)
@@ -66,6 +61,7 @@ static const struct wl_output_listener output_listener = {
 
 void output_destroy(struct output* output)
 {
+	zxdg_output_v1_destroy(output->xdg_output);
 	wl_output_destroy(output->wl_output);
 	free(output);
 }
@@ -96,6 +92,57 @@ struct output* output_new(struct wl_output* wl_output, uint32_t id)
 			output);
 
 	return output;
+}
+
+void output_logical_position(void* data, struct zxdg_output_v1* xdg_output,
+                             int32_t x, int32_t y)
+{
+	struct output* self = data;
+
+	self->x = x;
+	self->y = y;
+}
+
+void output_logical_size(void* data, struct zxdg_output_v1* xdg_output,
+                         int32_t width, int32_t height)
+{
+	struct output* self = data;
+
+	self->width = width;
+	self->height = height;
+}
+
+void output_name(void* data, struct zxdg_output_v1* xdg_output,
+                 const char* name)
+{
+	struct output* self = data;
+
+	strlcpy(self->name, name, sizeof(self->name));
+}
+
+void output_description(void* data, struct zxdg_output_v1* xdg_output,
+                        const char* description)
+{
+	struct output* self = data;
+
+	strlcpy(self->description, description, sizeof(self->description));
+}
+
+static const struct zxdg_output_v1_listener xdg_output_listener = {
+	.logical_position = output_logical_position,
+	.logical_size = output_logical_size,
+	.done = NULL, /* Deprecated */
+	.name = output_name,
+	.description = output_description,
+};
+
+void output_set_xdg_output(struct output* self,
+                           struct zxdg_output_v1* xdg_output)
+{
+	self->xdg_output = xdg_output;
+
+	zxdg_output_v1_add_listener(self->xdg_output, &xdg_output_listener,
+	                            self);
 }
 
 struct output* output_find_by_id(struct wl_list* list, uint32_t id)
