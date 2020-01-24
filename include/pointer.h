@@ -20,6 +20,8 @@
 #include <neatvnc.h>
 #include "wlr-virtual-pointer-unstable-v1.h"
 
+#include "output.h"
+
 struct pointer {
 	struct nvnc* vnc;
 	struct zwlr_virtual_pointer_v1* pointer;
@@ -29,8 +31,7 @@ struct pointer {
 	uint32_t current_x;
 	uint32_t current_y;
 
-	uint32_t width;
-	uint32_t height;
+	const struct output* output;
 };
 
 int pointer_init(struct pointer* self);

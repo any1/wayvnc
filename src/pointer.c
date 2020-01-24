@@ -75,9 +75,11 @@ void pointer_set(struct pointer* self, uint32_t x, uint32_t y,
 	uint32_t t = gettime_ms();
 
 	if (x != self->current_x || y != self->current_y)
-		zwlr_virtual_pointer_v1_motion_absolute(self->pointer, t, x, y,
-							self->width,
-							self->height);
+		zwlr_virtual_pointer_v1_motion_absolute(self->pointer, t,
+		                                        self->output->x + x,
+		                                        self->output->y + y,
+		                                        self->output->width,
+		                                        self->output->height);
 
 	self->current_x = x;
 	self->current_y = y;

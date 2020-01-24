@@ -699,8 +699,7 @@ int main(int argc, char* argv[])
 	keyboard_init(&self.keyboard_backend, self.kb_layout);
 
 	self.pointer_backend.vnc = self.nvnc;
-	self.pointer_backend.width = out->width;
-	self.pointer_backend.height = out->height;
+	self.pointer_backend.output = self.selected_output;
 
 	self.pointer_backend.pointer =
 		zwlr_virtual_pointer_manager_v1_create_virtual_pointer(
