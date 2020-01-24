@@ -17,6 +17,7 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <string.h>
 #include <wayland-client.h>
 
 #include "output.h"
@@ -151,6 +152,17 @@ struct output* output_find_by_id(struct wl_list* list, uint32_t id)
 
 	wl_list_for_each(output, list, link)
 		if (output->id == id)
+			return output;
+
+	return NULL;
+}
+
+struct output* output_find_by_name(struct wl_list* list, const char* name)
+{
+	struct output* output;
+
+	wl_list_for_each(output, list, link)
+		if (strcmp(output->name, name) == 0)
 			return output;
 
 	return NULL;

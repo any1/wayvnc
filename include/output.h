@@ -46,4 +46,5 @@ void output_set_xdg_output(struct output* output,
                            struct zxdg_output_v1* xdg_output);
 void output_list_destroy(struct wl_list* list);
 struct output* output_find_by_id(struct wl_list* list, uint32_t id);
+struct output* output_find_by_name(struct wl_list* list, const char* name);
 struct output* output_first(struct wl_list* list);
