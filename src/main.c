@@ -538,7 +538,7 @@ int wayvnc_usage(FILE* stream, int rc)
 "\n"
 "    -C,--config=<path>                        Select a config file.\n"
 "    -c,--frame-capturing=screencopy|dmabuf    Select frame capturing backend.\n"
-"    -o,--output=<id>                          Select output to capture.\n"
+"    -o,--output=<name>                        Select output to capture.\n"
 "    -k,--keyboard=<layout>                    Select keyboard layout.\n"
 "    -s,--seat=<name>                          Select seat by name.\n"
 "    -h,--help                                 Get help (this text).\n"
@@ -558,7 +558,7 @@ int main(int argc, char* argv[])
 	const char* address = NULL;
 	int port = 0;
 
-	int output_id = -1;
+	const char* output_name = NULL;
 	enum frame_capture_backend_type fcbackend = FRAME_CAPTURE_BACKEND_NONE;
 	const char* seat_name = NULL;
 
@@ -593,7 +593,7 @@ int main(int argc, char* argv[])
 			}
 			break;
 		case 'o':
-			output_id = atoi(optarg);
+			output_name = optarg;
 			break;
 		case 'k':
 			self.kb_layout = optarg;
@@ -641,15 +641,9 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 
-	printf("Outputs:\n");
-
 	struct output* out;
-	wl_list_for_each(out, &self.outputs, link)
-		printf("%"PRIu32": Make: %s. Model: %s\n", out->id, out->make,
-		       out->model);
-
-	if (output_id >= 0) {
-		out = output_find_by_id(&self.outputs, output_id);
+	if (output_name) {
+		out = output_find_by_name(&self.outputs, output_name);
 		if (!out) {
 			log_error("No such output\n");
 			goto failure;
