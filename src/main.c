@@ -66,6 +66,7 @@ struct wayvnc {
 
 	struct zxdg_output_manager_v1* xdg_output_manager;
 	struct zwp_virtual_keyboard_manager_v1* keyboard_manager;
+	struct zwlr_virtual_pointer_manager_v1* pointer_manager;
 
 	struct renderer renderer;
 	const struct output* selected_output;
@@ -158,7 +159,7 @@ static void registry_add(void* data, struct wl_registry* registry,
 	}
 
 	if (strcmp(interface, zwlr_virtual_pointer_manager_v1_interface.name) == 0) {
-		self->pointer_backend.manager =
+		self->pointer_manager =
 			wl_registry_bind(registry, id,
 					 &zwlr_virtual_pointer_manager_v1_interface,
 					 1);
@@ -229,7 +230,7 @@ void wayvnc_destroy(struct wayvnc* self)
 	zwp_virtual_keyboard_manager_v1_destroy(self->keyboard_manager);
 	keyboard_destroy(&self->keyboard_backend);
 
-	zwlr_virtual_pointer_manager_v1_destroy(self->pointer_backend.manager);
+	zwlr_virtual_pointer_manager_v1_destroy(self->pointer_manager);
 	pointer_destroy(&self->pointer_backend);
 
 	if (self->screencopy_backend.manager)
@@ -239,6 +240,18 @@ void wayvnc_destroy(struct wayvnc* self)
 		zwlr_export_dmabuf_manager_v1_destroy(self->dmabuf_backend.manager);
 
 	wl_display_disconnect(self->display);
+}
+
+static void init_xdg_outputs(struct wayvnc* self)
+{
+	struct output* output;
+	wl_list_for_each(output, &self->outputs, link) {
+		struct zxdg_output_v1* xdg_output =
+			zxdg_output_manager_v1_get_xdg_output(
+				self->xdg_output_manager, output->wl_output);
+
+		output_set_xdg_output(output, xdg_output);
+	}
 }
 
 static int init_wayland(struct wayvnc* self)
@@ -264,6 +277,21 @@ static int init_wayland(struct wayvnc* self)
 	wl_display_dispatch(self->display);
 	wl_display_roundtrip(self->display);
 
+	init_xdg_outputs(self);
+
+	if (!self->pointer_manager) {
+		log_error("Virtual Pointer protocol not supported by compositor.\n");
+		goto failure;
+	}
+
+	if (!self->keyboard_manager) {
+		log_error("Virtual Keyboard protocol not supported by compositor.\n");
+		goto failure;
+	}
+
+	wl_display_dispatch(self->display);
+	wl_display_roundtrip(self->display);
+
 	if (!self->dmabuf_backend.manager && !self->screencopy_backend.manager) {
 		log_error("Compositor supports neither screencopy nor export-dmabuf! Exiting.\n");
 		goto failure;
@@ -274,18 +302,6 @@ static int init_wayland(struct wayvnc* self)
 
 	self->screencopy_backend.frame_capture.on_done = on_capture_done;
 	self->screencopy_backend.frame_capture.userdata = self;
-
-	struct output* output;
-	wl_list_for_each(output, &self->outputs, link) {
-		struct zxdg_output_v1* xdg_output =
-			zxdg_output_manager_v1_get_xdg_output(
-				self->xdg_output_manager, output->wl_output);
-
-		output_set_xdg_output(output, xdg_output);
-	}
-
-	wl_display_dispatch(self->display);
-	wl_display_roundtrip(self->display);
 
 	return 0;
 
@@ -405,7 +421,7 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port)
 			    self->selected_output->height,
 			    format);
 
-	if (self->pointer_backend.manager)
+	if (self->pointer_manager)
 		nvnc_set_pointer_fn(self->nvnc, on_pointer_event);
 
 	if (self->keyboard_backend.virtual_keyboard)
@@ -676,27 +692,21 @@ int main(int argc, char* argv[])
 	self.dmabuf_backend.fc.wl_output = out->wl_output;
 	self.screencopy_backend.frame_capture.wl_output = out->wl_output;
 
-	if (self.pointer_backend.manager) {
-		self.pointer_backend.width = out->width;
-		self.pointer_backend.height = out->height;
-	}
-
-	assert(self.keyboard_manager);
-
 	self.keyboard_backend.virtual_keyboard =
 		zwp_virtual_keyboard_manager_v1_create_virtual_keyboard(
 			self.keyboard_manager, self.selected_seat->wl_seat);
 
 	keyboard_init(&self.keyboard_backend, self.kb_layout);
 
-	if (self.pointer_backend.manager) {
-		self.pointer_backend.vnc = self.nvnc;
-		pointer_init(&self.pointer_backend, self.selected_seat->wl_seat);
-	} else {
-		log_error("Compositor does not support %s.\n",
-			  zwlr_virtual_pointer_manager_v1_interface.name);
-		goto failure;
-	}
+	self.pointer_backend.vnc = self.nvnc;
+	self.pointer_backend.width = out->width;
+	self.pointer_backend.height = out->height;
+
+	self.pointer_backend.pointer =
+		zwlr_virtual_pointer_manager_v1_create_virtual_pointer(
+			self.pointer_manager, self.selected_seat->wl_seat);
+
+	pointer_init(&self.pointer_backend);
 
 	if (renderer_init(&self.renderer, self.selected_output->width,
 			  self.selected_output->height) < 0) {

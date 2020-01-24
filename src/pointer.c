@@ -23,11 +23,8 @@
 #include "wlr-virtual-pointer-unstable-v1.h"
 #include "time-util.h"
 
-int pointer_init(struct pointer* self, struct wl_seat* seat)
+int pointer_init(struct pointer* self)
 {
-	self->pointer =
-		zwlr_virtual_pointer_manager_v1_create_virtual_pointer(self->manager, seat);
-
 	zwlr_virtual_pointer_v1_axis_source(self->pointer,
 					    WL_POINTER_AXIS_SOURCE_WHEEL);
 	return 0;

@@ -22,7 +22,6 @@
 
 struct pointer {
 	struct nvnc* vnc;
-	struct zwlr_virtual_pointer_manager_v1* manager;
 	struct zwlr_virtual_pointer_v1* pointer;
 
 	enum nvnc_button_mask current_mask;
@@ -34,7 +33,7 @@ struct pointer {
 	uint32_t height;
 };
 
-int pointer_init(struct pointer* self, struct wl_seat* seat);
+int pointer_init(struct pointer* self);
 void pointer_destroy(struct pointer* self);
 
 void pointer_set(struct pointer* self, uint32_t x, uint32_t y,
