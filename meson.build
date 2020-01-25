@@ -59,6 +59,7 @@ sources = [
 	'src/seat.c',
 	'src/smooth.c',
 	'src/cfg.c',
+	'src/intset.c',
 ]
 
 dependencies = [
