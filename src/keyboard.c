@@ -31,12 +31,12 @@
 #include "keyboard.h"
 #include "shm.h"
 #include "logging.h"
+#include "intset.h"
 
 struct table_entry {
 	xkb_keysym_t symbol;
 	xkb_keycode_t code;
 	int level;
-	bool is_pressed;
 };
 
 static void append_entry(struct keyboard* self, xkb_keysym_t symbol,
@@ -59,7 +59,6 @@ static void append_entry(struct keyboard* self, xkb_keysym_t symbol,
 	entry->symbol = symbol;
 	entry->code = code;
 	entry->level = level;
-	entry->is_pressed = false;
 }
 
 static void key_iter(struct xkb_keymap* map, xkb_keycode_t code, void* userdata)
@@ -125,8 +124,10 @@ static void keyboard__dump_entry(const struct keyboard* self,
 	const char* code_name =
 		xkb_keymap_key_get_name(self->keymap, entry->code);
 
+	bool is_pressed = intset_is_set(&self->key_state, entry->code);
+
 	log_debug("symbol=%s level=%d code=%s %s\n", sym_name, entry->level,
-	          code_name, entry->is_pressed ? "pressed" : "released");
+	          code_name, is_pressed ? "pressed" : "released");
 }
 
 void keyboard_dump_lookup_table(const struct keyboard* self)
@@ -140,6 +141,9 @@ int keyboard_init(struct keyboard* self, const char* layout)
 	self->context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
 	if (!self->context)
 		return -1;
+
+	if (intset_init(&self->key_state, 0) < 0)
+		goto key_state_failure;
 
 	struct xkb_rule_names rule_names = {
 		.layout = layout,
@@ -193,6 +197,8 @@ table_failure:
 state_failure:
 	xkb_keymap_unref(self->keymap);
 keymap_failure:
+	intset_destroy(&self->key_state);
+key_state_failure:
 	xkb_context_unref(self->context);
 	return -1;
 }
@@ -202,6 +208,7 @@ void keyboard_destroy(struct keyboard* self)
 	free(self->lookup_table);
 	xkb_state_unref(self->state);
 	xkb_keymap_unref(self->keymap);
+	intset_destroy(&self->key_state);
 	xkb_context_unref(self->context);
 }
 
@@ -294,10 +301,14 @@ void keyboard_feed(struct keyboard* self, xkb_keysym_t symbol, bool is_pressed)
 			return; // TODO: Notify the user about this
 	}
 
-	if (entry->is_pressed == is_pressed)
+	bool was_pressed = intset_is_set(&self->key_state, entry->code);
+	if (was_pressed == is_pressed)
 		return;
 
-	entry->is_pressed = is_pressed;
+	if (is_pressed)
+		intset_set(&self->key_state, entry->code);
+	else
+		intset_clear(&self->key_state, entry->code);
 
 #ifndef NDEBUG
 	keyboard__dump_entry(self, entry);

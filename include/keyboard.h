@@ -20,6 +20,8 @@
 #include <xkbcommon/xkbcommon.h>
 #include <stdbool.h>
 
+#include "intset.h"
+
 struct zwp_virtual_keyboard_v1;
 struct table_entry;
 
@@ -33,6 +35,8 @@ struct keyboard {
 	size_t lookup_table_size;
 	size_t lookup_table_length;
 	struct table_entry* lookup_table;
+
+	struct intset key_state;
 };
 
 int keyboard_init(struct keyboard* self, const char* layout);
