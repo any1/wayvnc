@@ -75,3 +75,6 @@ password=p455w0rd
 private_key_file=/path/to/key.pem
 certificate_file=/path/to/cert.pem
 ```
+
+## Compatible Software
+See https://github.com/any1/neatvnc#client-compatibility
