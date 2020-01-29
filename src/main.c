@@ -632,7 +632,7 @@ int main(int argc, char* argv[])
 	enum frame_capture_backend_type fcbackend = FRAME_CAPTURE_BACKEND_NONE;
 	const char* seat_name = NULL;
 
-	static const char* shortopts = "Cc:o:k:s:h";
+	static const char* shortopts = "C:c:o:k:s:h";
 
 	static const struct option longopts[] = {
 		{ "config", required_argument, NULL, 'C' },
@@ -688,7 +688,7 @@ int main(int argc, char* argv[])
 
 	errno = 0;
 	int cfg_rc = cfg_load(&self.cfg, cfg_file);
-	if (cfg_rc != 0 && (cfg_file || errno != EEXIST)) {
+	if (cfg_rc != 0 && (cfg_file || errno != ENOENT)) {
 		if (cfg_rc > 0) {
 			log_error("Failed to load config. Error on line %d\n",
 			          cfg_rc);
