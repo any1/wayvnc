@@ -54,7 +54,7 @@ user authentication enabled. The best way to protect your VNC connection is to
 use SSH tunneling while listening on localhost, but users can also be
 authenticated when connecting to Wayvnc.
 
-### Encryptions & Authentication
+### Encryption & Authentication
 You'll need a private X509 key and a certificate. A self signed key with a
 certificate can be generated like so:
 ```
