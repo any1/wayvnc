@@ -118,7 +118,7 @@
     </request>
   </interface>
 
-  <interface name="zwlr_virtual_pointer_manager_v1" version="1">
+  <interface name="zwlr_virtual_pointer_manager_v1" version="2">
     <description summary="virtual pointer manager">
       This object allows clients to create individual virtual pointer objects.
     </description>
@@ -131,9 +131,19 @@
       <arg name="seat" type="object" interface="wl_seat" allow-null="true"/>
       <arg name="id" type="new_id" interface="zwlr_virtual_pointer_v1"/>
     </request>
-
     <request name="destroy" type="destructor" since="1">
       <description summary="destroy the virtual pointer manager"/>
+    </request>
+
+    <request name="create_virtual_pointer2" since="2">
+      <description summary="Create a new virtual pointer">
+        Creates a new virtual pointer. The seat and the output arguments are
+        optional. If they are set, the compositor must bind the pointer
+        accordingly.
+      </description>
+      <arg name="seat" type="object" interface="wl_seat" allow-null="true"/>
+      <arg name="output" type="object" interface="wl_output" allow-null="true"/>
+      <arg name="id" type="new_id" interface="zwlr_virtual_pointer_v1"/>
     </request>
   </interface>
 </protocol>

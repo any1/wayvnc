@@ -163,7 +163,7 @@ static void registry_add(void* data, struct wl_registry* registry,
 		self->pointer_manager =
 			wl_registry_bind(registry, id,
 					 &zwlr_virtual_pointer_manager_v1_interface,
-					 1);
+					 2);
 		return;
 	}
 
@@ -760,8 +760,9 @@ int main(int argc, char* argv[])
 	self.pointer_backend.output = self.selected_output;
 
 	self.pointer_backend.pointer =
-		zwlr_virtual_pointer_manager_v1_create_virtual_pointer(
-			self.pointer_manager, self.selected_seat->wl_seat);
+		zwlr_virtual_pointer_manager_v1_create_virtual_pointer2(
+			self.pointer_manager, self.selected_seat->wl_seat,
+			out->wl_output);
 
 	pointer_init(&self.pointer_backend);
 
