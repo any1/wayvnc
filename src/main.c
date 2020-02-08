@@ -36,6 +36,7 @@
 #include "wlr-export-dmabuf-unstable-v1.h"
 #include "wlr-screencopy-unstable-v1.h"
 #include "wlr-virtual-pointer-unstable-v1.h"
+#include "wlr-seat-management-unstable-v1.h"
 #include "virtual-keyboard-unstable-v1.h"
 #include "xdg-output-unstable-v1.h"
 #include "render.h"
@@ -68,6 +69,8 @@ struct wayvnc {
 	struct zxdg_output_manager_v1* xdg_output_manager;
 	struct zwp_virtual_keyboard_manager_v1* keyboard_manager;
 	struct zwlr_virtual_pointer_manager_v1* pointer_manager;
+	struct zwlr_seat_manager_v1* seat_manager;
+	struct zwlr_chair_v1* chair;
 
 	struct renderer renderer;
 	const struct output* selected_output;
@@ -190,6 +193,14 @@ static void registry_add(void* data, struct wl_registry* registry,
 			                 1);
 		return;
 	}
+
+	if (strcmp(interface, zwlr_seat_manager_v1_interface.name) == 0) {
+		self->seat_manager =
+			wl_registry_bind(registry, id,
+					 &zwlr_seat_manager_v1_interface, 1);
+		return;
+	}
+
 }
 
 static void registry_remove(void* data, struct wl_registry* registry,
@@ -227,6 +238,7 @@ void wayvnc_destroy(struct wayvnc* self)
 
 	wl_shm_destroy(self->screencopy_backend.wl_shm);
 
+	zwlr_seat_manager_v1_destroy(self->seat_manager);
 	zwp_virtual_keyboard_v1_destroy(self->keyboard_backend.virtual_keyboard);
 	zwp_virtual_keyboard_manager_v1_destroy(self->keyboard_manager);
 	keyboard_destroy(&self->keyboard_backend);
@@ -287,6 +299,17 @@ static int init_wayland(struct wayvnc* self)
 
 	if (!self->keyboard_manager) {
 		log_error("Virtual Keyboard protocol not supported by compositor.\n");
+		goto failure;
+	}
+
+	if (!self->seat_manager) {
+		log_error("Seat management protocol not supported by compositor.\n");
+		goto failure;
+	}
+
+	self->chair = zwlr_seat_manager_v1_create_chair(self->seat_manager, "wayvnc");
+	if (!self) {
+		log_error("Failed to create a seat for wayvnc.\n");
 		goto failure;
 	}
 
@@ -738,7 +761,7 @@ int main(int argc, char* argv[])
 			goto failure;
 		}
 	} else {
-		seat = seat_first(&self.seats);
+		seat = seat_find_by_name(&self.seats, "wayvnc");
 		if (!seat) {
 			log_error("No seat found\n");
 			goto failure;
