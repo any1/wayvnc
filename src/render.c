@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 Andri Yngvason
+ * Copyright (c) 2019 - 2020 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -31,8 +31,11 @@
 #include "logging.h"
 #include "render.h"
 #include "dmabuf.h"
+#include "config.h"
 
 #define MAYBE_UNUSED __attribute__((unused))
+
+#define SHADER_PATH PREFIX "share/wayvnc/shaders"
 
 enum {
 	ATTR_INDEX_POS = 0,
@@ -216,9 +219,22 @@ alloc_failure:
 	return NULL;
 }
 
-static int gl_load_shader_from_file(GLuint* dst, const char* path, GLenum type)
+static char* read_file_at_path(const char* prefix, const char* file)
 {
-	char* source = read_file(path);
+	char path[256];
+
+	snprintf(path, sizeof(path), "%s/%s", prefix, file);
+	path[sizeof(path) - 1] = '\0';
+
+	return read_file(path);
+}
+
+static int gl_load_shader_from_file(GLuint* dst, const char* file, GLenum type)
+{
+	char* source = read_file_at_path("shaders", file);
+	if (!source)
+		source = read_file_at_path(SHADER_PATH, file);
+
 	if (!source)
 		return -1;
 
@@ -381,13 +397,13 @@ int renderer_init(struct renderer* self, uint32_t width, uint32_t height)
 		goto late_extension_failure;
 
 	if (gl_compile_shader_program(&self->dmabuf_shader_program,
-				      "shaders/dmabuf-vertex.glsl",
-				      "shaders/dmabuf-fragment.glsl") < 0)
+				      "dmabuf-vertex.glsl",
+				      "dmabuf-fragment.glsl") < 0)
 		goto shader_failure;
 
 	if (gl_compile_shader_program(&self->texture_shader_program,
-				      "shaders/texture-vertex.glsl",
-				      "shaders/texture-fragment.glsl") < 0)
+				      "texture-vertex.glsl",
+				      "texture-fragment.glsl") < 0)
 		goto shader_failure;
 
 	self->width = width;

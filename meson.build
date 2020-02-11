@@ -9,6 +9,7 @@ project(
 )
 
 buildtype = get_option('buildtype')
+prefix = get_option('prefix')
 
 c_args = [
 	'-D_GNU_SOURCE',
@@ -73,6 +74,17 @@ dependencies = [
 	xkbcommon,
 	client_protos,
 ]
+
+config = configuration_data()
+
+config.set('PREFIX', '"' + prefix + '"')
+
+configure_file(
+	output: 'config.h',
+	configuration: config,
+)
+
+install_subdir('shaders', install_dir: 'share/wayvnc')
 
 executable(
 	'wayvnc',
