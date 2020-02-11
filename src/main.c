@@ -765,8 +765,12 @@ int main(int argc, char* argv[])
 
 	pointer_init(&self.pointer_backend);
 
+	enum renderer_input_type renderer_input_type =
+		fcbackend == FRAME_CAPTURE_BACKEND_DMABUF ?
+			RENDERER_INPUT_DMABUF : RENDERER_INPUT_FB;
 	if (renderer_init(&self.renderer, self.selected_output->width,
-			  self.selected_output->height) < 0) {
+		          self.selected_output->height,
+		          renderer_input_type) < 0) {
 		log_error("Failed to initialise renderer\n");
 		goto failure;
 	}

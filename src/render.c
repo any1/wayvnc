@@ -324,8 +324,7 @@ void gl_render(void)
 
 void renderer_destroy(struct renderer* self)
 {
-	glDeleteProgram(self->dmabuf_shader_program);
-	glDeleteProgram(self->texture_shader_program);
+	glDeleteProgram(self->shader_program);
 	eglMakeCurrent(self->display, EGL_NO_SURFACE, EGL_NO_SURFACE,
 		       EGL_NO_CONTEXT);
 	eglDestroySurface(self->display, self->surface);
@@ -333,7 +332,8 @@ void renderer_destroy(struct renderer* self)
 	eglTerminate(self->display);
 }
 
-int renderer_init(struct renderer* self, uint32_t width, uint32_t height)
+int renderer_init(struct renderer* self, uint32_t width, uint32_t height,
+                  enum renderer_input_type input_type)
 {
 	if (!eglBindAPI(EGL_OPENGL_ES_API))
 		return -1;
@@ -396,15 +396,20 @@ int renderer_init(struct renderer* self, uint32_t width, uint32_t height)
 	if (gl_load_late_extensions() < 0)
 		goto late_extension_failure;
 
-	if (gl_compile_shader_program(&self->dmabuf_shader_program,
-				      "dmabuf-vertex.glsl",
-				      "dmabuf-fragment.glsl") < 0)
-		goto shader_failure;
-
-	if (gl_compile_shader_program(&self->texture_shader_program,
-				      "texture-vertex.glsl",
-				      "texture-fragment.glsl") < 0)
-		goto shader_failure;
+	switch (input_type) {
+	case RENDERER_INPUT_DMABUF:
+		if (gl_compile_shader_program(&self->shader_program,
+					      "dmabuf-vertex.glsl",
+					      "dmabuf-fragment.glsl") < 0)
+			goto shader_failure;
+		break;
+	case RENDERER_INPUT_FB:
+		if (gl_compile_shader_program(&self->shader_program,
+					      "texture-vertex.glsl",
+					      "texture-fragment.glsl") < 0)
+			goto shader_failure;
+		break;
+	}
 
 	self->width = width;
 	self->height = height;
@@ -479,8 +484,8 @@ int render_dmabuf_frame(struct renderer* self, struct dmabuf_frame* frame)
 	glBindTexture(GL_TEXTURE_EXTERNAL_OES, tex);
 	glEGLImageTargetTexture2DOES(GL_TEXTURE_EXTERNAL_OES, image);
 
-	glUseProgram(self->dmabuf_shader_program);
-	glUniform1i(glGetUniformLocation(self->dmabuf_shader_program, "u_tex"), 0);
+	glUseProgram(self->shader_program);
+	glUniform1i(glGetUniformLocation(self->shader_program, "u_tex"), 0);
 	gl_render();
 
 	glBindTexture(GL_TEXTURE_2D, 0);
@@ -508,8 +513,8 @@ int render_framebuffer(struct renderer* self, const void* addr, uint32_t format,
 	glGenerateMipmap(GL_TEXTURE_2D);
 	glPixelStorei(GL_UNPACK_ROW_LENGTH_EXT, 0);
 
-	glUseProgram(self->texture_shader_program);
-	glUniform1i(glGetUniformLocation(self->texture_shader_program, "u_tex"), 0);
+	glUseProgram(self->shader_program);
+	glUniform1i(glGetUniformLocation(self->shader_program, "u_tex"), 0);
 	gl_render();
 
 	glBindTexture(GL_TEXTURE_2D, 0);

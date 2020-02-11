@@ -21,19 +21,24 @@
 
 struct dmabuf_frame;
 
+enum renderer_input_type {
+	RENDERER_INPUT_FB,
+	RENDERER_INPUT_DMABUF,
+};
+
 struct renderer {
 	EGLDisplay display;
 	EGLSurface surface;
 	EGLContext context;
-	GLuint dmabuf_shader_program;
-	GLuint texture_shader_program;
+	GLuint shader_program;
 	uint32_t width;
 	uint32_t height;
 	GLint read_format;
 	GLint read_type;
 };
 
-int renderer_init(struct renderer* self, uint32_t width, uint32_t height);
+int renderer_init(struct renderer* self, uint32_t width, uint32_t height,
+                  enum renderer_input_type input_type);
 void renderer_destroy(struct renderer* self);
 
 int render_dmabuf_frame(struct renderer* self, struct dmabuf_frame* frame);
