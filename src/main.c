@@ -575,6 +575,7 @@ int wayvnc_usage(FILE* stream, int rc)
 "    -o,--output=<name>                        Select output to capture.\n"
 "    -k,--keyboard=<layout>                    Select keyboard layout.\n"
 "    -s,--seat=<name>                          Select seat by name.\n"
+"    -r,--render-cursor                        Enable overlay cursor rendering.\n"
 "    -h,--help                                 Get help (this text).\n"
 "\n";
 
@@ -631,8 +632,10 @@ int main(int argc, char* argv[])
 	const char* output_name = NULL;
 	enum frame_capture_backend_type fcbackend = FRAME_CAPTURE_BACKEND_NONE;
 	const char* seat_name = NULL;
+	
+	bool overlay_cursor = false;
 
-	static const char* shortopts = "C:c:o:k:s:h";
+	static const char* shortopts = "C:c:o:k:s:rh";
 
 	static const struct option longopts[] = {
 		{ "config", required_argument, NULL, 'C' },
@@ -640,6 +643,7 @@ int main(int argc, char* argv[])
 		{ "output", required_argument, NULL, 'o' },
 		{ "keyboard", required_argument, NULL, 'k' },
 		{ "seat", required_argument, NULL, 's' },
+		{ "render-cursor", no_argument, NULL, 'r' },
 		{ "help", no_argument, NULL, 'h' },
 		{ NULL, 0, NULL, 0 }
 	};
@@ -670,6 +674,9 @@ int main(int argc, char* argv[])
 			break;
 		case 's':
 			seat_name = optarg;
+			break;
+		case 'r':
+			overlay_cursor = true;
 			break;
 		case 'h':
 			return wayvnc_usage(stdout, 0);
@@ -809,6 +816,8 @@ int main(int argc, char* argv[])
 			goto capture_failure;
 		break;
 	}
+
+	self.capture_backend->overlay_cursor = overlay_cursor;
 
 	if (wayvnc_start_capture(&self) < 0)
 		goto capture_failure;
