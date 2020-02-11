@@ -35,7 +35,7 @@
 
 #define MAYBE_UNUSED __attribute__((unused))
 
-#define SHADER_PATH PREFIX "share/wayvnc/shaders"
+#define SHADER_PATH PREFIX "/share/wayvnc/shaders"
 
 enum {
 	ATTR_INDEX_POS = 0,
