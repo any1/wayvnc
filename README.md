@@ -6,7 +6,8 @@ running Wayland session, creates virtual input devices and exposes a single
 display via the RFB protocol. The Wayland session may be a headless one, so it
 is also possible to run wayvnc without a physical display attached.
 
-For support, join the #wayvnc IRC channel on freenode.
+Please check the [FAQ](FAQ.md) for answers to common questions. For further
+support, join the #wayvnc IRC channel on freenode.
 
 ## Building
 ### Runtime Dependencies
