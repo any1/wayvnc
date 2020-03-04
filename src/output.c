@@ -18,6 +18,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+#include <wayland-client-protocol.h>
 #include <wayland-client.h>
 
 #include "output.h"
@@ -34,6 +35,8 @@ static void output_handle_geometry(void* data, struct wl_output* wl_output,
 {
 	struct output* output = data;
 
+	output->x = x;
+	output->y = y;
 	strlcpy(output->make, make, sizeof(output->make));
 	strlcpy(output->model, model, sizeof(output->model));
 }
@@ -42,6 +45,13 @@ static void output_handle_mode(void* data, struct wl_output* wl_output,
 			       uint32_t flags, int32_t width, int32_t height,
 			       int32_t refresh)
 {
+	struct output* output = data;
+
+	if (!(flags & WL_OUTPUT_MODE_CURRENT))
+		return;
+
+	output->width = width;
+	output->height = height;
 }
 
 static void output_handle_done(void* data, struct wl_output* wl_output)
@@ -98,19 +108,11 @@ struct output* output_new(struct wl_output* wl_output, uint32_t id)
 void output_logical_position(void* data, struct zxdg_output_v1* xdg_output,
                              int32_t x, int32_t y)
 {
-	struct output* self = data;
-
-	self->x = x;
-	self->y = y;
 }
 
 void output_logical_size(void* data, struct zxdg_output_v1* xdg_output,
                          int32_t width, int32_t height)
 {
-	struct output* self = data;
-
-	self->width = width;
-	self->height = height;
 }
 
 void output_name(void* data, struct zxdg_output_v1* xdg_output,
