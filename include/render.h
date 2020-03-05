@@ -40,6 +40,7 @@ struct renderer {
 	struct {
 		GLuint program;
 		GLint u_tex;
+		GLint u_proj;
 	} shader;
 };
 
