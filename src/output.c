@@ -37,6 +37,8 @@ static void output_handle_geometry(void* data, struct wl_output* wl_output,
 
 	output->x = x;
 	output->y = y;
+	output->transform = transform;
+
 	strlcpy(output->make, make, sizeof(output->make));
 	strlcpy(output->model, model, sizeof(output->model));
 }

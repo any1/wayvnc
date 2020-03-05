@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <wayland-client-protocol.h>
 #include <wayland-client.h>
 #include <stdint.h>
 
@@ -33,6 +34,8 @@ struct output {
 
 	uint32_t x;
 	uint32_t y;
+
+	enum wl_output_transform transform;
 
 	char make[256];
 	char model[256];
