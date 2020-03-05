@@ -22,6 +22,7 @@
 #include <wayland-client.h>
 
 struct dmabuf_frame;
+struct output;
 
 enum renderer_input_type {
 	RENDERER_INPUT_FB,
@@ -33,9 +34,7 @@ struct renderer {
 	EGLSurface surface;
 	EGLContext context;
 
-	uint32_t width;
-	uint32_t height;
-	enum wl_output_transform transform;
+	const struct output* output;
 
 	GLint read_format;
 	GLint read_type;
@@ -47,8 +46,7 @@ struct renderer {
 	} shader;
 };
 
-int renderer_init(struct renderer* self, uint32_t width, uint32_t height,
-                  enum wl_output_transform transform,
+int renderer_init(struct renderer* self, const struct output* output,
                   enum renderer_input_type input_type);
 void renderer_destroy(struct renderer* self);
 

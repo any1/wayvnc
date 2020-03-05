@@ -31,6 +31,7 @@
 #include "logging.h"
 #include "render.h"
 #include "dmabuf.h"
+#include "output.h"
 #include "config.h"
 
 #define MAYBE_UNUSED __attribute__((unused))
@@ -367,8 +368,7 @@ void renderer_destroy(struct renderer* self)
 	eglTerminate(self->display);
 }
 
-int renderer_init(struct renderer* self, uint32_t width, uint32_t height,
-                  enum wl_output_transform transform,
+int renderer_init(struct renderer* self, const struct output* output,
                   enum renderer_input_type input_type)
 {
 	if (!eglBindAPI(EGL_OPENGL_ES_API))
@@ -414,8 +414,8 @@ int renderer_init(struct renderer* self, uint32_t width, uint32_t height,
 		return -1;
 
 	EGLint surf_attr[] = {
-		EGL_WIDTH, width,
-		EGL_HEIGHT, height,
+		EGL_WIDTH, output->width,
+		EGL_HEIGHT, output->width,
 		EGL_NONE
 	};
 
@@ -450,13 +450,13 @@ int renderer_init(struct renderer* self, uint32_t width, uint32_t height,
 	self->shader.u_tex = glGetUniformLocation(self->shader.program, "u_tex");
 	self->shader.u_proj = glGetUniformLocation(self->shader.program, "u_proj");
 
-	self->width = width;
-	self->height = height;
-	self->transform = transform;
+	self->output = output;
 	glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &self->read_format);
 	glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &self->read_type);
 
-	glViewport(0, 0, width, height);
+	glViewport(0, 0,
+	           output_get_transformed_width(output),
+	           output_get_transformed_height(output));
 	gl_clear();
 
 	return 0;
@@ -528,7 +528,7 @@ int render_dmabuf_frame(struct renderer* self, struct dmabuf_frame* frame)
 
 	glUniform1i(self->shader.u_tex, 0);
 
-	const float* proj = transforms[self->transform];
+	const float* proj = transforms[self->output->transform];
 	glUniformMatrix2fv(self->shader.u_proj, 1, GL_FALSE, proj);
 
 	gl_render();
@@ -562,7 +562,7 @@ int render_framebuffer(struct renderer* self, const void* addr, uint32_t format,
 
 	glUniform1i(self->shader.u_tex, 0);
 
-	const float* proj = transforms[self->transform];
+	const float* proj = transforms[self->output->transform];
 	glUniformMatrix2fv(self->shader.u_proj, 1, GL_FALSE, proj);
 
 	gl_render();
@@ -576,8 +576,8 @@ int render_framebuffer(struct renderer* self, const void* addr, uint32_t format,
 void render_copy_pixels(struct renderer* self, void* dst, uint32_t y,
 			uint32_t height)
 {
-	assert(y + height <= self->height);
+	assert(y + height <= self->output->height);
 
-	glReadPixels(0, y, self->width, height, self->read_format,
+	glReadPixels(0, y, self->output->width, height, self->read_format,
 		    self->read_type, dst);
 }
