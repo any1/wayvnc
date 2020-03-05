@@ -63,6 +63,41 @@ enum {
 	X_GL_EXTENSIONS
 #undef X
 
+static const float transforms[][4] = {
+	[WL_OUTPUT_TRANSFORM_NORMAL] = {
+		1.0f, 0.0f,
+		0.0f, 1.0f,
+	},
+	[WL_OUTPUT_TRANSFORM_90] = {
+		0.0f, -1.0f,
+		1.0f, 0.0f,
+	},
+	[WL_OUTPUT_TRANSFORM_180] = {
+		-1.0f, 0.0f,
+		0.0f, -1.0f,
+	},
+	[WL_OUTPUT_TRANSFORM_270] = {
+		0.0f, 1.0f,
+		-1.0f, 0.0f,
+	},
+	[WL_OUTPUT_TRANSFORM_FLIPPED] = { // TODO
+		1.0f, 0.0f,
+		0.0f, 1.0f,
+	},
+	[WL_OUTPUT_TRANSFORM_FLIPPED_90] = { // TODO
+		1.0f, 0.0f,
+		0.0f, 1.0f,
+	},
+	[WL_OUTPUT_TRANSFORM_FLIPPED_180] = { // TODO
+		1.0f, 0.0f,
+		0.0f, 1.0f,
+	},
+	[WL_OUTPUT_TRANSFORM_FLIPPED_270] = { // TODO
+		1.0f, 0.0f,
+		0.0f, 1.0f,
+	},
+};
+
 int gl_format_from_fourcc(GLenum* result, uint32_t format)
 {
 	switch (format) {
@@ -333,6 +368,7 @@ void renderer_destroy(struct renderer* self)
 }
 
 int renderer_init(struct renderer* self, uint32_t width, uint32_t height,
+                  enum wl_output_transform transform,
                   enum renderer_input_type input_type)
 {
 	if (!eglBindAPI(EGL_OPENGL_ES_API))
@@ -416,6 +452,7 @@ int renderer_init(struct renderer* self, uint32_t width, uint32_t height,
 
 	self->width = width;
 	self->height = height;
+	self->transform = transform;
 	glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &self->read_format);
 	glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &self->read_type);
 
@@ -491,10 +528,7 @@ int render_dmabuf_frame(struct renderer* self, struct dmabuf_frame* frame)
 
 	glUniform1i(self->shader.u_tex, 0);
 
-	const float proj[] = {
-		1.0f, 0.0f,
-		0.0f, 1.0f,
-	};
+	const float* proj = transforms[self->transform];
 	glUniformMatrix2fv(self->shader.u_proj, 1, GL_FALSE, proj);
 
 	gl_render();
@@ -528,10 +562,7 @@ int render_framebuffer(struct renderer* self, const void* addr, uint32_t format,
 
 	glUniform1i(self->shader.u_tex, 0);
 
-	const float proj[] = {
-		1.0f, 0.0f,
-		0.0f, 1.0f,
-	};
+	const float* proj = transforms[self->transform];
 	glUniformMatrix2fv(self->shader.u_proj, 1, GL_FALSE, proj);
 
 	gl_render();

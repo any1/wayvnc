@@ -783,7 +783,7 @@ int main(int argc, char* argv[])
 			RENDERER_INPUT_DMABUF : RENDERER_INPUT_FB;
 	if (renderer_init(&self.renderer, self.selected_output->width,
 		          self.selected_output->height,
-		          renderer_input_type) < 0) {
+			  WL_OUTPUT_TRANSFORM_NORMAL, renderer_input_type) < 0) {
 		log_error("Failed to initialise renderer\n");
 		goto failure;
 	}

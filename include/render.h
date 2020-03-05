@@ -18,6 +18,8 @@
 
 #include <GLES2/gl2.h>
 #include <EGL/egl.h>
+#include <wayland-client-protocol.h>
+#include <wayland-client.h>
 
 struct dmabuf_frame;
 
@@ -33,6 +35,7 @@ struct renderer {
 
 	uint32_t width;
 	uint32_t height;
+	enum wl_output_transform transform;
 
 	GLint read_format;
 	GLint read_type;
@@ -45,6 +48,7 @@ struct renderer {
 };
 
 int renderer_init(struct renderer* self, uint32_t width, uint32_t height,
+                  enum wl_output_transform transform,
                   enum renderer_input_type input_type);
 void renderer_destroy(struct renderer* self);
 
