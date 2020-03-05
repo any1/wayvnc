@@ -30,11 +30,16 @@ struct renderer {
 	EGLDisplay display;
 	EGLSurface surface;
 	EGLContext context;
-	GLuint shader_program;
+
 	uint32_t width;
 	uint32_t height;
+
 	GLint read_format;
 	GLint read_type;
+
+	struct {
+		GLuint program;
+	} shader;
 };
 
 int renderer_init(struct renderer* self, uint32_t width, uint32_t height,
