@@ -411,6 +411,8 @@ int renderer_init(struct renderer* self, uint32_t width, uint32_t height,
 		break;
 	}
 
+	self->shader.u_tex = glGetUniformLocation(self->shader.program, "u_tex");
+
 	self->width = width;
 	self->height = height;
 	glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &self->read_format);
@@ -485,7 +487,7 @@ int render_dmabuf_frame(struct renderer* self, struct dmabuf_frame* frame)
 	glEGLImageTargetTexture2DOES(GL_TEXTURE_EXTERNAL_OES, image);
 
 	glUseProgram(self->shader.program);
-	glUniform1i(glGetUniformLocation(self->shader.program, "u_tex"), 0);
+	glUniform1i(self->shader.u_tex, 0);
 	gl_render();
 
 	glBindTexture(GL_TEXTURE_2D, 0);
@@ -514,7 +516,7 @@ int render_framebuffer(struct renderer* self, const void* addr, uint32_t format,
 	glPixelStorei(GL_UNPACK_ROW_LENGTH_EXT, 0);
 
 	glUseProgram(self->shader.program);
-	glUniform1i(glGetUniformLocation(self->shader.program, "u_tex"), 0);
+	glUniform1i(self->shader.u_tex, 0);
 	gl_render();
 
 	glBindTexture(GL_TEXTURE_2D, 0);

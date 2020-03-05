@@ -39,6 +39,7 @@ struct renderer {
 
 	struct {
 		GLuint program;
+		GLint u_tex;
 	} shader;
 };
 
