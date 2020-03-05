@@ -51,3 +51,6 @@ void output_list_destroy(struct wl_list* list);
 struct output* output_find_by_id(struct wl_list* list, uint32_t id);
 struct output* output_find_by_name(struct wl_list* list, const char* name);
 struct output* output_first(struct wl_list* list);
+
+uint32_t output_get_transformed_width(const struct output* self);
+uint32_t output_get_transformed_height(const struct output* self);

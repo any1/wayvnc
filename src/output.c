@@ -18,6 +18,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 #include <wayland-client-protocol.h>
 #include <wayland-client.h>
 
@@ -26,6 +27,33 @@
 #include "logging.h"
 
 #include "xdg-output-unstable-v1.h"
+
+static bool is_transform_90_degrees(enum wl_output_transform transform)
+{
+	switch (transform) {
+	case WL_OUTPUT_TRANSFORM_90:
+	case WL_OUTPUT_TRANSFORM_270:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_90:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_270:
+		return true;
+	default:
+		break;
+	}
+
+	return false;
+}
+
+uint32_t output_get_transformed_width(const struct output* self)
+{
+	return is_transform_90_degrees(self->transform)
+	      ? self->height : self->width;
+}
+
+uint32_t output_get_transformed_height(const struct output* self)
+{
+	return is_transform_90_degrees(self->transform)
+	      ? self->width : self->height;
+}
 
 static void output_handle_geometry(void* data, struct wl_output* wl_output,
 				   int32_t x, int32_t y, int32_t phys_width,
