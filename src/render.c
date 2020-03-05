@@ -414,8 +414,8 @@ int renderer_init(struct renderer* self, const struct output* output,
 		return -1;
 
 	EGLint surf_attr[] = {
-		EGL_WIDTH, output->width,
-		EGL_HEIGHT, output->width,
+		EGL_WIDTH, output_get_transformed_width(output),
+		EGL_HEIGHT, output_get_transformed_height(output),
 		EGL_NONE
 	};
 
@@ -576,8 +576,10 @@ int render_framebuffer(struct renderer* self, const void* addr, uint32_t format,
 void render_copy_pixels(struct renderer* self, void* dst, uint32_t y,
 			uint32_t height)
 {
-	assert(y + height <= self->output->height);
+	assert(y + height <= output_get_transformed_height(self->output));
 
-	glReadPixels(0, y, self->output->width, height, self->read_format,
-		    self->read_type, dst);
+	uint32_t width = output_get_transformed_width(self->output);
+
+	glReadPixels(0, y, width, height, self->read_format, self->read_type,
+	             dst);
 }

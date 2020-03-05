@@ -434,8 +434,8 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port)
 
 	nvnc_set_name(self->nvnc, "WayVNC");
 	nvnc_set_dimensions(self->nvnc,
-			    self->selected_output->width,
-			    self->selected_output->height,
+			    output_get_transformed_width(self->selected_output),
+			    output_get_transformed_height(self->selected_output),
 			    format);
 
 	if (self->cfg.enable_auth)
@@ -508,11 +508,14 @@ void wayvnc_process_frame(struct wayvnc* self)
 	uint32_t format = fourcc_from_gl_format(self->renderer.read_format);
 	struct dmabuf_frame* frame = &self->dmabuf_backend.frame;
 
-	struct nvnc_fb* fb = nvnc_fb_new(frame->width, frame->height, format);
+	uint32_t fb_width = output_get_transformed_width(self->selected_output);
+	uint32_t fb_height =
+		output_get_transformed_height(self->selected_output);
+	struct nvnc_fb* fb = nvnc_fb_new(fb_width, fb_height, format);
 	void* addr = nvnc_fb_get_addr(fb);
 
 	render_dmabuf_frame(&self->renderer, frame);
-	render_copy_pixels(&self->renderer, addr, 0, frame->height);
+	render_copy_pixels(&self->renderer, addr, 0, fb_height);
 
 	wayvnc_update_vnc(self, fb);
 }
@@ -529,12 +532,15 @@ void wayvnc_process_screen(struct wayvnc* self)
 	uint32_t stride = self->capture_backend->frame_info.stride;
 	uint32_t frame_format = self->capture_backend->frame_info.fourcc_format;
 
-	struct nvnc_fb* fb = nvnc_fb_new(width, height, renderer_format);
+	uint32_t fb_width = output_get_transformed_width(self->selected_output);
+	uint32_t fb_height =
+		output_get_transformed_height(self->selected_output);
+	struct nvnc_fb* fb = nvnc_fb_new(fb_width, fb_height, renderer_format);
 	void* addr = nvnc_fb_get_addr(fb);
 
 	render_framebuffer(&self->renderer, pixels, frame_format, width, height,
 			   stride);
-	render_copy_pixels(&self->renderer, addr, 0, height);
+	render_copy_pixels(&self->renderer, addr, 0, fb_height);
 
 	wayvnc_update_vnc(self, fb);
 }
