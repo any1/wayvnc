@@ -395,7 +395,10 @@ static void on_pointer_event(struct nvnc_client* client, uint16_t x, uint16_t y,
 	struct nvnc* nvnc = nvnc_get_server(client);
 	struct wayvnc* wayvnc = nvnc_get_userdata(nvnc);
 
-	pointer_set(&wayvnc->pointer_backend, x, y, button_mask);
+	uint32_t xfx = 0, xfy = 0;
+	output_transform_coord(wayvnc->selected_output, x, y, &xfx, &xfy);
+
+	pointer_set(&wayvnc->pointer_backend, xfx, xfy, button_mask);
 }
 
 static void on_key_event(struct nvnc_client* client, uint32_t symbol,
