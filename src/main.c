@@ -486,8 +486,15 @@ void wayvnc_update_vnc(struct wayvnc* self, struct nvnc_fb* fb)
 		uint32_t hint_width = self->capture_backend->damage_hint.width;
 		uint32_t hint_height = self->capture_backend->damage_hint.height;
 
-		nvnc_check_damage(self->current_fb, self->last_fb, hint_x,
-				  hint_y, hint_width, hint_height,
+		uint32_t tfx0, tfy0, tfx1, tfy1;
+		output_transform_box_coord(self->selected_output,
+		                           hint_x, hint_y,
+		                           hint_x + hint_width,
+		                           hint_y + hint_height,
+		                           &tfx0, &tfy0, &tfx1, &tfy1);
+
+		nvnc_check_damage(self->current_fb, self->last_fb, tfx0,
+				  tfy0, tfx1 - tfx0, tfy1 - tfy0,
 				  on_damage_check_done, self);
 		return;
 	}
