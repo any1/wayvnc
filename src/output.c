@@ -28,6 +28,66 @@
 
 #include "xdg-output-unstable-v1.h"
 
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+
+void output_transform_coord(const struct output* self,
+                            uint32_t src_x, uint32_t src_y,
+                            uint32_t* dst_x, uint32_t* dst_y)
+{
+	switch (self->transform) {
+	case WL_OUTPUT_TRANSFORM_NORMAL:
+		*dst_x = src_x;
+		*dst_y = src_y;
+		break;
+	case WL_OUTPUT_TRANSFORM_90:
+		*dst_x = src_y;
+		*dst_y = self->width - src_x;
+		break;
+	case WL_OUTPUT_TRANSFORM_180:
+		*dst_x = self->width - src_x;
+		*dst_y = self->height - src_y;
+		break;
+	case WL_OUTPUT_TRANSFORM_270:
+		*dst_x = self->height - src_y;
+		*dst_y = src_x;
+		break;
+	case WL_OUTPUT_TRANSFORM_FLIPPED:
+		*dst_x = self->width - src_x;
+		*dst_y = src_y;
+		break;
+	case WL_OUTPUT_TRANSFORM_FLIPPED_90:
+		*dst_x = self->height - src_y;
+		*dst_y = self->width - src_x;
+		break;
+	case WL_OUTPUT_TRANSFORM_FLIPPED_180:
+		*dst_x = src_x;
+		*dst_y = self->height - src_y;
+		break;
+	case WL_OUTPUT_TRANSFORM_FLIPPED_270:
+		*dst_x = src_y;
+		*dst_y = src_x;
+		break;
+	}
+}
+
+void output_transform_box_coord(const struct output* self,
+                                uint32_t src_x0, uint32_t src_y0,
+                                uint32_t src_x1, uint32_t src_y1,
+                                uint32_t* dst_x0, uint32_t* dst_y0,
+				uint32_t* dst_x1, uint32_t* dst_y1)
+{
+	uint32_t x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+
+	output_transform_coord(self, src_x0, src_y0, &x0, &y0);
+	output_transform_coord(self, src_x1, src_y1, &x1, &y1);
+
+	*dst_x0 = MIN(x0, x1);
+	*dst_x1 = MAX(x0, x1);
+	*dst_y0 = MIN(y0, y1);
+	*dst_y1 = MAX(y0, y1);
+}
+
 static bool is_transform_90_degrees(enum wl_output_transform transform)
 {
 	switch (transform) {

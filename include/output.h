@@ -54,3 +54,12 @@ struct output* output_first(struct wl_list* list);
 
 uint32_t output_get_transformed_width(const struct output* self);
 uint32_t output_get_transformed_height(const struct output* self);
+
+void output_transform_coord(const struct output* self,
+                            uint32_t src_x, uint32_t src_y,
+                            uint32_t* dst_x, uint32_t* dst_y);
+void output_transform_box_coord(const struct output* self,
+                                uint32_t src_x0, uint32_t src_y0,
+                                uint32_t src_x1, uint32_t src_y1,
+                                uint32_t* dst_x0, uint32_t* dst_y0,
+                                uint32_t* dst_x1, uint32_t* dst_y1);
