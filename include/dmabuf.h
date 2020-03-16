@@ -18,12 +18,13 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include <uv.h>
+#include <aml.h>
 #include "frame-capture.h"
 
 struct zwlr_export_dmabuf_manager_v1;
 struct zwlr_export_dmabuf_frame_v1;
 struct wl_output;
+struct aml_timer;
 
 struct dmabuf_plane {
 	int fd;
@@ -50,7 +51,7 @@ struct dmabuf_capture {
 	struct dmabuf_frame frame;
 
 	uint64_t last_time;
-	uv_timer_t timer;
+	struct aml_timer* timer;
 };
 
 void dmabuf_capture_init(struct dmabuf_capture* self);

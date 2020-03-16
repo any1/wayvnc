@@ -22,7 +22,7 @@
 #include <wayland-client-protocol.h>
 #include <wayland-client.h>
 #include <libdrm/drm_fourcc.h>
-#include <uv.h>
+#include <aml.h>
 
 #include "shm.h"
 #include "screencopy.h"
@@ -87,7 +87,7 @@ static void screencopy_stop(struct frame_capture* fc)
 {
 	struct screencopy* self = (void*)fc;
 
-	uv_timer_stop(&self->timer);
+	aml_stop(aml_get_default(), self->timer);
 
 	if (self->frame) {
 		zwlr_screencopy_frame_v1_destroy(self->frame);
@@ -199,9 +199,9 @@ static int screencopy__start_capture(struct frame_capture* fc)
 	return 0;
 }
 
-static void screencopy__poll(uv_timer_t* timer)
+static void screencopy__poll(void* obj)
 {
-	struct screencopy* self = wl_container_of(timer, self, timer);
+	struct screencopy* self = aml_get_userdata(obj);
 	struct frame_capture* fc = (struct frame_capture*)self;
 
 	screencopy__start_capture(fc);
@@ -220,14 +220,18 @@ static int screencopy_start(struct frame_capture* fc)
 
 	fc->status = CAPTURE_IN_PROGRESS;
 
-	return time_left > 0 ?
-		uv_timer_start(&self->timer, screencopy__poll, time_left, 0) :
-		screencopy__start_capture(fc);
+	if (time_left > 0) {
+		aml_set_duration(self->timer, time_left);
+		return aml_start(aml_get_default(), self->timer);
+	}
+
+	return screencopy__start_capture(fc);
 }
 
 void screencopy_init(struct screencopy* self)
 {
-	uv_timer_init(uv_default_loop(), &self->timer);
+	self->timer = aml_timer_new(0, screencopy__poll, self, NULL);
+	assert(self->timer);
 
 	self->delay_smoother.time_constant = DELAY_SMOOTHER_TIME_CONSTANT;
 
@@ -237,7 +241,8 @@ void screencopy_init(struct screencopy* self)
 
 void screencopy_destroy(struct screencopy* self)
 {
-	uv_timer_stop(&self->timer);
+	aml_stop(aml_get_default(), self->timer);
+	aml_unref(self->timer);
 
 	if (self->buffer)
 		wl_buffer_destroy(self->buffer);
