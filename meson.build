@@ -24,9 +24,9 @@ add_project_arguments(c_args, language: 'c')
 cc = meson.get_compiler('c')
 
 libm = cc.find_library('m', required: false)
+librt = cc.find_library('rt', required: false)
 
 pixman = dependency('pixman-1')
-libuv = dependency('libuv')
 egl = dependency('egl')
 glesv2 = dependency('glesv2')
 xkbcommon = dependency('xkbcommon')
@@ -36,6 +36,13 @@ neatvnc_project = subproject(
 	'neatvnc',
 	required: false,
 )
+
+aml_project = subproject('aml', required: false)
+if aml_project.found()
+	aml = aml_project.get_variable('aml_dep')
+else
+	aml = dependency('aml')
+endif
 
 if neatvnc_project.found()
 	neatvnc = neatvnc_project.get_variable('neatvnc_dep')
@@ -65,8 +72,9 @@ sources = [
 
 dependencies = [
 	libm,
+	librt,
 	pixman,
-	libuv,
+	aml,
 	egl,
 	glesv2,
 	wayland_client,

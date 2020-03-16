@@ -1,7 +1,6 @@
 #pragma once
 
 #include <stdbool.h>
-#include <uv.h>
 
 #include "wlr-screencopy-unstable-v1.h"
 #include "frame-capture.h"
@@ -12,6 +11,7 @@ struct zwlr_screencopy_frame_v1;
 struct wl_output;
 struct wl_buffer;
 struct wl_shm;
+struct aml_timer;
 
 enum screencopy_status {
 	SCREENCOPY_STATUS_CAPTURING = 0,
@@ -34,7 +34,7 @@ struct screencopy {
 
 	uint64_t last_time;
 	uint64_t start_time;
-	uv_timer_t timer;
+	struct aml_timer* timer;
 
 	struct smooth delay_smoother;
 	double delay;

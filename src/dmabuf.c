@@ -18,7 +18,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <wayland-client.h>
-#include <uv.h>
+#include <aml.h>
 #include <wayland-util.h>
 
 #include "frame-capture.h"
@@ -41,7 +41,7 @@ static void dmabuf_capture_stop(struct frame_capture* fc)
 {
 	struct dmabuf_capture* self = (void*)fc;
 
-	if (uv_timer_stop(&self->timer))
+	if (aml_stop(aml_get_default(), self->timer) >= 0)
 		dmabuf_close_fds(self);
 
 	fc->status = CAPTURE_STOPPED;
@@ -64,7 +64,7 @@ static void dmabuf_frame_start(void* data,
 	struct dmabuf_capture* self = data;
 	struct frame_capture* fc = data;
 
-	uv_timer_stop(&self->timer);
+	aml_stop(aml_get_default(), self->timer);
 	dmabuf_close_fds(self);
 
 	uint64_t mod = ((uint64_t)mod_high << 32) | (uint64_t)mod_low;
@@ -99,9 +99,9 @@ static void dmabuf_frame_object(void* data,
 	self->frame.plane[plane_index].pitch = stride;
 }
 
-static void dmabuf_timer_ready(uv_timer_t* timer)
+static void dmabuf_timer_ready(void* timer)
 {
-	struct dmabuf_capture* self = wl_container_of(timer, self, timer);
+	struct dmabuf_capture* self = aml_get_userdata(timer);
 	struct frame_capture* fc = (struct frame_capture*)self;
 
 	if (fc->status != CAPTURE_IN_PROGRESS)
@@ -130,7 +130,8 @@ static void dmabuf_frame_ready(void* data,
 	double time_left = (1.0 / RATE_LIMIT - dt) * 1.0e3;
 
 	if (time_left >= 0.0) {
-		uv_timer_start(&self->timer, dmabuf_timer_ready, time_left, 0);
+		aml_set_duration(self->timer, time_left);
+		aml_start(aml_get_default(), self->timer);
 		frame_capture_start(fc);
 		return;
 	}
@@ -188,7 +189,8 @@ static int dmabuf_capture_start(struct frame_capture* fc)
 
 void dmabuf_capture_init(struct dmabuf_capture* self)
 {
-	uv_timer_init(uv_default_loop(), &self->timer);
+	self->timer = aml_timer_new(0, dmabuf_timer_ready, self, NULL);
+	assert(self->timer);
 
 	self->fc.backend.start = dmabuf_capture_start;
 	self->fc.backend.stop = dmabuf_capture_stop;

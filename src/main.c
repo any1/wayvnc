@@ -25,7 +25,8 @@
 #include <inttypes.h>
 #include <errno.h>
 #include <neatvnc.h>
-#include <uv.h>
+#include <aml.h>
+#include <signal.h>
 #include <libdrm/drm_fourcc.h>
 #include <wayland-client-protocol.h>
 #include <wayland-client.h>
@@ -59,6 +60,8 @@ enum frame_capture_backend_type {
 };
 
 struct wayvnc {
+	bool do_exit;
+
 	struct wl_display* display;
 	struct wl_registry* registry;
 	struct wl_list outputs;
@@ -81,22 +84,18 @@ struct wayvnc {
 	struct pointer pointer_backend;
 	struct keyboard keyboard_backend;
 
-	uv_poll_t wayland_poller;
-	uv_prepare_t flusher;
-	uv_signal_t signal_handler;
-	uv_timer_t performance_timer;
+	struct aml_handler* wayland_handler;
+	struct aml_signal* signal_handler;
 
 	struct nvnc* nvnc;
 
 	struct nvnc_fb* current_fb;
 	struct nvnc_fb* last_fb;
 
-	uint32_t n_frames;
-
 	const char* kb_layout;
 };
 
-void wayvnc_exit(void);
+void wayvnc_exit(struct wayvnc* self);
 void on_capture_done(struct frame_capture* capture);
 
 static enum frame_capture_backend_type
@@ -314,65 +313,49 @@ failure:
 	return -1;
 }
 
-void on_wayland_event(uv_poll_t* handle, int status, int event)
+void on_wayland_event(void* obj)
 {
-	if (event & UV_DISCONNECT) {
-		log_error("The compositor is gone. Exiting...\n");
-		wayvnc_exit();
-		return;
-	}
+	struct wayvnc* self = aml_get_userdata(obj);
+	// TODO: Check if the compositor has gone away
 
-	struct wayvnc* self = wl_container_of(handle, self, wayland_poller);
 	wl_display_dispatch(self->display);
 }
 
-void prepare_for_poll(uv_prepare_t* handle)
+void wayvnc_exit(struct wayvnc* self)
 {
-	struct wayvnc* self = wl_container_of(handle, self, flusher);
-	wl_display_flush(self->display);
+	self->do_exit = true;
 }
 
-void on_uv_walk(uv_handle_t* handle, void* arg)
+void on_signal(void* obj)
 {
-	uv_unref(handle);
-}
-
-void wayvnc_exit(void)
-{
-	uv_walk(uv_default_loop(), on_uv_walk, NULL);
-}
-
-void on_signal(uv_signal_t* handle, int signo)
-{
-	wayvnc_exit();
-}
-
-void on_performance_tick(uv_timer_t* handle)
-{
-	struct wayvnc* self = wl_container_of(handle, self, performance_timer);
-
-	printf("%"PRIu32" FPS\n", self->n_frames);
-	self->n_frames = 0;
+	struct wayvnc* self = aml_get_userdata(obj);
+	wayvnc_exit(self);
 }
 
 int init_main_loop(struct wayvnc* self)
 {
-	uv_loop_t* loop = uv_default_loop();
+	struct aml* loop = aml_get_default();
 
-	uv_poll_init(loop, &self->wayland_poller,
-		     wl_display_get_fd(self->display));
-	uv_poll_start(&self->wayland_poller, UV_READABLE | UV_DISCONNECT,
-	              on_wayland_event);
+	struct aml_handler* wl_handler;
+	wl_handler = aml_handler_new(wl_display_get_fd(self->display),
+	                             on_wayland_event, self, NULL);
+	if (!wl_handler)
+		return -1;
 
-	uv_prepare_init(loop, &self->flusher);
-	uv_prepare_start(&self->flusher, prepare_for_poll);
+	int rc = aml_start(loop, wl_handler);
+	aml_unref(wl_handler);
+	if (rc < 0)
+		return -1;
 
-	uv_signal_init(loop, &self->signal_handler);
-	uv_signal_start(&self->signal_handler, on_signal, SIGINT);
+	struct aml_signal* sig;
+	sig = aml_signal_new(SIGINT, on_signal, self, NULL);
+	if (!sig)
+		return -1;
 
-	uv_timer_init(loop, &self->performance_timer);
-	uv_timer_start(&self->performance_timer, on_performance_tick, 1000,
-		       1000);
+	rc = aml_start(loop, sig);
+	aml_unref(sig);
+	if (rc < 0)
+		return -1;
 
 	return 0;
 }
@@ -468,7 +451,7 @@ void on_damage_check_done(struct pixman_region16* damage, void* userdata)
 
 	if (wayvnc_start_capture(self) < 0) {
 		log_error("Failed to start capture. Exiting...\n");
-		wayvnc_exit();
+		wayvnc_exit(self);
 	}
 }
 
@@ -509,7 +492,7 @@ void wayvnc_update_vnc(struct wayvnc* self, struct nvnc_fb* fb)
 
 	if (wayvnc_start_capture(self) < 0) {
 		log_error("Failed to start capture. Exiting...\n");
-		wayvnc_exit();
+		wayvnc_exit(self);
 	}
 }
 
@@ -566,16 +549,15 @@ void on_capture_done(struct frame_capture* capture)
 		break;
 	case CAPTURE_FATAL:
 		log_error("Fatal error while capturing. Exiting...\n");
-		wayvnc_exit();
+		wayvnc_exit(self);
 		break;
 	case CAPTURE_FAILED:
 		if (wayvnc_start_capture(self) < 0) {
 			log_error("Failed to start capture. Exiting...\n");
-			wayvnc_exit();
+			wayvnc_exit(self);
 		}
 		break;
 	case CAPTURE_DONE:
-		self->n_frames++;
 		if (self->capture_backend == (struct frame_capture*)&self->screencopy_backend)
 			wayvnc_process_screen(self);
 		else
@@ -803,6 +785,12 @@ int main(int argc, char* argv[])
 		goto failure;
 	}
 
+	struct aml* aml = aml_new(NULL, 0);
+	if (!aml)
+		goto main_loop_failure;
+
+	aml_set_default(aml);
+
 	if (init_main_loop(&self) < 0)
 		goto main_loop_failure;
 
@@ -847,9 +835,13 @@ int main(int argc, char* argv[])
 	if (wayvnc_start_capture(&self) < 0)
 		goto capture_failure;
 
-	uv_run(uv_default_loop(), UV_RUN_DEFAULT);
+	wl_display_dispatch(self.display);
 
-	uv_loop_close(uv_default_loop());
+	while (!self.do_exit) {
+		wl_display_flush(self.display);
+		aml_poll(aml, -1);
+		aml_dispatch(aml);
+	}
 
 	frame_capture_stop(self.capture_backend);
 
@@ -860,6 +852,7 @@ int main(int argc, char* argv[])
 	renderer_destroy(&self.renderer);
 	screencopy_destroy(&self.screencopy_backend);
 	wayvnc_destroy(&self);
+	aml_unref(aml);
 
 	return 0;
 
