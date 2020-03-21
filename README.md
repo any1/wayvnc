@@ -24,12 +24,17 @@ support, join the #wayvnc IRC channel on freenode.
  * ninja
  * pkg-config
 
+#### For archlinux
+```
+pacman -S base-devel libglvnd libxkbcommon libuv pixman libuv pixman gnutls
+```
+
 #### For fedora 31
 ```
 dnf install -y meson gcc ninja-build pkg-config egl-wayland egl-wayland-devel \
 	mesa-libEGL-devel mesa-libEGL libwayland-egl libglvnd-devel \
 	libglvnd-core-devel libglvnd mesa-libGLES-devel mesa-libGLES \
-	libxkbcommon-devel libxkbcommon  libwayland-client libwayland \
+	libxkbcommon-devel libxkbcommon libwayland-client libwayland \
 	wayland-devel gnutls-devel
 ```
 
