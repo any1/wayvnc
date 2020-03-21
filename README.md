@@ -9,6 +9,20 @@ is also possible to run wayvnc without a physical display attached.
 Please check the [FAQ](FAQ.md) for answers to common questions. For further
 support, join the #wayvnc IRC channel on freenode.
 
+## Installing
+### archlinux
+```
+git clone https://aur.archlinux.org/neatvnc.git
+cd neatvnc
+makepkg -si
+cd -
+
+git clone https://aur.archlinux.org/wayvnc.git
+cd wayvnc
+makepkg -si
+cd -
+```
+
 ## Building
 ### Runtime Dependencies
  * EGL
