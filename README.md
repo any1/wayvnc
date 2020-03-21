@@ -18,18 +18,6 @@ support, join the #wayvnc IRC channel on freenode.
  * OpenGL ES V2.0
  * pixman
 
-### For fedora 31
-
-```
-dnf install -y  egl-wayland egl-wayland-devel \ 
-                mesa-libEGL-devel mesa-libEGL libwayland-egl \
-                libglvnd-devel libglvnd-core-devel libglvnd \
-                mesa-libGLES-devel mesa-libGLES \
-                libxkbcommon-devel libxkbcommon \
-                libwayland-client libwayland wayland-devel \
-                gnutls-devel
-```
-
 ### Build Dependencies
  * GCC
  * meson
@@ -37,9 +25,12 @@ dnf install -y  egl-wayland egl-wayland-devel \
  * pkg-config
 
 #### For fedora 31
-
 ```
-dnf install -y meson gcc ninja-build pkg-config clang cmake
+dnf install -y meson gcc ninja-build pkg-config egl-wayland egl-wayland-devel \
+	mesa-libEGL-devel mesa-libEGL libwayland-egl libglvnd-devel \
+	libglvnd-core-devel libglvnd mesa-libGLES-devel mesa-libGLES \
+	libxkbcommon-devel libxkbcommon  libwayland-client libwayland \
+	wayland-devel gnutls-devel
 ```
 
 The easiest way to satisfy the neatvnc dependency is to clone it into the
