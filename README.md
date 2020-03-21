@@ -25,8 +25,8 @@ cd -
 
 ## Building
 ### Runtime Dependencies
+ * aml
  * EGL
- * libuv
  * libxkbcommon
  * neatvnc
  * OpenGL ES V2.0
@@ -40,7 +40,7 @@ cd -
 
 #### For archlinux
 ```
-pacman -S base-devel libglvnd libxkbcommon libuv pixman libuv pixman gnutls
+pacman -S base-devel libglvnd libxkbcommon pixman gnutls
 ```
 
 #### For fedora 31
@@ -52,11 +52,23 @@ dnf install -y meson gcc ninja-build pkg-config egl-wayland egl-wayland-devel \
 	wayland-devel gnutls-devel
 ```
 
-The easiest way to satisfy the neatvnc dependency is to clone it into the
-subprojects directory:
+The easiest way to satisfy the neatvnc and aml dependencies is to link to them
+in the subprojects directory:
 ```
-mkdir subprojects
-git clone https://github.com/any1/neatvnc.git subprojects/neatvnc
+git clone https://github.com/any1/wayvnc.git
+git clone https://github.com/any1/neatvnc.git
+git clone https://github.com/any1/aml.git
+
+mkdir wayvnc/subprojects
+cd wayvnc/subprojects
+ln -s ../../neatvnc .
+ln -s ../../aml .
+cd -
+
+mkdir neatvnc/subprojects
+cd neatvnc/subprojects
+ln -s ../../aml .
+cd -
 ```
 
 Setting the buildtype flag is not required but it is recommended as there are
