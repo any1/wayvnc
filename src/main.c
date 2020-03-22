@@ -316,9 +316,18 @@ failure:
 void on_wayland_event(void* obj)
 {
 	struct wayvnc* self = aml_get_userdata(obj);
-	// TODO: Check if the compositor has gone away
 
-	wl_display_dispatch(self->display);
+	if (wl_display_prepare_read(self->display) < 0) {
+		wl_display_cancel_read(self->display);
+		return;
+	}
+
+	if (wl_display_read_events(self->display) < 0 && errno == EPIPE) {
+		log_error("Compositor has gone away. Exiting...\n");
+		wayvnc_exit(self);
+	}
+
+	wl_display_dispatch_pending(self->display);
 }
 
 void wayvnc_exit(struct wayvnc* self)
