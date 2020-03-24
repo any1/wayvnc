@@ -358,12 +358,46 @@ void gl_render(void)
 	glDisableVertexAttribArray(1);
 }
 
+void destroy_fbo(struct renderer_fbo* fbo)
+{
+	glDeleteFramebuffers(1, &fbo->fbo);
+	glDeleteRenderbuffers(1, &fbo->rbo);
+}
+
+int create_fbo(struct renderer_fbo* dst, GLint format, uint32_t width,
+               uint32_t height)
+{
+	GLuint rbo;
+	glGenRenderbuffers(1, &rbo);
+	glBindRenderbuffer(GL_RENDERBUFFER, rbo);
+	glRenderbufferStorage(GL_RENDERBUFFER, format, width, height);
+	glBindRenderbuffer(GL_RENDERBUFFER, 0);
+
+	GLuint fbo;
+	glGenFramebuffers(1, &fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+	                          GL_RENDERBUFFER, rbo);
+	GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+	if (status != GL_FRAMEBUFFER_COMPLETE) {
+		log_error("Framebuffer incomplete\n");
+		return -1;
+	}
+
+	dst->fbo = fbo;
+	dst->rbo = rbo;
+
+	return 0;
+}
+
 void renderer_destroy(struct renderer* self)
 {
 	glDeleteProgram(self->shader.program);
 	eglMakeCurrent(self->display, EGL_NO_SURFACE, EGL_NO_SURFACE,
 		       EGL_NO_CONTEXT);
-	eglDestroySurface(self->display, self->surface);
+	destroy_fbo(&self->fbo);
 	eglDestroyContext(self->display, self->context);
 	eglTerminate(self->display);
 }
@@ -389,7 +423,7 @@ int renderer_init(struct renderer* self, const struct output* output,
 		return -1;
 
 	static const EGLint cfg_attr[] = {
-		EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
+		EGL_SURFACE_TYPE, 0,
 		EGL_ALPHA_SIZE, 8,
 		EGL_BLUE_SIZE, 8,
 		EGL_GREEN_SIZE, 8,
@@ -413,17 +447,7 @@ int renderer_init(struct renderer* self, const struct output* output,
 	if (!self->context)
 		return -1;
 
-	EGLint surf_attr[] = {
-		EGL_WIDTH, output_get_transformed_width(output),
-		EGL_HEIGHT, output_get_transformed_height(output),
-		EGL_NONE
-	};
-
-	self->surface = eglCreatePbufferSurface(self->display, cfg, surf_attr);
-	if (!self->surface)
-		goto surface_failure;
-
-	if (!eglMakeCurrent(self->display, self->surface, self->surface,
+	if (!eglMakeCurrent(self->display, EGL_NO_SURFACE, EGL_NO_SURFACE,
 			    self->context))
 		goto make_current_failure;
 
@@ -431,6 +455,14 @@ int renderer_init(struct renderer* self, const struct output* output,
 
 	if (gl_load_late_extensions() < 0)
 		goto late_extension_failure;
+
+	uint32_t tf_width = output_get_transformed_width(output);
+	uint32_t tf_height = output_get_transformed_height(output);
+
+	if (create_fbo(&self->fbo, GL_RGBA8_OES, tf_width, tf_height) < 0)
+		goto fbo_failure;
+
+	glBindFramebuffer(GL_FRAMEBUFFER, self->fbo.fbo);
 
 	switch (input_type) {
 	case RENDERER_INPUT_DMABUF:
@@ -457,15 +489,15 @@ int renderer_init(struct renderer* self, const struct output* output,
 	glViewport(0, 0,
 	           output_get_transformed_width(output),
 	           output_get_transformed_height(output));
+
 	gl_clear();
 
 	return 0;
 
 shader_failure:
+fbo_failure:
 late_extension_failure:
 make_current_failure:
-	eglDestroySurface(self->display, self->surface);
-surface_failure:
 	eglDestroyContext(self->display, self->context);
 	return -1;
 }

@@ -29,15 +29,21 @@ enum renderer_input_type {
 	RENDERER_INPUT_DMABUF,
 };
 
+struct renderer_fbo {
+	GLuint rbo;
+	GLuint fbo;
+};
+
 struct renderer {
 	EGLDisplay display;
-	EGLSurface surface;
 	EGLContext context;
 
 	const struct output* output;
 
 	GLint read_format;
 	GLint read_type;
+
+	struct renderer_fbo fbo;
 
 	struct {
 		GLuint program;
