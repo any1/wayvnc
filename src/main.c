@@ -516,7 +516,9 @@ void wayvnc_process_frame(struct wayvnc* self)
 	struct nvnc_fb* fb = nvnc_fb_new(fb_width, fb_height, format);
 	void* addr = nvnc_fb_get_addr(fb);
 
-	render_dmabuf_frame(&self->renderer, frame);
+	GLuint tex = renderer_next_tex(&self->renderer);
+	renderer_import_dmabuf_frame(&self->renderer, tex, frame);
+	render();
 	render_copy_pixels(&self->renderer, addr, 0, fb_height);
 
 	wayvnc_update_vnc(self, fb);
@@ -540,8 +542,10 @@ void wayvnc_process_screen(struct wayvnc* self)
 	struct nvnc_fb* fb = nvnc_fb_new(fb_width, fb_height, renderer_format);
 	void* addr = nvnc_fb_get_addr(fb);
 
-	render_framebuffer(&self->renderer, pixels, frame_format, width, height,
-			   stride);
+	GLuint tex = renderer_next_tex(&self->renderer);
+	renderer_import_framebuffer(&self->renderer, tex, pixels, frame_format,
+	                            width, height, stride);
+	render();
 	render_copy_pixels(&self->renderer, addr, 0, fb_height);
 
 	wayvnc_update_vnc(self, fb);

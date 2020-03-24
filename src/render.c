@@ -322,14 +322,14 @@ fragment_failure:
 	return rc;
 }
 
-static inline GLuint gl_next_tex(struct renderer* self)
+GLuint renderer_next_tex(struct renderer* self)
 {
 	GLuint tex = self->tex[self->tex_index];
 	self->tex_index = (self->tex_index + 1) % ARRAY_LEN(self->tex);
 	return tex;
 }
 
-static inline GLuint gl_last_tex(const struct renderer* self)
+GLuint renderer_last_tex(const struct renderer* self)
 {
 	size_t len = ARRAY_LEN(self->tex);
 	size_t index = (len + self->tex_index - 1) % len;
@@ -342,7 +342,7 @@ void gl_clear(void)
 	glClear(GL_COLOR_BUFFER_BIT);
 }
 
-void gl_render(void)
+void render(void)
 {
 	static const GLfloat s_vertices[4][2] = {
 		{ -1.0, 1.0 },
@@ -550,7 +550,8 @@ static void dmabuf_attr_append_planes(EGLint* dst, int* i,
 #undef APPEND_PLANE_ATTR
 }
 
-int render_dmabuf_frame(struct renderer* self, struct dmabuf_frame* frame)
+int renderer_import_dmabuf_frame(struct renderer* self, GLuint tex,
+                                 struct dmabuf_frame* frame)
 {
 	int index = 0;
 	EGLint attr[6 + 10 * 4 + 1];
@@ -570,10 +571,10 @@ int render_dmabuf_frame(struct renderer* self, struct dmabuf_frame* frame)
 	if (!image)
 		return -1;
 
-	GLuint tex = gl_next_tex(self);
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_EXTERNAL_OES, tex);
 	glEGLImageTargetTexture2DOES(GL_TEXTURE_EXTERNAL_OES, image);
+	eglDestroyImageKHR(self->display, image);
 
 	glUseProgram(self->shader.program);
 
@@ -582,18 +583,14 @@ int render_dmabuf_frame(struct renderer* self, struct dmabuf_frame* frame)
 	const float* proj = transforms[self->output->transform];
 	glUniformMatrix2fv(self->shader.u_proj, 1, GL_FALSE, proj);
 
-	gl_render();
-
-	glBindTexture(GL_TEXTURE_2D, 0);
-	eglDestroyImageKHR(self->display, image);
-
 	return 0;
 }
 
-int render_framebuffer(struct renderer* self, const void* addr, uint32_t format,
-		       uint32_t width, uint32_t height, uint32_t stride)
+int renderer_import_framebuffer(struct renderer* self, GLuint tex,
+                                const void* addr, uint32_t format,
+                                uint32_t width, uint32_t height,
+                                uint32_t stride)
 {
-	GLuint tex = gl_next_tex(self);
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, tex);
 
@@ -613,10 +610,6 @@ int render_framebuffer(struct renderer* self, const void* addr, uint32_t format,
 
 	const float* proj = transforms[self->output->transform];
 	glUniformMatrix2fv(self->shader.u_proj, 1, GL_FALSE, proj);
-
-	gl_render();
-
-	glBindTexture(GL_TEXTURE_2D, 0);
 
 	return 0;
 }
