@@ -43,6 +43,8 @@ enum {
 	ATTR_INDEX_TEXTURE,
 };
 
+#define ARRAY_LEN(a) (sizeof(a) / sizeof((a)[0]))
+
 #define XSTR(s) STR(s)
 #define STR(s) #s
 
@@ -320,6 +322,20 @@ fragment_failure:
 	return rc;
 }
 
+static inline GLuint gl_next_tex(struct renderer* self)
+{
+	GLuint tex = self->tex[self->tex_index];
+	self->tex_index = (self->tex_index + 1) % ARRAY_LEN(self->tex);
+	return tex;
+}
+
+static inline GLuint gl_last_tex(const struct renderer* self)
+{
+	size_t len = ARRAY_LEN(self->tex);
+	size_t index = (len + self->tex_index - 1) % len;
+	return self->tex[index];
+}
+
 void gl_clear(void)
 {
 	glClearColor(0.0, 0.0, 0.0, 1.0);
@@ -398,6 +414,7 @@ void renderer_destroy(struct renderer* self)
 	eglMakeCurrent(self->display, EGL_NO_SURFACE, EGL_NO_SURFACE,
 		       EGL_NO_CONTEXT);
 	destroy_fbo(&self->fbo);
+	glDeleteTextures(ARRAY_LEN(self->tex), self->tex);
 	eglDestroyContext(self->display, self->context);
 	eglTerminate(self->display);
 }
@@ -456,6 +473,8 @@ int renderer_init(struct renderer* self, const struct output* output,
 	if (gl_load_late_extensions() < 0)
 		goto late_extension_failure;
 
+	glGenTextures(ARRAY_LEN(self->tex), self->tex);
+
 	uint32_t tf_width = output_get_transformed_width(output);
 	uint32_t tf_height = output_get_transformed_height(output);
 
@@ -496,6 +515,7 @@ int renderer_init(struct renderer* self, const struct output* output,
 
 shader_failure:
 fbo_failure:
+	glDeleteTextures(ARRAY_LEN(self->tex), self->tex);
 late_extension_failure:
 make_current_failure:
 	eglDestroyContext(self->display, self->context);
@@ -550,8 +570,7 @@ int render_dmabuf_frame(struct renderer* self, struct dmabuf_frame* frame)
 	if (!image)
 		return -1;
 
-	GLuint tex;
-	glGenTextures(1, &tex);
+	GLuint tex = gl_next_tex(self);
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_EXTERNAL_OES, tex);
 	glEGLImageTargetTexture2DOES(GL_TEXTURE_EXTERNAL_OES, image);
@@ -566,7 +585,6 @@ int render_dmabuf_frame(struct renderer* self, struct dmabuf_frame* frame)
 	gl_render();
 
 	glBindTexture(GL_TEXTURE_2D, 0);
-	glDeleteTextures(1, &tex);
 	eglDestroyImageKHR(self->display, image);
 
 	return 0;
@@ -575,8 +593,7 @@ int render_dmabuf_frame(struct renderer* self, struct dmabuf_frame* frame)
 int render_framebuffer(struct renderer* self, const void* addr, uint32_t format,
 		       uint32_t width, uint32_t height, uint32_t stride)
 {
-	GLuint tex;
-	glGenTextures(1, &tex);
+	GLuint tex = gl_next_tex(self);
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, tex);
 
@@ -600,7 +617,6 @@ int render_framebuffer(struct renderer* self, const void* addr, uint32_t format,
 	gl_render();
 
 	glBindTexture(GL_TEXTURE_2D, 0);
-	glDeleteTextures(1, &tex);
 
 	return 0;
 }

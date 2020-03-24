@@ -45,6 +45,9 @@ struct renderer {
 
 	struct renderer_fbo fbo;
 
+	GLuint tex[2];
+	int tex_index;
+
 	struct {
 		GLuint program;
 		GLint u_tex;
