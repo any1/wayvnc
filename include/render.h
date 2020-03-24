@@ -73,4 +73,4 @@ void render_copy_pixels(struct renderer* self, void* dst, uint32_t y,
 GLuint renderer_next_tex(struct renderer* self);
 GLuint renderer_last_tex(const struct renderer* self);
 
-void render(void);
+void render(struct renderer* self);

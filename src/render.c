@@ -342,8 +342,15 @@ void gl_clear(void)
 	glClear(GL_COLOR_BUFFER_BIT);
 }
 
-void render(void)
+void render(struct renderer* self)
 {
+	glUseProgram(self->shader.program);
+
+	glUniform1i(self->shader.u_tex, 0);
+
+	const float* proj = transforms[self->output->transform];
+	glUniformMatrix2fv(self->shader.u_proj, 1, GL_FALSE, proj);
+
 	static const GLfloat s_vertices[4][2] = {
 		{ -1.0, 1.0 },
 		{ 1.0, 1.0 },
@@ -576,13 +583,6 @@ int renderer_import_dmabuf_frame(struct renderer* self, GLuint tex,
 	glEGLImageTargetTexture2DOES(GL_TEXTURE_EXTERNAL_OES, image);
 	eglDestroyImageKHR(self->display, image);
 
-	glUseProgram(self->shader.program);
-
-	glUniform1i(self->shader.u_tex, 0);
-
-	const float* proj = transforms[self->output->transform];
-	glUniformMatrix2fv(self->shader.u_proj, 1, GL_FALSE, proj);
-
 	return 0;
 }
 
@@ -603,13 +603,6 @@ int renderer_import_framebuffer(struct renderer* self, GLuint tex,
 		     gl_format, GL_UNSIGNED_BYTE, addr);
 	glGenerateMipmap(GL_TEXTURE_2D);
 	glPixelStorei(GL_UNPACK_ROW_LENGTH_EXT, 0);
-
-	glUseProgram(self->shader.program);
-
-	glUniform1i(self->shader.u_tex, 0);
-
-	const float* proj = transforms[self->output->transform];
-	glUniformMatrix2fv(self->shader.u_proj, 1, GL_FALSE, proj);
 
 	return 0;
 }
