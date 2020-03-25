@@ -375,21 +375,8 @@ void gl_clear(void)
 	glClear(GL_COLOR_BUFFER_BIT);
 }
 
-void render(struct renderer* self)
+void gl_draw(void)
 {
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(self->tex_target, renderer_current_tex(self));
-	glActiveTexture(GL_TEXTURE1);
-	glBindTexture(self->tex_target, renderer_last_tex(self));
-
-	glUseProgram(self->shader.program);
-
-	glUniform1i(self->shader.u_tex0, 0);
-	glUniform1i(self->shader.u_tex1, 1);
-
-	const float* proj = transforms[self->output->transform];
-	glUniformMatrix2fv(self->shader.u_proj, 1, GL_FALSE, proj);
-
 	static const GLfloat s_vertices[4][2] = {
 		{ -1.0, 1.0 },
 		{ 1.0, 1.0 },
@@ -418,6 +405,24 @@ void render(struct renderer* self)
 
 	glDisableVertexAttribArray(0);
 	glDisableVertexAttribArray(1);
+}
+
+void render(struct renderer* self)
+{
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(self->tex_target, renderer_current_tex(self));
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(self->tex_target, renderer_last_tex(self));
+
+	glUseProgram(self->frame_shader.program);
+
+	glUniform1i(self->frame_shader.u_tex0, 0);
+	glUniform1i(self->frame_shader.u_tex1, 1);
+
+	const float* proj = transforms[self->output->transform];
+	glUniformMatrix2fv(self->frame_shader.u_proj, 1, GL_FALSE, proj);
+
+	gl_draw();
 }
 
 void destroy_fbo(struct renderer_fbo* fbo)
@@ -456,10 +461,10 @@ int create_fbo(struct renderer_fbo* dst, GLint format, uint32_t width,
 
 void renderer_destroy(struct renderer* self)
 {
-	glDeleteProgram(self->shader.program);
+	glDeleteProgram(self->frame_shader.program);
 	eglMakeCurrent(self->display, EGL_NO_SURFACE, EGL_NO_SURFACE,
 		       EGL_NO_CONTEXT);
-	destroy_fbo(&self->fbo);
+	destroy_fbo(&self->frame_fbo);
 	glDeleteTextures(ARRAY_LEN(self->tex), self->tex);
 	eglDestroyContext(self->display, self->context);
 	eglTerminate(self->display);
@@ -524,33 +529,56 @@ int renderer_init(struct renderer* self, const struct output* output,
 	uint32_t tf_width = output_get_transformed_width(output);
 	uint32_t tf_height = output_get_transformed_height(output);
 
-	if (create_fbo(&self->fbo, GL_RGBA8_OES, tf_width, tf_height) < 0)
-		goto fbo_failure;
+	if (create_fbo(&self->frame_fbo, GL_RGBA8_OES, tf_width, tf_height) < 0)
+		goto frame_fbo_failure;
 
-	glBindFramebuffer(GL_FRAMEBUFFER, self->fbo.fbo);
+	if (create_fbo(&self->damage_fbo, GL_R8_EXT, tf_width, tf_height) < 0)
+		goto damage_fbo_failure;
+
+	glBindFramebuffer(GL_FRAMEBUFFER, self->frame_fbo.fbo);
 
 	switch (input_type) {
 	case RENDERER_INPUT_DMABUF:
 		self->tex_target = GL_TEXTURE_EXTERNAL_OES;
 
-		if (gl_compile_shader_program(&self->shader.program,
+		if (gl_compile_shader_program(&self->frame_shader.program,
 					      "dmabuf-vertex.glsl",
 					      "dmabuf-fragment.glsl") < 0)
-			goto shader_failure;
+			goto frame_shader_failure;
+
+		if (gl_compile_shader_program(&self->damage_shader.program,
+					      "dmabuf-vertex.glsl",
+					      "dmabuf-damage-fragment.glsl") < 0)
+			goto damage_shader_failure;
 		break;
 	case RENDERER_INPUT_FB:
 		self->tex_target = GL_TEXTURE_2D;
 
-		if (gl_compile_shader_program(&self->shader.program,
+		if (gl_compile_shader_program(&self->frame_shader.program,
 					      "texture-vertex.glsl",
 					      "texture-fragment.glsl") < 0)
-			goto shader_failure;
+			goto frame_shader_failure;
+
+		if (gl_compile_shader_program(&self->damage_shader.program,
+					      "texture-vertex.glsl",
+					      "texture-damage-fragment.glsl") < 0)
+			goto damage_shader_failure;
 		break;
 	}
 
-	self->shader.u_tex0 = glGetUniformLocation(self->shader.program, "u_tex0");
-	self->shader.u_tex1 = glGetUniformLocation(self->shader.program, "u_tex1");
-	self->shader.u_proj = glGetUniformLocation(self->shader.program, "u_proj");
+	self->frame_shader.u_tex0 =
+		glGetUniformLocation(self->frame_shader.program, "u_tex0");
+	self->frame_shader.u_tex1 =
+		glGetUniformLocation(self->frame_shader.program, "u_tex1");
+	self->frame_shader.u_proj =
+		glGetUniformLocation(self->frame_shader.program, "u_proj");
+
+	self->damage_shader.u_tex0 =
+		glGetUniformLocation(self->damage_shader.program, "u_tex0");
+	self->damage_shader.u_tex1 =
+		glGetUniformLocation(self->damage_shader.program, "u_tex1");
+	self->damage_shader.u_proj =
+		glGetUniformLocation(self->damage_shader.program, "u_proj");
 
 	self->output = output;
 	glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &self->read_format);
@@ -564,8 +592,13 @@ int renderer_init(struct renderer* self, const struct output* output,
 
 	return 0;
 
-shader_failure:
-fbo_failure:
+damage_shader_failure:
+	glDeleteShader(self->frame_shader.program);
+frame_shader_failure:
+	destroy_fbo(&self->damage_fbo);
+damage_fbo_failure:
+	destroy_fbo(&self->frame_fbo);
+frame_fbo_failure:
 	glDeleteTextures(ARRAY_LEN(self->tex), self->tex);
 late_extension_failure:
 make_current_failure:
@@ -663,6 +696,9 @@ void render_copy_pixels(struct renderer* self, void* dst, uint32_t y,
 
 	uint32_t width = output_get_transformed_width(self->output);
 
-	glReadPixels(0, y, width, height, self->read_format, self->read_type,
-	             dst);
+	GLint read_format, read_type;
+	glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &read_format);
+	glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &read_type);
+
+	glReadPixels(0, y, width, height, read_format, read_type, dst);
 }

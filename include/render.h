@@ -43,7 +43,8 @@ struct renderer {
 	GLint read_format;
 	GLint read_type;
 
-	struct renderer_fbo fbo;
+	struct renderer_fbo frame_fbo;
+	struct renderer_fbo damage_fbo;
 
 	GLuint tex[2];
 	int tex_index;
@@ -55,7 +56,14 @@ struct renderer {
 		GLint u_tex0;
 		GLint u_tex1;
 		GLint u_proj;
-	} shader;
+	} frame_shader;
+
+	struct {
+		GLuint program;
+		GLint u_tex0;
+		GLint u_tex1;
+		GLint u_proj;
+	} damage_shader;
 };
 
 int renderer_init(struct renderer* self, const struct output* output,
