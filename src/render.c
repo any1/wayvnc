@@ -329,7 +329,12 @@ static int gl_compile_shader_program(GLuint* dst, const char* vertex_path,
 	glDeleteShader(vertex);
 	glDeleteShader(fragment);
 
-	if (glGetError() != GL_NO_ERROR) {
+	GLint is_linked = 0;
+	glGetProgramiv(program, GL_LINK_STATUS, &is_linked);
+	if (!is_linked) {
+		log_error("Failed to link shaders %s and %s\n", vertex_path,
+		          fragment_path);
+		gl_shader_log(program);
 		glDeleteProgram(program);
 		goto program_failure;
 	}
