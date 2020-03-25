@@ -409,6 +409,8 @@ void gl_draw(void)
 
 void render(struct renderer* self)
 {
+	glBindFramebuffer(GL_FRAMEBUFFER, self->frame_fbo.fbo);
+
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(self->tex_target, renderer_current_tex(self));
 	glActiveTexture(GL_TEXTURE1);
@@ -421,6 +423,26 @@ void render(struct renderer* self)
 
 	const float* proj = transforms[self->output->transform];
 	glUniformMatrix2fv(self->frame_shader.u_proj, 1, GL_FALSE, proj);
+
+	gl_draw();
+}
+
+void render_damage(struct renderer* self)
+{
+	glBindFramebuffer(GL_FRAMEBUFFER, self->damage_fbo.fbo);
+
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(self->tex_target, renderer_current_tex(self));
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(self->tex_target, renderer_last_tex(self));
+
+	glUseProgram(self->damage_shader.program);
+
+	glUniform1i(self->damage_shader.u_tex0, 0);
+	glUniform1i(self->damage_shader.u_tex1, 1);
+
+	const float* proj = transforms[self->output->transform];
+	glUniformMatrix2fv(self->damage_shader.u_proj, 1, GL_FALSE, proj);
 
 	gl_draw();
 }

@@ -85,3 +85,4 @@ GLuint renderer_next_tex(struct renderer* self);
 GLuint renderer_last_tex(const struct renderer* self);
 
 void render(struct renderer* self);
+void render_damage(struct renderer* self);
