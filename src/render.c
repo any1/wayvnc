@@ -355,6 +355,13 @@ GLuint renderer_next_tex(struct renderer* self)
 	return tex;
 }
 
+GLuint renderer_current_tex(const struct renderer* self)
+{
+	size_t len = ARRAY_LEN(self->tex);
+	size_t index = (len + self->tex_index - 1) % len;
+	return self->tex[index];
+}
+
 GLuint renderer_last_tex(const struct renderer* self)
 {
 	size_t len = ARRAY_LEN(self->tex);
@@ -370,6 +377,11 @@ void gl_clear(void)
 
 void render(struct renderer* self)
 {
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(self->tex_target, renderer_current_tex(self));
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(self->tex_target, renderer_last_tex(self));
+
 	glUseProgram(self->shader.program);
 
 	glUniform1i(self->shader.u_tex0, 0);
@@ -519,12 +531,16 @@ int renderer_init(struct renderer* self, const struct output* output,
 
 	switch (input_type) {
 	case RENDERER_INPUT_DMABUF:
+		self->tex_target = GL_TEXTURE_EXTERNAL_OES;
+
 		if (gl_compile_shader_program(&self->shader.program,
 					      "dmabuf-vertex.glsl",
 					      "dmabuf-fragment.glsl") < 0)
 			goto shader_failure;
 		break;
 	case RENDERER_INPUT_FB:
+		self->tex_target = GL_TEXTURE_2D;
+
 		if (gl_compile_shader_program(&self->shader.program,
 					      "texture-vertex.glsl",
 					      "texture-fragment.glsl") < 0)
@@ -608,11 +624,11 @@ int renderer_import_dmabuf_frame(struct renderer* self, GLuint tex,
 
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_EXTERNAL_OES, tex);
+
 	glEGLImageTargetTexture2DOES(GL_TEXTURE_EXTERNAL_OES, image);
 	eglDestroyImageKHR(self->display, image);
 
-	glActiveTexture(GL_TEXTURE1);
-	glBindTexture(GL_TEXTURE_2D, renderer_last_tex(self));
+	glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0);
 
 	return 0;
 }
@@ -635,8 +651,7 @@ int renderer_import_framebuffer(struct renderer* self, GLuint tex,
 	glGenerateMipmap(GL_TEXTURE_2D);
 	glPixelStorei(GL_UNPACK_ROW_LENGTH_EXT, 0);
 
-	glActiveTexture(GL_TEXTURE1);
-	glBindTexture(GL_TEXTURE_2D, renderer_last_tex(self));
+	glBindTexture(GL_TEXTURE_2D, 0);
 
 	return 0;
 }

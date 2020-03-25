@@ -48,6 +48,8 @@ struct renderer {
 	GLuint tex[2];
 	int tex_index;
 
+	GLenum tex_target;
+
 	struct {
 		GLuint program;
 		GLint u_tex0;
