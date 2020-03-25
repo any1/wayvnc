@@ -196,14 +196,35 @@ static void gl_debug_init()
 #endif
 }
 
-static int gl_load_shader(GLuint* dst, const char* source, GLenum type)
+static void gl_shader_log(GLuint shader)
+{
+	GLint len = 0;
+	glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &len);
+
+	char* log = malloc(len);
+	assert(log);
+
+	glGetShaderInfoLog(shader, len, &len, log);
+
+	fwrite(log, 1, len, stderr);
+
+	free(log);
+}
+
+static int gl_load_shader(GLuint* dst, const char* path, const char* source,
+                          GLenum type)
 {
 	GLuint shader = glCreateShader(type);
 
 	glShaderSource(shader, 1, &source, NULL);
 	glCompileShader(shader);
 
-	if (glGetError() != GL_NO_ERROR) {
+	GLint is_compiled = 0;
+	glGetShaderiv(shader, GL_COMPILE_STATUS, &is_compiled);
+
+	if (!is_compiled) {
+		log_error("Failed to compile shader: %s\n", path);
+		gl_shader_log(shader);
 		glDeleteShader(shader);
 		return -1;
 	}
@@ -276,7 +297,7 @@ static int gl_load_shader_from_file(GLuint* dst, const char* file, GLenum type)
 	if (!source)
 		return -1;
 
-	int rc = gl_load_shader(dst, source, type);
+	int rc = gl_load_shader(dst, file, source, type);
 
 	free(source);
 	return rc;
