@@ -332,7 +332,7 @@ GLuint renderer_next_tex(struct renderer* self)
 GLuint renderer_last_tex(const struct renderer* self)
 {
 	size_t len = ARRAY_LEN(self->tex);
-	size_t index = (len + self->tex_index - 1) % len;
+	size_t index = (len + self->tex_index - 2) % len;
 	return self->tex[index];
 }
 
@@ -346,7 +346,8 @@ void render(struct renderer* self)
 {
 	glUseProgram(self->shader.program);
 
-	glUniform1i(self->shader.u_tex, 0);
+	glUniform1i(self->shader.u_tex0, 0);
+	glUniform1i(self->shader.u_tex1, 1);
 
 	const float* proj = transforms[self->output->transform];
 	glUniformMatrix2fv(self->shader.u_proj, 1, GL_FALSE, proj);
@@ -505,7 +506,8 @@ int renderer_init(struct renderer* self, const struct output* output,
 		break;
 	}
 
-	self->shader.u_tex = glGetUniformLocation(self->shader.program, "u_tex");
+	self->shader.u_tex0 = glGetUniformLocation(self->shader.program, "u_tex0");
+	self->shader.u_tex1 = glGetUniformLocation(self->shader.program, "u_tex1");
 	self->shader.u_proj = glGetUniformLocation(self->shader.program, "u_proj");
 
 	self->output = output;
@@ -583,6 +585,9 @@ int renderer_import_dmabuf_frame(struct renderer* self, GLuint tex,
 	glEGLImageTargetTexture2DOES(GL_TEXTURE_EXTERNAL_OES, image);
 	eglDestroyImageKHR(self->display, image);
 
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, renderer_last_tex(self));
+
 	return 0;
 }
 
@@ -603,6 +608,9 @@ int renderer_import_framebuffer(struct renderer* self, GLuint tex,
 		     gl_format, GL_UNSIGNED_BYTE, addr);
 	glGenerateMipmap(GL_TEXTURE_2D);
 	glPixelStorei(GL_UNPACK_ROW_LENGTH_EXT, 0);
+
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, renderer_last_tex(self));
 
 	return 0;
 }
