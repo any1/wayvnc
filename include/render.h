@@ -32,6 +32,7 @@ enum renderer_input_type {
 struct renderer_fbo {
 	GLuint rbo;
 	GLuint fbo;
+	GLuint tex;
 };
 
 struct renderer {

@@ -451,18 +451,21 @@ void destroy_fbo(struct renderer_fbo* fbo)
 {
 	glDeleteFramebuffers(1, &fbo->fbo);
 	glDeleteRenderbuffers(1, &fbo->rbo);
+
+	if (fbo->tex)
+		glDeleteTextures(1, &fbo->tex);
 }
 
 int create_fbo(struct renderer_fbo* dst, GLint format, uint32_t width,
                uint32_t height)
 {
-	GLuint rbo;
+	GLuint rbo = 0;
 	glGenRenderbuffers(1, &rbo);
 	glBindRenderbuffer(GL_RENDERBUFFER, rbo);
 	glRenderbufferStorage(GL_RENDERBUFFER, format, width, height);
 	glBindRenderbuffer(GL_RENDERBUFFER, 0);
 
-	GLuint fbo;
+	GLuint fbo = 0;
 	glGenFramebuffers(1, &fbo);
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
@@ -477,6 +480,49 @@ int create_fbo(struct renderer_fbo* dst, GLint format, uint32_t width,
 
 	dst->fbo = fbo;
 	dst->rbo = rbo;
+	dst->tex = 0;
+
+	return 0;
+}
+
+int create_textured_fbo(struct renderer_fbo* dst, GLint format, uint32_t width,
+                        uint32_t height)
+{
+	GLuint rbo = 0;
+	glGenRenderbuffers(1, &rbo);
+	glBindRenderbuffer(GL_RENDERBUFFER, rbo);
+	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8_OES, width,
+	                      height);
+	glBindRenderbuffer(GL_RENDERBUFFER, 0);
+
+	GLuint tex = 0;
+	glGenTextures(1, &tex);
+	glBindTexture(GL_TEXTURE_2D, tex);
+	glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format,
+	             GL_UNSIGNED_BYTE, NULL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glBindTexture(GL_TEXTURE_2D, 0);
+
+	GLuint fbo = 0;
+	glGenFramebuffers(1, &fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER,
+	                          GL_LAYOUT_DEPTH_STENCIL_ATTACHMENT_EXT,
+	                          GL_RENDERBUFFER, rbo);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+	                       GL_TEXTURE_2D, tex, 0);
+	GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+	if (status != GL_FRAMEBUFFER_COMPLETE) {
+		log_error("Framebuffer incomplete\n");
+		return -1;
+	}
+
+	dst->fbo = fbo;
+	dst->rbo = rbo;
+	dst->tex = tex;
 
 	return 0;
 }
@@ -551,7 +597,8 @@ int renderer_init(struct renderer* self, const struct output* output,
 	uint32_t tf_width = output_get_transformed_width(output);
 	uint32_t tf_height = output_get_transformed_height(output);
 
-	if (create_fbo(&self->frame_fbo, GL_RGBA8_OES, tf_width, tf_height) < 0)
+	if (create_textured_fbo(&self->frame_fbo, GL_RGBA, tf_width,
+	                        tf_height) < 0)
 		goto frame_fbo_failure;
 
 	if (create_fbo(&self->damage_fbo, GL_R8_EXT, tf_width, tf_height) < 0)
