@@ -348,27 +348,6 @@ fragment_failure:
 	return rc;
 }
 
-GLuint renderer_next_tex(struct renderer* self)
-{
-	GLuint tex = self->tex[self->tex_index];
-	self->tex_index = (self->tex_index + 1) % ARRAY_LEN(self->tex);
-	return tex;
-}
-
-GLuint renderer_current_tex(const struct renderer* self)
-{
-	size_t len = ARRAY_LEN(self->tex);
-	size_t index = (len + self->tex_index - 1) % len;
-	return self->tex[index];
-}
-
-GLuint renderer_last_tex(const struct renderer* self)
-{
-	size_t len = ARRAY_LEN(self->tex);
-	size_t index = (len + self->tex_index - 2) % len;
-	return self->tex[index];
-}
-
 void gl_clear(void)
 {
 	glClearColor(0.0, 0.0, 0.0, 1.0);
@@ -407,24 +386,33 @@ void gl_draw(void)
 	glDisableVertexAttribArray(1);
 }
 
-void render(struct renderer* self)
+void renderer_swap_textures(struct renderer* self)
+{
+	self->tex_index ^= 1;
+	GLuint tex = self->tex[self->tex_index];
+
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+	                       GL_TEXTURE_2D, tex, 0);
+
+	assert(glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
+}
+
+void render_frame(struct renderer* self)
 {
 	glBindFramebuffer(GL_FRAMEBUFFER, self->frame_fbo.fbo);
 
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(self->tex_target, renderer_current_tex(self));
-	glActiveTexture(GL_TEXTURE1);
-	glBindTexture(self->tex_target, renderer_last_tex(self));
+	renderer_swap_textures(self);
 
 	glUseProgram(self->frame_shader.program);
 
 	glUniform1i(self->frame_shader.u_tex0, 0);
-	glUniform1i(self->frame_shader.u_tex1, 1);
 
 	const float* proj = transforms[self->output->transform];
 	glUniformMatrix2fv(self->frame_shader.u_proj, 1, GL_FALSE, proj);
 
 	gl_draw();
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 void render_damage(struct renderer* self)
@@ -432,28 +420,24 @@ void render_damage(struct renderer* self)
 	glBindFramebuffer(GL_FRAMEBUFFER, self->damage_fbo.fbo);
 
 	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(self->tex_target, renderer_current_tex(self));
+	glBindTexture(GL_TEXTURE_2D, self->tex[self->tex_index]);
 	glActiveTexture(GL_TEXTURE1);
-	glBindTexture(self->tex_target, renderer_last_tex(self));
+	glBindTexture(GL_TEXTURE_2D, self->tex[!self->tex_index]);
 
 	glUseProgram(self->damage_shader.program);
 
 	glUniform1i(self->damage_shader.u_tex0, 0);
 	glUniform1i(self->damage_shader.u_tex1, 1);
 
-	const float* proj = transforms[self->output->transform];
-	glUniformMatrix2fv(self->damage_shader.u_proj, 1, GL_FALSE, proj);
-
 	gl_draw();
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 void destroy_fbo(struct renderer_fbo* fbo)
 {
 	glDeleteFramebuffers(1, &fbo->fbo);
 	glDeleteRenderbuffers(1, &fbo->rbo);
-
-	if (fbo->tex)
-		glDeleteTextures(1, &fbo->tex);
 }
 
 int create_fbo(struct renderer_fbo* dst, GLint format, uint32_t width,
@@ -480,13 +464,12 @@ int create_fbo(struct renderer_fbo* dst, GLint format, uint32_t width,
 
 	dst->fbo = fbo;
 	dst->rbo = rbo;
-	dst->tex = 0;
 
 	return 0;
 }
 
-int create_textured_fbo(struct renderer_fbo* dst, GLint format, uint32_t width,
-                        uint32_t height)
+int create_textured_fbo(struct renderer_fbo* dst, uint32_t width,
+                        uint32_t height, GLuint tex)
 {
 	GLuint rbo = 0;
 	glGenRenderbuffers(1, &rbo);
@@ -494,15 +477,6 @@ int create_textured_fbo(struct renderer_fbo* dst, GLint format, uint32_t width,
 	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8_OES, width,
 	                      height);
 	glBindRenderbuffer(GL_RENDERBUFFER, 0);
-
-	GLuint tex = 0;
-	glGenTextures(1, &tex);
-	glBindTexture(GL_TEXTURE_2D, tex);
-	glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format,
-	             GL_UNSIGNED_BYTE, NULL);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glBindTexture(GL_TEXTURE_2D, 0);
 
 	GLuint fbo = 0;
 	glGenFramebuffers(1, &fbo);
@@ -522,9 +496,21 @@ int create_textured_fbo(struct renderer_fbo* dst, GLint format, uint32_t width,
 
 	dst->fbo = fbo;
 	dst->rbo = rbo;
-	dst->tex = tex;
 
 	return 0;
+}
+
+GLuint create_texture_attachment(GLint format, uint32_t width, uint32_t height)
+{
+	GLuint tex = 0;
+	glGenTextures(1, &tex);
+	glBindTexture(GL_TEXTURE_2D, tex);
+	glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format,
+	             GL_UNSIGNED_BYTE, NULL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	return tex;
 }
 
 void renderer_destroy(struct renderer* self)
@@ -592,13 +578,14 @@ int renderer_init(struct renderer* self, const struct output* output,
 	if (gl_load_late_extensions() < 0)
 		goto late_extension_failure;
 
-	glGenTextures(ARRAY_LEN(self->tex), self->tex);
-
 	uint32_t tf_width = output_get_transformed_width(output);
 	uint32_t tf_height = output_get_transformed_height(output);
 
-	if (create_textured_fbo(&self->frame_fbo, GL_RGBA, tf_width,
-	                        tf_height) < 0)
+	self->tex[0] = create_texture_attachment(GL_RGBA, tf_width, tf_height);
+	self->tex[1] = create_texture_attachment(GL_RGBA, tf_width, tf_height);
+
+	if (create_textured_fbo(&self->frame_fbo, tf_width, tf_height,
+	                        self->tex[0]) < 0)
 		goto frame_fbo_failure;
 
 	if (create_fbo(&self->damage_fbo, GL_R8_EXT, tf_width, tf_height) < 0)
@@ -608,37 +595,26 @@ int renderer_init(struct renderer* self, const struct output* output,
 
 	switch (input_type) {
 	case RENDERER_INPUT_DMABUF:
-		self->tex_target = GL_TEXTURE_EXTERNAL_OES;
-
 		if (gl_compile_shader_program(&self->frame_shader.program,
 					      "dmabuf-vertex.glsl",
 					      "dmabuf-fragment.glsl") < 0)
 			goto frame_shader_failure;
-
-		if (gl_compile_shader_program(&self->damage_shader.program,
-					      "dmabuf-vertex.glsl",
-					      "dmabuf-damage-fragment.glsl") < 0)
-			goto damage_shader_failure;
 		break;
 	case RENDERER_INPUT_FB:
-		self->tex_target = GL_TEXTURE_2D;
-
 		if (gl_compile_shader_program(&self->frame_shader.program,
 					      "texture-vertex.glsl",
 					      "texture-fragment.glsl") < 0)
 			goto frame_shader_failure;
-
-		if (gl_compile_shader_program(&self->damage_shader.program,
-					      "texture-vertex.glsl",
-					      "texture-damage-fragment.glsl") < 0)
-			goto damage_shader_failure;
 		break;
 	}
 
+	if (gl_compile_shader_program(&self->damage_shader.program,
+				      "damage-vertex.glsl",
+				      "damage-fragment.glsl") < 0)
+		goto damage_shader_failure;
+
 	self->frame_shader.u_tex0 =
 		glGetUniformLocation(self->frame_shader.program, "u_tex0");
-	self->frame_shader.u_tex1 =
-		glGetUniformLocation(self->frame_shader.program, "u_tex1");
 	self->frame_shader.u_proj =
 		glGetUniformLocation(self->frame_shader.program, "u_proj");
 
@@ -646,8 +622,6 @@ int renderer_init(struct renderer* self, const struct output* output,
 		glGetUniformLocation(self->damage_shader.program, "u_tex0");
 	self->damage_shader.u_tex1 =
 		glGetUniformLocation(self->damage_shader.program, "u_tex1");
-	self->damage_shader.u_proj =
-		glGetUniformLocation(self->damage_shader.program, "u_proj");
 
 	self->output = output;
 	glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &self->read_format);
@@ -703,8 +677,7 @@ static void dmabuf_attr_append_planes(EGLint* dst, int* i,
 #undef APPEND_PLANE_ATTR
 }
 
-int renderer_import_dmabuf_frame(struct renderer* self, GLuint tex,
-                                 struct dmabuf_frame* frame)
+int render_dmabuf(struct renderer* self, struct dmabuf_frame* frame)
 {
 	int index = 0;
 	EGLint attr[6 + 10 * 4 + 1];
@@ -724,22 +697,29 @@ int renderer_import_dmabuf_frame(struct renderer* self, GLuint tex,
 	if (!image)
 		return -1;
 
+	GLuint tex = 0;
+	glGenTextures(1, &tex);
+
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_EXTERNAL_OES, tex);
 
 	glEGLImageTargetTexture2DOES(GL_TEXTURE_EXTERNAL_OES, image);
 	eglDestroyImageKHR(self->display, image);
 
+	render_frame(self);
+
 	glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0);
+	glDeleteTextures(1, &tex);
 
 	return 0;
 }
 
-int renderer_import_framebuffer(struct renderer* self, GLuint tex,
-                                const void* addr, uint32_t format,
-                                uint32_t width, uint32_t height,
-                                uint32_t stride)
+int render_framebuffer(struct renderer* self, const void* addr, uint32_t format,
+                       uint32_t width, uint32_t height, uint32_t stride)
 {
+	GLuint tex = 0;
+	glGenTextures(1, &tex);
+
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, tex);
 
@@ -753,13 +733,16 @@ int renderer_import_framebuffer(struct renderer* self, GLuint tex,
 	glGenerateMipmap(GL_TEXTURE_2D);
 	glPixelStorei(GL_UNPACK_ROW_LENGTH_EXT, 0);
 
+	render_frame(self);
+
 	glBindTexture(GL_TEXTURE_2D, 0);
+	glDeleteTextures(1, &tex);
 
 	return 0;
 }
 
-void render_copy_pixels(struct renderer* self, void* dst, uint32_t y,
-			uint32_t height)
+void renderer_read_pixels(struct renderer* self, void* dst, uint32_t y,
+                          uint32_t height)
 {
 	assert(y + height <= output_get_transformed_height(self->output));
 
@@ -770,4 +753,20 @@ void render_copy_pixels(struct renderer* self, void* dst, uint32_t y,
 	glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &read_type);
 
 	glReadPixels(0, y, width, height, read_format, read_type, dst);
+}
+
+void renderer_read_frame(struct renderer* self, void* dst, uint32_t y,
+                         uint32_t height)
+{
+	glBindFramebuffer(GL_FRAMEBUFFER, self->frame_fbo.fbo);
+	renderer_read_pixels(self, dst, y, height);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void renderer_read_damage(struct renderer* self, void* dst, uint32_t y,
+                          uint32_t height)
+{
+	glBindFramebuffer(GL_FRAMEBUFFER, self->damage_fbo.fbo);
+	renderer_read_pixels(self, dst, y, height);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
