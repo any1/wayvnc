@@ -100,6 +100,8 @@ void damage_check(struct pixman_region16* damage, const uint8_t* buffer,
 		                      current_height);
 	}
 
+	pixman_region_intersect_rect(damage, damage, 0, 0, width, height);
+
 	free(row_buffer);
 }
 
