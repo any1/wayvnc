@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 Andri Yngvason
+ * Copyright (c) 2019 - 2020 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -20,6 +20,8 @@
 #include <stdbool.h>
 
 struct wl_output;
+struct nvnc_fb;
+struct renderer;
 
 enum frame_capture_status {
 	CAPTURE_STOPPED = 0,
@@ -53,6 +55,8 @@ struct frame_capture {
 	} damage_hint;
 
 	struct {
+		void (*render)(struct frame_capture*, struct renderer*,
+		               struct nvnc_fb* fb);
 		int (*start)(struct frame_capture*);
 		void (*stop)(struct frame_capture*);
 	} backend;
@@ -66,4 +70,11 @@ static inline int frame_capture_start(struct frame_capture* self)
 static inline void frame_capture_stop(struct frame_capture* self)
 {
 	self->backend.stop(self);
+}
+
+static inline void frame_capture_render(struct frame_capture* self,
+                                        struct renderer* renderer,
+                                        struct nvnc_fb* fb)
+{
+	return self->backend.render(self, renderer, fb);
 }

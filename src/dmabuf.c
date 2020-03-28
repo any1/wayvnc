@@ -26,6 +26,7 @@
 #include "dmabuf.h"
 #include "wlr-export-dmabuf-unstable-v1.h"
 #include "time-util.h"
+#include "render.h"
 
 #define RATE_LIMIT 20.0 // Hz
 
@@ -187,6 +188,13 @@ static int dmabuf_capture_start(struct frame_capture* fc)
 	return 0;
 }
 
+static void dmabuf_capture_render(struct frame_capture* fc,
+                                  struct renderer* render, struct nvnc_fb* fb)
+{
+	struct dmabuf_capture* self = (void*)fc;
+	render_dmabuf(render, &self->frame);
+}
+
 void dmabuf_capture_init(struct dmabuf_capture* self)
 {
 	self->timer = aml_timer_new(0, dmabuf_timer_ready, self, NULL);
@@ -194,4 +202,5 @@ void dmabuf_capture_init(struct dmabuf_capture* self)
 
 	self->fc.backend.start = dmabuf_capture_start;
 	self->fc.backend.stop = dmabuf_capture_stop;
+	self->fc.backend.render = dmabuf_capture_render;
 }

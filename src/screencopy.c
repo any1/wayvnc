@@ -28,6 +28,7 @@
 #include "screencopy.h"
 #include "smooth.h"
 #include "time-util.h"
+#include "render.h"
 
 #define RATE_LIMIT 20.0 // Hz
 #define DELAY_SMOOTHER_TIME_CONSTANT 0.5 // s
@@ -228,6 +229,19 @@ static int screencopy_start(struct frame_capture* fc)
 	return screencopy__start_capture(fc);
 }
 
+static void screencopy_render(struct frame_capture* fc,
+                              struct renderer* renderer, struct nvnc_fb* fb)
+{
+	struct screencopy* self = (void*)fc;
+
+	uint32_t width = fc->frame_info.width;
+	uint32_t height = fc->frame_info.height;
+	uint32_t stride = fc->frame_info.stride;
+	uint32_t format = fc->frame_info.fourcc_format;
+
+	render_framebuffer(renderer, self->pixels, format, width, height, stride);
+}
+
 void screencopy_init(struct screencopy* self)
 {
 	self->timer = aml_timer_new(0, screencopy__poll, self, NULL);
@@ -237,6 +251,7 @@ void screencopy_init(struct screencopy* self)
 
 	self->frame_capture.backend.start = screencopy_start;
 	self->frame_capture.backend.stop = screencopy_stop;
+	self->frame_capture.backend.render = screencopy_render;
 }
 
 void screencopy_destroy(struct screencopy* self)

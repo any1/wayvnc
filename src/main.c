@@ -508,40 +508,14 @@ void wayvnc_update_vnc(struct wayvnc* self, struct nvnc_fb* fb)
 void wayvnc_process_frame(struct wayvnc* self)
 {
 	uint32_t format = fourcc_from_gl_format(self->renderer.read_format);
-	struct dmabuf_frame* frame = &self->dmabuf_backend.frame;
-
 	uint32_t fb_width = output_get_transformed_width(self->selected_output);
 	uint32_t fb_height =
 		output_get_transformed_height(self->selected_output);
+
 	struct nvnc_fb* fb = nvnc_fb_new(fb_width, fb_height, format);
 	void* addr = nvnc_fb_get_addr(fb);
 
-	render_dmabuf(&self->renderer, frame);
-	renderer_read_frame(&self->renderer, addr, 0, fb_height);
-
-	wayvnc_update_vnc(self, fb);
-}
-
-void wayvnc_process_screen(struct wayvnc* self)
-{
-	uint32_t renderer_format =
-		fourcc_from_gl_format(self->renderer.read_format);
-
-	void* pixels = self->screencopy_backend.pixels;
-
-	uint32_t width = self->capture_backend->frame_info.width;
-	uint32_t height = self->capture_backend->frame_info.height;
-	uint32_t stride = self->capture_backend->frame_info.stride;
-	uint32_t frame_format = self->capture_backend->frame_info.fourcc_format;
-
-	uint32_t fb_width = output_get_transformed_width(self->selected_output);
-	uint32_t fb_height =
-		output_get_transformed_height(self->selected_output);
-	struct nvnc_fb* fb = nvnc_fb_new(fb_width, fb_height, renderer_format);
-	void* addr = nvnc_fb_get_addr(fb);
-
-	render_framebuffer(&self->renderer, pixels, frame_format, width, height,
-	                   stride);
+	frame_capture_render(self->capture_backend, &self->renderer, fb);
 	renderer_read_frame(&self->renderer, addr, 0, fb_height);
 
 	wayvnc_update_vnc(self, fb);
@@ -567,10 +541,7 @@ void on_capture_done(struct frame_capture* capture)
 		}
 		break;
 	case CAPTURE_DONE:
-		if (self->capture_backend == (struct frame_capture*)&self->screencopy_backend)
-			wayvnc_process_screen(self);
-		else
-			wayvnc_process_frame(self);
+		wayvnc_process_frame(self);
 		break;
 	}
 }
