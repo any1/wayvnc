@@ -17,7 +17,7 @@ bindsym $mod+Pause mode passthrough
 This makes it so that when you press $mod+Pause, all keybindings, except the one
 to switch back, are disabled.
 
-**Q: Wayvnc changes the Sway's keyboard layout. Can this be fixed?**
+**Q: Wayvnc changes Sway's keyboard layout. Can this be fixed?**
 
 A: This happens because of a bug in how the virtual keyboard protocol interacts
 with a feature in sway called smart keyboard grouping. This can be remedied by
