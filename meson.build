@@ -68,6 +68,7 @@ sources = [
 	'src/smooth.c',
 	'src/cfg.c',
 	'src/intset.c',
+	'src/damage.c',
 ]
 
 dependencies = [

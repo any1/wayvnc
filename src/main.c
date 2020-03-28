@@ -49,6 +49,7 @@
 #include "keyboard.h"
 #include "seat.h"
 #include "cfg.h"
+#include "damage.h"
 
 #define DEFAULT_ADDRESS "127.0.0.1"
 #define DEFAULT_PORT 5900
@@ -451,7 +452,7 @@ int wayvnc_start_capture(struct wayvnc* self)
 	return frame_capture_start(self->capture_backend);
 }
 
-void on_damage_check_done(struct pixman_region16* damage, void* userdata)
+static void on_damage_check_done(struct pixman_region16* damage, void* userdata)
 {
 	struct wayvnc* self = userdata;
 
@@ -488,9 +489,17 @@ void wayvnc_update_vnc(struct wayvnc* self, struct nvnc_fb* fb)
 		                           hint_y + hint_height,
 		                           &tfx0, &tfy0, &tfx1, &tfy1);
 
-		nvnc_check_damage(self->current_fb, self->last_fb, tfx0,
-				  tfy0, tfx1 - tfx0, tfy1 - tfy0,
-				  on_damage_check_done, self);
+		struct pixman_box16 hint = {
+			.x1 = tfx0, .y1 = tfy0,
+			.x2 = tfx1, .y2 = tfy1,
+		};
+
+		uint8_t* damage_buffer = malloc(width * height);
+		render_damage(&self->renderer);
+		renderer_read_damage(&self->renderer, damage_buffer, 0, height);
+
+		damage_check_async(damage_buffer, width, height, &hint,
+		                   on_damage_check_done, self);
 		return;
 	}
 
