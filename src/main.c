@@ -465,10 +465,17 @@ static void on_damage_check_done(struct pixman_region16* damage, void* userdata)
 	}
 }
 
-void wayvnc_update_vnc(struct wayvnc* self, struct nvnc_fb* fb)
+void wayvnc_process_frame(struct wayvnc* self)
 {
-	uint32_t width = nvnc_fb_get_width(fb);
-	uint32_t height = nvnc_fb_get_height(fb);
+	uint32_t format = fourcc_from_gl_format(self->renderer.read_format);
+	uint32_t width = output_get_transformed_width(self->selected_output);
+	uint32_t height = output_get_transformed_height(self->selected_output);
+
+	struct nvnc_fb* fb = nvnc_fb_new(width, height, format);
+	void* addr = nvnc_fb_get_addr(fb);
+
+	frame_capture_render(self->capture_backend, &self->renderer, fb);
+	renderer_read_frame(&self->renderer, addr, 0, height);
 
 	if (self->last_fb)
 		nvnc_fb_unref(self->last_fb);
@@ -512,22 +519,6 @@ void wayvnc_update_vnc(struct wayvnc* self, struct nvnc_fb* fb)
 		log_error("Failed to start capture. Exiting...\n");
 		wayvnc_exit(self);
 	}
-}
-
-void wayvnc_process_frame(struct wayvnc* self)
-{
-	uint32_t format = fourcc_from_gl_format(self->renderer.read_format);
-	uint32_t fb_width = output_get_transformed_width(self->selected_output);
-	uint32_t fb_height =
-		output_get_transformed_height(self->selected_output);
-
-	struct nvnc_fb* fb = nvnc_fb_new(fb_width, fb_height, format);
-	void* addr = nvnc_fb_get_addr(fb);
-
-	frame_capture_render(self->capture_backend, &self->renderer, fb);
-	renderer_read_frame(&self->renderer, addr, 0, fb_height);
-
-	wayvnc_update_vnc(self, fb);
 }
 
 void on_capture_done(struct frame_capture* capture)
