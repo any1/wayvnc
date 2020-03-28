@@ -91,14 +91,24 @@ struct wayvnc {
 
 	struct nvnc* nvnc;
 
-	struct nvnc_fb* current_fb;
-	struct nvnc_fb* last_fb;
+	struct nvnc_fb* fb[2];
+	int fb_index;
 
 	const char* kb_layout;
 };
 
 void wayvnc_exit(struct wayvnc* self);
 void on_capture_done(struct frame_capture* capture);
+
+static struct nvnc_fb* get_current_fb(struct wayvnc* self)
+{
+	return self->fb[self->fb_index];
+}
+
+static void swap_fds(struct wayvnc* self)
+{
+	self->fb_index ^= 1;
+}
 
 static enum frame_capture_backend_type
 frame_capture_backend_from_string(const char* str)
@@ -475,13 +485,14 @@ static void on_damage_check_done(struct pixman_region16* damage, void* userdata)
 		uint32_t y = ext->y1;
 		uint32_t damage_height = ext->y2 - ext->y1;
 
-		uint32_t* addr = nvnc_fb_get_addr(self->current_fb);
-		uint32_t fb_width = nvnc_fb_get_width(self->current_fb);
+		uint32_t* addr = nvnc_fb_get_addr(get_current_fb(self));
+		uint32_t fb_width = nvnc_fb_get_width(get_current_fb(self));
 
 		renderer_read_frame(&self->renderer, addr + y * fb_width, y,
 		                    damage_height);
 
-		nvnc_feed_frame(self->nvnc, self->current_fb, damage);
+		nvnc_feed_frame(self->nvnc, get_current_fb(self), damage);
+		swap_fds(self);
 	}
 
 	if (wayvnc_start_capture(self) < 0) {
@@ -495,18 +506,23 @@ void wayvnc_process_frame(struct wayvnc* self)
 	uint32_t format = fourcc_from_gl_format(self->renderer.read_format);
 	uint32_t width = output_get_transformed_width(self->selected_output);
 	uint32_t height = output_get_transformed_height(self->selected_output);
+	bool is_first_frame = false;
 
-	struct nvnc_fb* fb = nvnc_fb_new(width, height, format);
+	struct nvnc_fb* fb = get_current_fb(self);
+	if (!fb) {
+		self->fb[0] = nvnc_fb_new(width, height, format);
+		self->fb[1] = nvnc_fb_new(width, height, format);
+		fb = get_current_fb(self);
+		is_first_frame = true;
+	} else {
+		// TODO: Reallocate
+		assert(width == nvnc_fb_get_width(fb));
+		assert(height == nvnc_fb_get_height(fb));
+	}
 
 	frame_capture_render(self->capture_backend, &self->renderer, fb);
 
-	if (self->last_fb)
-		nvnc_fb_unref(self->last_fb);
-
-	self->last_fb = self->current_fb;
-	self->current_fb = fb;
-
-	if (!self->please_send_full_frame_next && self->last_fb) {
+	if (!self->please_send_full_frame_next && !is_first_frame) {
 		uint32_t hint_x = self->capture_backend->damage_hint.x;
 		uint32_t hint_y = self->capture_backend->damage_hint.y;
 		uint32_t hint_width = self->capture_backend->damage_hint.width;
@@ -538,7 +554,8 @@ void wayvnc_process_frame(struct wayvnc* self)
 
 	struct pixman_region16 damage;
 	pixman_region_init_rect(&damage, 0, 0, width, height);
-	nvnc_feed_frame(self->nvnc, self->current_fb, &damage);
+	nvnc_feed_frame(self->nvnc, fb, &damage);
+	swap_fds(self);
 	pixman_region_fini(&damage);
 
 	if (wayvnc_start_capture(self) < 0) {
@@ -853,8 +870,8 @@ int main(int argc, char* argv[])
 
 	frame_capture_stop(self.capture_backend);
 
-	if (self.current_fb) nvnc_fb_unref(self.current_fb);
-	if (self.last_fb) nvnc_fb_unref(self.last_fb);
+	if (self.fb[1]) nvnc_fb_unref(self.fb[1]);
+	if (self.fb[0]) nvnc_fb_unref(self.fb[0]);
 
 	nvnc_close(self.nvnc);
 	renderer_destroy(&self.renderer);
