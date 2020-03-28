@@ -456,8 +456,19 @@ static void on_damage_check_done(struct pixman_region16* damage, void* userdata)
 {
 	struct wayvnc* self = userdata;
 
-	if (pixman_region_not_empty(damage))
+	if (pixman_region_not_empty(damage)) {
+		struct pixman_box16* ext = pixman_region_extents(damage);
+		uint32_t y = ext->y1;
+		uint32_t damage_height = ext->y2 - ext->y1;
+
+		uint32_t* addr = nvnc_fb_get_addr(self->current_fb);
+		uint32_t fb_width = nvnc_fb_get_width(self->current_fb);
+
+		renderer_read_frame(&self->renderer, addr + y * fb_width, y,
+		                    damage_height);
+
 		nvnc_feed_frame(self->nvnc, self->current_fb, damage);
+	}
 
 	if (wayvnc_start_capture(self) < 0) {
 		log_error("Failed to start capture. Exiting...\n");
@@ -472,10 +483,8 @@ void wayvnc_process_frame(struct wayvnc* self)
 	uint32_t height = output_get_transformed_height(self->selected_output);
 
 	struct nvnc_fb* fb = nvnc_fb_new(width, height, format);
-	void* addr = nvnc_fb_get_addr(fb);
 
 	frame_capture_render(self->capture_backend, &self->renderer, fb);
-	renderer_read_frame(&self->renderer, addr, 0, height);
 
 	if (self->last_fb)
 		nvnc_fb_unref(self->last_fb);
@@ -509,6 +518,9 @@ void wayvnc_process_frame(struct wayvnc* self)
 		                   on_damage_check_done, self);
 		return;
 	}
+
+	void* addr = nvnc_fb_get_addr(fb);
+	renderer_read_frame(&self->renderer, addr, 0, height);
 
 	struct pixman_region16 damage;
 	pixman_region_init_rect(&damage, 0, 0, width, height);
