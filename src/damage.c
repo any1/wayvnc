@@ -24,8 +24,36 @@
 #include <assert.h>
 #include <sys/param.h>
 #include <pixman.h>
+#include <aml.h>
 
 #define UDIV_UP(a, b) (((a) + (b) - 1) / (b))
+
+struct damage_work {
+	void (*on_done)(struct pixman_region16*, void*);
+	void* userdata;
+	uint8_t* buffer;
+	uint32_t width, height;
+	struct pixman_region16 damage;
+};
+
+struct damage_work* damage_work_new(void)
+{
+	struct damage_work* work = calloc(1, sizeof(*work));
+	if (!work)
+		return NULL;
+
+	pixman_region_init(&work->damage);
+
+	return work;
+}
+
+void damage_work_free(void* ud)
+{
+	struct damage_work* work = ud;
+	free(work->buffer);
+	pixman_region_fini(&work->damage);
+	free(work);
+}
 
 bool damage_check_32_byte_block(const void* block)
 {
@@ -73,6 +101,52 @@ void damage_check(struct pixman_region16* damage, const uint8_t* buffer,
 	}
 
 	free(row_buffer);
+}
+
+static void do_damage_check(void* aml_obj)
+{
+	struct damage_work* priv = aml_get_userdata(aml_obj);
+	damage_check(&priv->damage, priv->buffer, priv->width, priv->height, NULL);
+}
+
+static void on_damage_check_done(void* aml_obj)
+{
+	struct damage_work* priv = aml_get_userdata(aml_obj);
+	priv->on_done(&priv->damage, priv->userdata);
+}
+
+// TODO: Use the hint
+// TODO: Split rows between jobs
+// XXX: This takes ownership of the damage buffer
+int damage_check_async(uint8_t* buffer, uint32_t width, uint32_t height,
+                       struct pixman_box16* hint,
+                       void (*on_done)(struct pixman_region16*, void*),
+                       void* userdata)
+{
+	struct damage_work* priv = damage_work_new();
+	if (!priv)
+		return -1;
+
+	priv->buffer = buffer;
+	priv->width = width;
+	priv->height = height;
+	priv->on_done = on_done;
+	priv->userdata = userdata;
+
+	struct aml_work* work;
+	work = aml_work_new(do_damage_check, on_damage_check_done, priv,
+	                    damage_work_free);
+	if (!work)
+		goto oom;
+
+	int rc = aml_start(aml_get_default(), work);
+	aml_unref(work);
+
+	return rc;
+
+oom:
+	damage_work_free(priv);
+	return -1;
 }
 
 void damage_dump(FILE* stream, struct pixman_region16* damage,

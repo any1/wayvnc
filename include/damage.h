@@ -25,5 +25,10 @@ struct pixman_box16;
 void damage_check(struct pixman_region16* damage, const uint8_t* buffer,
                   uint32_t width, uint32_t height, struct pixman_box16* hint);
 
+int damage_check_async(uint8_t* buffer, uint32_t width, uint32_t height,
+                       struct pixman_box16* hint,
+                       void (*on_done)(struct pixman_region16*, void*),
+                       void* userdata);
+
 void damage_dump(FILE* stream, struct pixman_region16* damage,
                  uint32_t width, uint32_t height, uint32_t tile_size);
