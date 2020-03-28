@@ -62,6 +62,7 @@ enum frame_capture_backend_type {
 
 struct wayvnc {
 	bool do_exit;
+	bool please_send_full_frame_next;
 
 	struct wl_display* display;
 	struct wl_registry* registry;
@@ -416,6 +417,17 @@ bool on_auth(const char* username, const char* password, void* ud)
 	return true;
 }
 
+static void on_fb_req(struct nvnc_client* client, bool is_incremental,
+                      uint16_t x, uint16_t y, uint16_t width, uint16_t height)
+{
+	struct nvnc* nvnc = nvnc_get_server(client);
+	struct wayvnc* self = nvnc_get_userdata(nvnc);
+
+	// TODO: Make this per-client rather than global
+	if (!is_incremental)
+		self->please_send_full_frame_next = true;
+}
+
 int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port)
 {
 	self->nvnc = nvnc_open(addr, port);
@@ -433,6 +445,8 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port)
 			    output_get_transformed_width(self->selected_output),
 			    output_get_transformed_height(self->selected_output),
 			    format);
+
+	nvnc_set_fb_req_fn(self->nvnc, on_fb_req);
 
 	if (self->cfg.enable_auth)
 		nvnc_enable_auth(self->nvnc, self->cfg.private_key_file,
@@ -492,7 +506,7 @@ void wayvnc_process_frame(struct wayvnc* self)
 	self->last_fb = self->current_fb;
 	self->current_fb = fb;
 
-	if (self->last_fb) {
+	if (!self->please_send_full_frame_next && self->last_fb) {
 		uint32_t hint_x = self->capture_backend->damage_hint.x;
 		uint32_t hint_y = self->capture_backend->damage_hint.y;
 		uint32_t hint_width = self->capture_backend->damage_hint.width;
@@ -531,6 +545,8 @@ void wayvnc_process_frame(struct wayvnc* self)
 		log_error("Failed to start capture. Exiting...\n");
 		wayvnc_exit(self);
 	}
+
+	self->please_send_full_frame_next = false;
 }
 
 void on_capture_done(struct frame_capture* capture)
