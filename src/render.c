@@ -377,13 +377,13 @@ void gl_draw(void)
 	glVertexAttribPointer(ATTR_INDEX_TEXTURE, 2, GL_FLOAT, GL_FALSE, 0,
 			      s_positions);
 
-	glEnableVertexAttribArray(0);
-	glEnableVertexAttribArray(1);
+	glEnableVertexAttribArray(ATTR_INDEX_POS);
+	glEnableVertexAttribArray(ATTR_INDEX_TEXTURE);
 
 	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
-	glDisableVertexAttribArray(0);
-	glDisableVertexAttribArray(1);
+	glDisableVertexAttribArray(ATTR_INDEX_TEXTURE);
+	glDisableVertexAttribArray(ATTR_INDEX_POS);
 }
 
 void renderer_swap(struct renderer* self)
