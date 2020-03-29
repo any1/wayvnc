@@ -423,6 +423,12 @@ void render_damage(struct renderer* self)
 	glUniform1i(self->damage_shader.u_tex0, 0);
 	glUniform1i(self->damage_shader.u_tex1, 1);
 
+	uint32_t width = output_get_transformed_width(self->output);
+	uint32_t height = output_get_transformed_height(self->output);
+
+	glUniform1i(self->damage_shader.u_width, width);
+	glUniform1i(self->damage_shader.u_height, height);
+
 	gl_draw();
 
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -605,6 +611,10 @@ int renderer_init(struct renderer* self, const struct output* output,
 		glGetUniformLocation(self->damage_shader.program, "u_tex0");
 	self->damage_shader.u_tex1 =
 		glGetUniformLocation(self->damage_shader.program, "u_tex1");
+	self->damage_shader.u_width =
+		glGetUniformLocation(self->damage_shader.program, "u_width");
+	self->damage_shader.u_height =
+		glGetUniformLocation(self->damage_shader.program, "u_height");
 
 	self->output = output;
 	glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &self->read_format);

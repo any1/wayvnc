@@ -59,6 +59,8 @@ struct renderer {
 		GLuint program;
 		GLint u_tex0;
 		GLint u_tex1;
+		GLint u_width;
+		GLint u_height;
 	} damage_shader;
 };
 
