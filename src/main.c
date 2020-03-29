@@ -484,6 +484,10 @@ static void on_damage_check_done(struct pixman_region16* damage, void* userdata)
 {
 	struct wayvnc* self = userdata;
 
+	uint32_t width = output_get_transformed_width(self->selected_output);
+	uint32_t height = output_get_transformed_height(self->selected_output);
+	damage_dump(stdout, damage, width, height, 32);
+
 	if (pixman_region_not_empty(damage)) {
 		struct pixman_box16* ext = pixman_region_extents(damage);
 		uint32_t y = ext->y1;

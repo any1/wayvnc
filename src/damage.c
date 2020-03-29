@@ -90,6 +90,21 @@ void damage_check_tile_row(struct pixman_region16* damage,
 void damage_check(struct pixman_region16* damage, const uint8_t* buffer,
                   uint32_t width, uint32_t height, struct pixman_box16* hint)
 {
+	uint32_t h = UDIV_UP(height, 32);
+	uint32_t w = UDIV_UP(width, 32);
+
+	for (uint32_t y = 0; y < h; ++y)
+		for (uint32_t x = 0; x < w; ++x)
+			if (buffer[x + y * w])
+				pixman_region_union_rect(damage, damage,
+							 x * 32, y * 32, 32, 32);
+
+	pixman_region_intersect_rect(damage, damage, 0, 0, width, height);
+	return;
+
+
+
+
 	uint32_t tiled_width = UDIV_UP(width, 32);
 	uint8_t* row_buffer = malloc(tiled_width);
 	assert(row_buffer);

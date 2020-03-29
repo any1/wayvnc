@@ -44,6 +44,7 @@ enum {
 };
 
 #define ARRAY_LEN(a) (sizeof(a) / sizeof((a)[0]))
+#define UDIV_UP(a, b) (((a) + (b) - 1) / (b))
 
 #define XSTR(s) STR(s)
 #define STR(s) #s
@@ -393,9 +394,13 @@ void renderer_swap(struct renderer* self)
 
 void render_frame(struct renderer* self)
 {
+	uint32_t width = output_get_transformed_width(self->output);
+	uint32_t height = output_get_transformed_height(self->output);
+
 	renderer_swap(self);
 
 	glBindFramebuffer(GL_FRAMEBUFFER, self->frame_fbo[self->frame_index].fbo);
+	glViewport(0, 0, width, height);
 
 	glUseProgram(self->frame_shader.program);
 
@@ -411,7 +416,11 @@ void render_frame(struct renderer* self)
 
 void render_damage(struct renderer* self)
 {
+	uint32_t width = output_get_transformed_width(self->output);
+	uint32_t height = output_get_transformed_height(self->output);
+
 	glBindFramebuffer(GL_FRAMEBUFFER, self->damage_fbo.fbo);
+	glViewport(0, 0, UDIV_UP(width, 32), UDIV_UP(height, 32));
 
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, self->frame_fbo[self->frame_index].tex);
@@ -422,9 +431,6 @@ void render_damage(struct renderer* self)
 
 	glUniform1i(self->damage_shader.u_tex0, 0);
 	glUniform1i(self->damage_shader.u_tex1, 1);
-
-	uint32_t width = output_get_transformed_width(self->output);
-	uint32_t height = output_get_transformed_height(self->output);
 
 	glUniform1i(self->damage_shader.u_width, width);
 	glUniform1i(self->damage_shader.u_height, height);
@@ -479,8 +485,10 @@ int create_textured_fbo(struct renderer_fbo* dst, GLint format, uint32_t width,
 	glBindTexture(GL_TEXTURE_2D, tex);
 	glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format,
 	             GL_UNSIGNED_BYTE, NULL);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glBindTexture(GL_TEXTURE_2D, 0);
 
 	GLuint fbo = 0;
@@ -577,7 +585,7 @@ int renderer_init(struct renderer* self, const struct output* output,
 	if (create_textured_fbo(&self->frame_fbo[1], GL_RGBA, tf_width, tf_height) < 0)
 		goto frame_fbo_failure_1;
 
-	if (create_fbo(&self->damage_fbo, GL_R8_EXT, tf_width, tf_height) < 0)
+	if (create_fbo(&self->damage_fbo, GL_R8_EXT, UDIV_UP(tf_width, 32), UDIV_UP(tf_height, 32)) < 0)
 		goto damage_fbo_failure;
 
 	glBindFramebuffer(GL_FRAMEBUFFER, self->frame_fbo[0].fbo);
@@ -761,6 +769,14 @@ void renderer_read_damage(struct renderer* self, void* dst, uint32_t y,
                           uint32_t height)
 {
 	glBindFramebuffer(GL_FRAMEBUFFER, self->damage_fbo.fbo);
-	renderer_read_pixels(self, dst, y, height);
+
+	uint32_t width = output_get_transformed_width(self->output);
+
+	GLint read_format, read_type;
+	glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &read_format);
+	glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &read_type);
+
+	glReadPixels(0, y, UDIV_UP(width, 32), UDIV_UP(height, 32), read_format, read_type, dst);
+
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
