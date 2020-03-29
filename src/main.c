@@ -33,6 +33,7 @@
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
 #include <pixman.h>
+#include <sys/param.h>
 
 #include "wlr-export-dmabuf-unstable-v1.h"
 #include "wlr-screencopy-unstable-v1.h"
@@ -53,6 +54,9 @@
 
 #define DEFAULT_ADDRESS "127.0.0.1"
 #define DEFAULT_PORT 5900
+
+#define UDIV_UP(a, b) (((a) + (b) - 1) / (b))
+#define ALIGN_UP(n, a) (UDIV_UP(n, a) * a)
 
 enum frame_capture_backend_type {
 	FRAME_CAPTURE_BACKEND_NONE = 0,
@@ -540,7 +544,10 @@ void wayvnc_process_frame(struct wayvnc* self)
 			.x2 = tfx1, .y2 = tfy1,
 		};
 
-		uint8_t* damage_buffer = malloc(width * height);
+		size_t alignment = MAX(4, sizeof(void*));
+		size_t damage_buffer_size = ALIGN_UP(width * height, alignment);
+		uint8_t* damage_buffer =
+			aligned_alloc(alignment, damage_buffer_size);
 		render_damage(&self->renderer);
 		renderer_read_damage(&self->renderer, damage_buffer, 0, height);
 
