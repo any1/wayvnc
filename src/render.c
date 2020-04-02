@@ -33,6 +33,7 @@
 #include "dmabuf.h"
 #include "output.h"
 #include "config.h"
+#include "usdt.h"
 
 #define MAYBE_UNUSED __attribute__((unused))
 
@@ -663,6 +664,8 @@ static void dmabuf_attr_append_planes(EGLint* dst, int* i,
 
 int render_dmabuf(struct renderer* self, struct dmabuf_frame* frame)
 {
+	DTRACE_PROBE1(wayvnc, render_dmabuf_start, self);
+
 	int index = 0;
 	EGLint attr[6 + 10 * 4 + 1];
 
@@ -695,12 +698,15 @@ int render_dmabuf(struct renderer* self, struct dmabuf_frame* frame)
 	glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0);
 	glDeleteTextures(1, &tex);
 
+	DTRACE_PROBE(wayvnc, render_dmabuf_end);
 	return 0;
 }
 
 int render_framebuffer(struct renderer* self, const void* addr, uint32_t format,
                        uint32_t width, uint32_t height, uint32_t stride)
 {
+	DTRACE_PROBE1(wayvnc, render_framebuffer_start, self);
+
 	GLuint tex = 0;
 	glGenTextures(1, &tex);
 
@@ -722,6 +728,7 @@ int render_framebuffer(struct renderer* self, const void* addr, uint32_t format,
 	glBindTexture(GL_TEXTURE_2D, 0);
 	glDeleteTextures(1, &tex);
 
+	DTRACE_PROBE(wayvnc, render_framebuffer_end);
 	return 0;
 }
 
@@ -742,15 +749,19 @@ void renderer_read_pixels(struct renderer* self, void* dst, uint32_t y,
 void renderer_read_frame(struct renderer* self, void* dst, uint32_t y,
                          uint32_t height)
 {
+	DTRACE_PROBE3(wayvnc, render_read_frame_start, self, y, height);
 	glBindFramebuffer(GL_FRAMEBUFFER, self->frame_fbo[self->frame_index].fbo);
 	renderer_read_pixels(self, dst, y, height);
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	DTRACE_PROBE(wayvnc, render_read_frame_end);
 }
 
 void renderer_read_damage(struct renderer* self, void* dst, uint32_t y,
                           uint32_t height)
 {
+	DTRACE_PROBE1(wayvnc, render_read_damage_start, self);
 	glBindFramebuffer(GL_FRAMEBUFFER, self->damage_fbo.fbo);
 	renderer_read_pixels(self, dst, y, height);
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	DTRACE_PROBE(wayvnc, render_read_damage_end);
 }
