@@ -29,6 +29,7 @@
 #include "smooth.h"
 #include "time-util.h"
 #include "render.h"
+#include "usdt.h"
 
 #define RATE_LIMIT 20.0 // Hz
 #define DELAY_SMOOTHER_TIME_CONSTANT 0.5 // s
@@ -139,6 +140,8 @@ static void screencopy_ready(void* data,
 
 	struct screencopy* self = data;
 
+	DTRACE_PROBE1(wayvnc, screencopy_ready, self);
+
 	screencopy_stop(&self->frame_capture);
 
 	self->last_time = gettime_us();
@@ -155,6 +158,8 @@ static void screencopy_failed(void* data,
 {
 	struct screencopy* self = data;
 
+	DTRACE_PROBE1(wayvnc, screencopy_failed, self);
+
 	screencopy_stop(&self->frame_capture);
 	self->frame_capture.status = CAPTURE_FAILED;
 	self->frame_capture.on_done(&self->frame_capture);
@@ -167,6 +172,8 @@ static void screencopy_damage(void* data,
 {
 	struct screencopy* self = data;
 
+	DTRACE_PROBE1(wayvnc, screencopy_damage, self);
+
 	self->frame_capture.damage_hint.x = x;
 	self->frame_capture.damage_hint.y = y;
 	self->frame_capture.damage_hint.width = width;
@@ -176,6 +183,8 @@ static void screencopy_damage(void* data,
 static int screencopy__start_capture(struct frame_capture* fc)
 {
 	struct screencopy* self = (void*)fc;
+
+	DTRACE_PROBE1(wayvnc, screencopy_start, self);
 
 	static const struct zwlr_screencopy_frame_v1_listener frame_listener = {
 		.buffer = screencopy_buffer,
