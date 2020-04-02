@@ -9,6 +9,7 @@ project(
 )
 
 buildtype = get_option('buildtype')
+host_system = host_machine.system()
 prefix = get_option('prefix')
 
 c_args = [
@@ -87,6 +88,10 @@ dependencies = [
 config = configuration_data()
 
 config.set('PREFIX', '"' + prefix + '"')
+
+if host_system == 'linux' and cc.has_header('sys/sdt.h')
+	config.set('HAVE_USDT', true)
+endif
 
 configure_file(
 	output: 'config.h',
