@@ -454,8 +454,10 @@ static void on_fb_req(struct nvnc_client* client, bool is_incremental,
 int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port)
 {
 	self->nvnc = nvnc_open(addr, port);
-	if (!self->nvnc)
+	if (!self->nvnc) {
+		log_error("Failed to bind to address\n");
 		return -1;
+	}
 
 	nvnc_set_userdata(self->nvnc, self);
 
