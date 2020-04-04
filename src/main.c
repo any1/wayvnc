@@ -110,7 +110,12 @@ static struct nvnc_fb* get_current_fb(struct wayvnc* self)
 	return self->fb[self->fb_index];
 }
 
-static void swap_fds(struct wayvnc* self)
+static struct nvnc_fb* get_last_fb(struct wayvnc* self)
+{
+	return self->fb[!self->fb_index];
+}
+
+static void swap_fbs(struct wayvnc* self)
 {
 	self->fb_index ^= 1;
 }
@@ -496,19 +501,16 @@ static void on_damage_check_done(struct pixman_region16* damage, void* userdata)
 		struct nvnc_fb* fb = get_current_fb(self);
 		uint32_t* addr = nvnc_fb_get_addr(fb);
 		uint32_t fb_width = nvnc_fb_get_width(fb);
-		uint32_t fb_height = nvnc_fb_get_height(fb);
 
 		renderer_read_frame(&self->renderer, addr + y * fb_width, y,
 		                    damage_height);
 
-		if (damage_height != fb_height)
-			nvnc_fb_set_flags(fb, nvnc_fb_get_flags(fb) |
-			                      NVNC_FB_PARTIAL);
+		nvnc_fb_set_flags(fb, nvnc_fb_get_flags(fb) | NVNC_FB_PARTIAL);
 
 		nvnc_fb_unlock(fb);
 
 		nvnc_feed_frame(self->nvnc, fb, damage);
-		swap_fds(self);
+		swap_fbs(self);
 	} else {
 		nvnc_fb_unlock(get_current_fb(self));
 	}
@@ -539,18 +541,26 @@ void wayvnc_process_frame(struct wayvnc* self)
 	}
 
 	/* Check if frame is still in use. This can happen when encoding is too
-	 * slow to keep up with frames being fed to it. When this happens the
-	 * user can choose to do one of three things:
-	 *  - Grow the swap chain
-	 *  - Remove the frame from the swap chain and add a new one
-	 *  - Drop the frame. This is what we'll be doing here.
+	 * slow to keep up with frames being fed to it.
+	 *
+	 * We'll just add to the frame that was added last if Neat VNC is busy.
 	 *
 	 * TODO: Damage hints are not being used now, but if they will be used
 	 * then this breaks things.
 	 */
 	if (!nvnc_fb_lock(fb)) {
-		log_debug("nvnc_fb(%p) still in use. Dropping frame.\n", fb);
-		goto done;
+		log_debug("nvnc_fb %d still in use. Merging frame.\n",
+		          self->fb_index);
+
+		struct nvnc_fb* last_fb = get_last_fb(self);
+		if (!nvnc_fb_lock(last_fb)) {
+			log_error("Whole swap chain locked. Dropping frame.\n");
+			goto done;
+		}
+
+		swap_fbs(self);
+		fb = get_current_fb(self);
+		assert(fb == last_fb);
 	}
 
 	frame_capture_render(self->capture_backend, &self->renderer, fb);
@@ -593,7 +603,7 @@ void wayvnc_process_frame(struct wayvnc* self)
 	struct pixman_region16 damage;
 	pixman_region_init_rect(&damage, 0, 0, width, height);
 	nvnc_feed_frame(self->nvnc, fb, &damage);
-	swap_fds(self);
+	swap_fbs(self);
 	pixman_region_fini(&damage);
 
 done:
