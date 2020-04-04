@@ -133,7 +133,7 @@ static void dmabuf_frame_ready(void* data,
 	if (time_left >= 0.0) {
 		aml_set_duration(self->timer, time_left);
 		aml_start(aml_get_default(), self->timer);
-		frame_capture_start(fc);
+		frame_capture_start(fc, 0);
 		return;
 	}
 
@@ -161,7 +161,8 @@ static void dmabuf_frame_cancel(void* data,
 	dmabuf_close_fds(self);
 }
 
-static int dmabuf_capture_start(struct frame_capture* fc)
+static int dmabuf_capture_start(struct frame_capture* fc,
+                                enum frame_capture_options options)
 {
 	struct dmabuf_capture* self = (void*)fc;
 

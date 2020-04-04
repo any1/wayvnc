@@ -35,6 +35,7 @@
 #include <pixman.h>
 #include <sys/param.h>
 
+#include "frame-capture.h"
 #include "wlr-export-dmabuf-unstable-v1.h"
 #include "wlr-screencopy-unstable-v1.h"
 #include "wlr-virtual-pointer-unstable-v1.h"
@@ -438,8 +439,11 @@ static void on_fb_req(struct nvnc_client* client, bool is_incremental,
 	struct wayvnc* self = nvnc_get_userdata(nvnc);
 
 	// TODO: Make this per-client rather than global
-	if (!is_incremental)
+	if (!is_incremental) {
 		self->please_send_full_frame_next = true;
+		frame_capture_stop(self->capture_backend);
+		frame_capture_start(self->capture_backend, CAPTURE_NOW);
+	}
 }
 
 int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port)
@@ -475,9 +479,9 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port)
 	return 0;
 }
 
-int wayvnc_start_capture(struct wayvnc* self)
+int wayvnc_start_capture(struct wayvnc* self, enum frame_capture_options opt)
 {
-	return frame_capture_start(self->capture_backend);
+	return frame_capture_start(self->capture_backend, opt);
 }
 
 static void on_damage_check_done(struct pixman_region16* damage, void* userdata)
@@ -491,10 +495,16 @@ static void on_damage_check_done(struct pixman_region16* damage, void* userdata)
 
 		struct nvnc_fb* fb = get_current_fb(self);
 		uint32_t* addr = nvnc_fb_get_addr(fb);
-		uint32_t fb_width = nvnc_fb_get_width(get_current_fb(self));
+		uint32_t fb_width = nvnc_fb_get_width(fb);
+		uint32_t fb_height = nvnc_fb_get_height(fb);
 
 		renderer_read_frame(&self->renderer, addr + y * fb_width, y,
 		                    damage_height);
+
+		if (damage_height != fb_height)
+			nvnc_fb_set_flags(fb, nvnc_fb_get_flags(fb) |
+			                      NVNC_FB_PARTIAL);
+
 		nvnc_fb_unlock(fb);
 
 		nvnc_feed_frame(self->nvnc, fb, damage);
@@ -503,7 +513,7 @@ static void on_damage_check_done(struct pixman_region16* damage, void* userdata)
 		nvnc_fb_unlock(get_current_fb(self));
 	}
 
-	if (wayvnc_start_capture(self) < 0) {
+	if (wayvnc_start_capture(self, 0) < 0) {
 		log_error("Failed to start capture. Exiting...\n");
 		wayvnc_exit(self);
 	}
@@ -577,6 +587,7 @@ void wayvnc_process_frame(struct wayvnc* self)
 
 	void* addr = nvnc_fb_get_addr(fb);
 	renderer_read_frame(&self->renderer, addr, 0, height);
+	nvnc_fb_set_flags(fb, nvnc_fb_get_flags(fb) & ~NVNC_FB_PARTIAL);
 	nvnc_fb_unlock(fb);
 
 	struct pixman_region16 damage;
@@ -586,7 +597,7 @@ void wayvnc_process_frame(struct wayvnc* self)
 	pixman_region_fini(&damage);
 
 done:
-	if (wayvnc_start_capture(self) < 0) {
+	if (wayvnc_start_capture(self, 0) < 0) {
 		log_error("Failed to start capture. Exiting...\n");
 		wayvnc_exit(self);
 	}
@@ -608,7 +619,7 @@ void on_capture_done(struct frame_capture* capture)
 		wayvnc_exit(self);
 		break;
 	case CAPTURE_FAILED:
-		if (wayvnc_start_capture(self) < 0) {
+		if (wayvnc_start_capture(self, CAPTURE_NOW) < 0) {
 			log_error("Failed to start capture. Exiting...\n");
 			wayvnc_exit(self);
 		}
@@ -885,7 +896,7 @@ int main(int argc, char* argv[])
 
 	self.capture_backend->overlay_cursor = overlay_cursor;
 
-	if (wayvnc_start_capture(&self) < 0)
+	if (wayvnc_start_capture(&self, 0) < 0)
 		goto capture_failure;
 
 	wl_display_dispatch(self.display);

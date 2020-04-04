@@ -31,6 +31,10 @@ enum frame_capture_status {
 	CAPTURE_DONE,
 };
 
+enum frame_capture_options {
+	CAPTURE_NOW = 1 << 0,
+};
+
 struct frame_capture {
 	enum frame_capture_status status;
 
@@ -57,14 +61,14 @@ struct frame_capture {
 	struct {
 		void (*render)(struct frame_capture*, struct renderer*,
 		               struct nvnc_fb* fb);
-		int (*start)(struct frame_capture*);
+		int (*start)(struct frame_capture*, enum frame_capture_options);
 		void (*stop)(struct frame_capture*);
 	} backend;
 };
 
-static inline int frame_capture_start(struct frame_capture* self)
+static inline int frame_capture_start(struct frame_capture* self, enum frame_capture_options options)
 {
-	return self->backend.start(self);
+	return self->backend.start(self, options);
 }
 
 static inline void frame_capture_stop(struct frame_capture* self)

@@ -55,6 +55,7 @@ struct screencopy {
 
 	struct smooth delay_smoother;
 	double delay;
+	bool is_immediate_copy;
 };
 
 void screencopy_init(struct screencopy* self);

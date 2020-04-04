@@ -24,6 +24,7 @@
 #include <libdrm/drm_fourcc.h>
 #include <aml.h>
 
+#include "frame-capture.h"
 #include "shm.h"
 #include "screencopy.h"
 #include "smooth.h"
@@ -91,6 +92,8 @@ static void screencopy_stop(struct frame_capture* fc)
 
 	aml_stop(aml_get_default(), self->timer);
 
+	self->frame_capture.status = CAPTURE_STOPPED;
+
 	if (self->frame) {
 		zwlr_screencopy_frame_v1_destroy(self->frame);
 		self->frame = NULL;
@@ -116,7 +119,11 @@ static void screencopy_buffer(void* data,
 	self->frame_capture.frame_info.height = height;
 	self->frame_capture.frame_info.stride = stride;
 
-	zwlr_screencopy_frame_v1_copy_with_damage(self->frame, self->buffer);
+	if (self->is_immediate_copy)
+		zwlr_screencopy_frame_v1_copy(self->frame, self->buffer);
+	else
+		zwlr_screencopy_frame_v1_copy_with_damage(self->frame,
+		                                         self->buffer);
 }
 
 static void screencopy_flags(void* data,
@@ -148,6 +155,15 @@ static void screencopy_ready(void* data,
 
 	double delay = (self->last_time - self->start_time) * 1.0e-6;
 	self->delay = smooth(&self->delay_smoother, delay);
+
+	if (self->is_immediate_copy) {
+		self->frame_capture.damage_hint.x = 0;
+		self->frame_capture.damage_hint.y = 0;
+		self->frame_capture.damage_hint.width =
+			self->frame_capture.frame_info.width;
+		self->frame_capture.damage_hint.height =
+			self->frame_capture.frame_info.height;
+	}
 
 	self->frame_capture.status = CAPTURE_DONE;
 	self->frame_capture.on_done(&self->frame_capture);
@@ -217,12 +233,15 @@ static void screencopy__poll(void* obj)
 	screencopy__start_capture(fc);
 }
 
-static int screencopy_start(struct frame_capture* fc)
+static int screencopy_start(struct frame_capture* fc,
+                            enum frame_capture_options options)
 {
 	struct screencopy* self = (void*)fc;
 
 	if (fc->status == CAPTURE_IN_PROGRESS)
 		return -1;
+
+	self->is_immediate_copy = !!(options & CAPTURE_NOW);
 
 	uint64_t now = gettime_us();
 	double dt = (now - self->last_time) * 1.0e-6;
