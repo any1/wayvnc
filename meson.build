@@ -93,6 +93,13 @@ if host_system == 'linux' and cc.has_header('sys/sdt.h')
 	config.set('HAVE_USDT', true)
 endif
 
+if cc.has_function('memfd_create')
+	config.set('HAVE_MEMFD', true)
+	config.set('HAVE_MEMFD_CREATE', true)
+elif cc.has_function('SYS_memfd_create', prefix : '#include <sys/syscall.h>')
+	config.set('HAVE_MEMFD', true)
+endif
+
 configure_file(
 	output: 'config.h',
 	configuration: config,
