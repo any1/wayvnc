@@ -8,6 +8,18 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "config.h"
+
+// Linux with glibc < 2.27 has no wrapper
+#if defined(HAVE_MEMFD) && !defined(HAVE_MEMFD_CREATE)
+#include <sys/syscall.h>
+
+static inline int memfd_create(const char *name, unsigned int flags) {
+	return syscall(SYS_memfd_create, name, flags);
+}
+#endif
+
+#ifndef HAVE_MEMFD
 static void randname(char *buf)
 {
 	struct timespec ts;
@@ -19,9 +31,16 @@ static void randname(char *buf)
 		r >>= 5;
 	}
 }
+#endif
 
 static int create_shm_file(void)
 {
+#ifdef HAVE_MEMFD
+	return memfd_create("wayvnc-shm", 0);
+#elif defined(__FreeBSD__)
+	// memfd_create added in FreeBSD 13, but SHM_ANON has been supported for ages
+	return shm_open(SHM_ANON, O_RDWR | O_CREAT | O_EXCL, 0600);
+#else
 	int retries = 100;
 
 	do {
@@ -37,6 +56,7 @@ static int create_shm_file(void)
 	} while (retries > 0 && errno == EEXIST);
 
 	return -1;
+#endif
 }
 
 int shm_alloc_fd(size_t size)
