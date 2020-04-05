@@ -171,7 +171,7 @@ int keyboard_init(struct keyboard* self, const char* layout)
 
 	size_t keymap_len = strlen(keymap_string);
 
-	int keymap_fd = shm_alloc_fd(0);
+	int keymap_fd = shm_alloc_fd(keymap_len);
 	if (keymap_fd < 0)
 		goto fd_failure;
 
