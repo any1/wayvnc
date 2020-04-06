@@ -18,6 +18,7 @@
  * interface.
  */
 
+#include <errno.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdbool.h>
@@ -175,8 +176,15 @@ int keyboard_init(struct keyboard* self, const char* layout)
 	if (keymap_fd < 0)
 		goto fd_failure;
 
-	// TODO: Check that write finished writing everything
-	write(keymap_fd, keymap_string, keymap_len);
+	int written = 0;
+	while (written < keymap_len) {
+		ssize_t ret = write(keymap_fd, keymap_string + written, keymap_len - written);
+		if (ret == -1 && errno == EINTR)
+			continue;
+		if (ret == -1)
+			goto write_failure;
+		written += ret;
+	}
 
 	free(keymap_string);
 
@@ -188,6 +196,8 @@ int keyboard_init(struct keyboard* self, const char* layout)
 
 	return 0;
 
+write_failure:
+	close(keymap_fd);
 fd_failure:
 	free(keymap_string);
 keymap_string_failure:
