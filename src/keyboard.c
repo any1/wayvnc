@@ -18,6 +18,7 @@
  * interface.
  */
 
+#include <errno.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdbool.h>
@@ -169,25 +170,34 @@ int keyboard_init(struct keyboard* self, const char* layout)
 	if (!keymap_string)
 		goto keymap_string_failure;
 
-	size_t keymap_len = strlen(keymap_string);
+	size_t keymap_size = strlen(keymap_string) + 1;
 
-	int keymap_fd = shm_alloc_fd(keymap_len);
+	int keymap_fd = shm_alloc_fd(keymap_size);
 	if (keymap_fd < 0)
 		goto fd_failure;
 
-	// TODO: Check that write finished writing everything
-	write(keymap_fd, keymap_string, keymap_len);
+	int written = 0;
+	while (written < keymap_size) {
+		ssize_t ret = write(keymap_fd, keymap_string + written, keymap_size - written);
+		if (ret == -1 && errno == EINTR)
+			continue;
+		if (ret == -1)
+			goto write_failure;
+		written += ret;
+	}
 
 	free(keymap_string);
 
 	zwp_virtual_keyboard_v1_keymap(self->virtual_keyboard,
 	                               WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1,
-	                               keymap_fd, keymap_len);
+	                               keymap_fd, keymap_size);
 
 	close(keymap_fd);
 
 	return 0;
 
+write_failure:
+	close(keymap_fd);
 fd_failure:
 	free(keymap_string);
 keymap_string_failure:
