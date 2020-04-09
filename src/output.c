@@ -42,14 +42,14 @@ void output_transform_coord(const struct output* self,
 		break;
 	case WL_OUTPUT_TRANSFORM_90:
 		*dst_x = src_y;
-		*dst_y = self->width - src_x;
+		*dst_y = self->height - src_x;
 		break;
 	case WL_OUTPUT_TRANSFORM_180:
 		*dst_x = self->width - src_x;
 		*dst_y = self->height - src_y;
 		break;
 	case WL_OUTPUT_TRANSFORM_270:
-		*dst_x = self->height - src_y;
+		*dst_x = self->width - src_y;
 		*dst_y = src_x;
 		break;
 	case WL_OUTPUT_TRANSFORM_FLIPPED:
@@ -57,16 +57,16 @@ void output_transform_coord(const struct output* self,
 		*dst_y = src_y;
 		break;
 	case WL_OUTPUT_TRANSFORM_FLIPPED_90:
-		*dst_x = self->height - src_y;
-		*dst_y = self->width - src_x;
+		*dst_x = src_y;
+		*dst_y = src_x;
 		break;
 	case WL_OUTPUT_TRANSFORM_FLIPPED_180:
 		*dst_x = src_x;
 		*dst_y = self->height - src_y;
 		break;
 	case WL_OUTPUT_TRANSFORM_FLIPPED_270:
-		*dst_x = src_y;
-		*dst_y = src_x;
+		*dst_x = self->width - src_y;
+		*dst_y = self->height - src_x;
 		break;
 	}
 }
