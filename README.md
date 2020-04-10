@@ -23,6 +23,11 @@ makepkg -si
 cd -
 ```
 
+### FreeBSD
+```
+pkg install wayvnc
+```
+
 ## Building
 ### Runtime Dependencies
  * aml
