@@ -432,15 +432,7 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port)
 
 	nvnc_set_userdata(self->nvnc, self);
 
-	uint32_t format = fourcc_from_gl_format(self->renderer.read_format);
-	if (format == DRM_FORMAT_INVALID)
-		return -1;
-
 	nvnc_set_name(self->nvnc, "WayVNC");
-	nvnc_set_dimensions(self->nvnc,
-			    output_get_transformed_width(self->selected_output),
-			    output_get_transformed_height(self->selected_output),
-			    format);
 
 	nvnc_set_render_fn(self->nvnc, on_render);
 
