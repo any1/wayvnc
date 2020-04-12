@@ -94,6 +94,7 @@ struct wayvnc {
 	struct aml_signal* signal_handler;
 
 	struct nvnc* nvnc;
+	struct nvnc_display* nvnc_display;
 	struct nvnc_fb* buffer;
 
 	struct pixman_region16 current_damage;
@@ -103,7 +104,7 @@ struct wayvnc {
 
 void wayvnc_exit(struct wayvnc* self);
 void on_capture_done(struct frame_capture* capture);
-static void on_render(struct nvnc* nvnc, struct nvnc_fb* fb);
+static void on_render(struct nvnc_display* display, struct nvnc_fb* fb);
 
 static enum frame_capture_backend_type
 frame_capture_backend_from_string(const char* str)
@@ -391,7 +392,7 @@ static void on_pointer_event(struct nvnc_client* client, uint16_t x, uint16_t y,
 {
 	// TODO: Have a seat per client
 
-	struct nvnc* nvnc = nvnc_get_server(client);
+	struct nvnc* nvnc = nvnc_client_get_server(client);
 	struct wayvnc* wayvnc = nvnc_get_userdata(nvnc);
 
 	uint32_t xfx = 0, xfy = 0;
@@ -403,7 +404,7 @@ static void on_pointer_event(struct nvnc_client* client, uint16_t x, uint16_t y,
 static void on_key_event(struct nvnc_client* client, uint32_t symbol,
                          bool is_pressed)
 {
-	struct nvnc* nvnc = nvnc_get_server(client);
+	struct nvnc* nvnc = nvnc_client_get_server(client);
 	struct wayvnc* wayvnc = nvnc_get_userdata(nvnc);
 
 	keyboard_feed(&wayvnc->keyboard_backend, symbol, is_pressed);
@@ -430,11 +431,17 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port)
 		return -1;
 	}
 
+	self->nvnc_display = nvnc_display_new(0, 0);
+	if (!self->nvnc_display)
+		goto failure;
+
+	nvnc_add_display(self->nvnc, self->nvnc_display);
+
 	nvnc_set_userdata(self->nvnc, self);
 
 	nvnc_set_name(self->nvnc, "WayVNC");
 
-	nvnc_set_render_fn(self->nvnc, on_render);
+	nvnc_display_set_render_fn(self->nvnc_display, on_render);
 
 	if (self->cfg.enable_auth)
 		nvnc_enable_auth(self->nvnc, self->cfg.private_key_file,
@@ -447,6 +454,10 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port)
 		nvnc_set_key_fn(self->nvnc, on_key_event);
 
 	return 0;
+
+failure:
+	nvnc_close(self->nvnc);
+	return -1;
 }
 
 int wayvnc_start_capture(struct wayvnc* self, enum frame_capture_options opt)
@@ -454,8 +465,9 @@ int wayvnc_start_capture(struct wayvnc* self, enum frame_capture_options opt)
 	return frame_capture_start(self->capture_backend, opt);
 }
 
-static void on_render(struct nvnc* nvnc, struct nvnc_fb* fb)
+static void on_render(struct nvnc_display* display, struct nvnc_fb* fb)
 {
+	struct nvnc* nvnc = nvnc_display_get_server(display);
 	struct wayvnc* self = nvnc_get_userdata(nvnc);
 
 	struct pixman_box16* ext = pixman_region_extents(&self->current_damage);
@@ -474,7 +486,7 @@ static void wayvnc_damage_region(struct wayvnc* self,
                                  struct pixman_region16* damage)
 {
 	pixman_region_union(&self->current_damage, &self->current_damage, damage);
-	nvnc_damage_region(self->nvnc, damage);
+	nvnc_display_damage_region(self->nvnc_display, damage);
 }
 
 static void wayvnc_damage_whole(struct wayvnc* self)
@@ -509,7 +521,7 @@ void wayvnc_process_frame(struct wayvnc* self)
 
 	if (!self->buffer) {
 		self->buffer = nvnc_fb_new(width, height, format);
-		nvnc_set_buffer(self->nvnc, self->buffer);
+		nvnc_display_set_buffer(self->nvnc_display, self->buffer);
 		is_first_frame = true;
 	} else {
 		// TODO: Reallocate
@@ -870,6 +882,7 @@ int main(int argc, char* argv[])
 
 	pixman_region_fini(&self.current_damage);
 
+	nvnc_display_unref(self.nvnc_display);
 	nvnc_close(self.nvnc);
 	renderer_destroy(&self.renderer);
 	screencopy_destroy(&self.screencopy_backend);
@@ -879,6 +892,7 @@ int main(int argc, char* argv[])
 	return 0;
 
 capture_failure:
+	nvnc_display_unref(self.nvnc_display);
 	nvnc_close(self.nvnc);
 nvnc_failure:
 main_loop_failure:
