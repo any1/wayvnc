@@ -74,12 +74,8 @@ mkdir neatvnc/subprojects
 cd neatvnc/subprojects
 ln -s ../../aml .
 cd -
-```
 
-Setting the buildtype flag is not required but it is recommended as there are
-significant performance gains to be had from an optimised build.
-```
-meson build --buildtype=release
+meson build
 ninja -C build
 ```
 
