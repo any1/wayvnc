@@ -19,16 +19,28 @@
 #include <time.h>
 #include <stdint.h>
 
+static inline uint64_t timespec_to_us(const struct timespec* ts)
+{
+	return (uint64_t)ts->tv_sec * UINT64_C(1000000) +
+	       (uint64_t)ts->tv_nsec / UINT64_C(1000);
+}
+
+static inline uint64_t timespec_to_ms(const struct timespec* ts)
+{
+	return (uint64_t)ts->tv_sec * UINT64_C(1000) +
+	       (uint64_t)ts->tv_nsec / UINT64_C(1000000);
+}
+
 static inline uint64_t gettime_us(void)
 {
 	struct timespec ts = { 0 };
 	clock_gettime(CLOCK_MONOTONIC, &ts);
-	return ts.tv_sec * 1000000ULL + (double)ts.tv_nsec / 1000ULL;
+	return timespec_to_us(&ts);
 }
 
 static inline uint32_t gettime_ms(void)
 {
 	struct timespec ts = { 0 };
 	clock_gettime(CLOCK_MONOTONIC, &ts);
-	return ts.tv_sec * 1000UL + ts.tv_nsec / 1000000UL;
+	return timespec_to_ms(&ts);
 }
