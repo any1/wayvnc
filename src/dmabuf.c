@@ -17,8 +17,10 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <inttypes.h>
 #include <wayland-client.h>
 #include <wayland-util.h>
+#include <time-util.h>
 
 #include "frame-capture.h"
 #include "logging.h"
@@ -26,6 +28,8 @@
 #include "wlr-export-dmabuf-unstable-v1.h"
 #include "render.h"
 #include "usdt.h"
+
+#define PROCESSING_DURATION_LIMIT 16 /* ms */
 
 static void dmabuf_close_fds(struct dmabuf_capture* self)
 {
@@ -101,7 +105,14 @@ static void dmabuf_frame_ready(void* data,
 	struct dmabuf_capture* self = data;
 	struct frame_capture* fc = data;
 
-	DTRACE_PROBE1(wayvnc, dmabuf_frame_ready, self);
+	struct timespec ts = {
+		.tv_sec = ((uint64_t)tv_sec_hi << 32) | tv_sec_lo,
+		.tv_nsec = tv_nsec
+	};
+
+	uint64_t precommit_time = timespec_to_ms(&ts);
+
+	DTRACE_PROBE2(wayvnc, dmabuf_frame_ready, self, precommit_time);
 
 	dmabuf_capture_stop(fc);
 
@@ -109,6 +120,16 @@ static void dmabuf_frame_ready(void* data,
 	fc->on_done(fc);
 
 	dmabuf_close_fds(self);
+
+	uint64_t processing_duration =
+		self->render_finish_time - precommit_time;
+
+	DTRACE_PROBE3(wayvnc, dmabuf_frame_release, self,
+	              self->render_finish_time, processing_duration);
+
+	if (processing_duration > PROCESSING_DURATION_LIMIT)
+		log_debug("Processing dmabuf took %"PRIu64" ms.\n",
+		          processing_duration);
 }
 
 static void dmabuf_frame_cancel(void* data,
@@ -164,6 +185,7 @@ static void dmabuf_capture_render(struct frame_capture* fc,
 {
 	struct dmabuf_capture* self = (void*)fc;
 	render_dmabuf(render, &self->frame);
+	self->render_finish_time = gettime_ms();
 }
 
 void dmabuf_capture_init(struct dmabuf_capture* self)
