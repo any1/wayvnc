@@ -38,7 +38,7 @@ static inline uint64_t gettime_us(void)
 	return timespec_to_us(&ts);
 }
 
-static inline uint32_t gettime_ms(void)
+static inline uint64_t gettime_ms(void)
 {
 	struct timespec ts = { 0 };
 	clock_gettime(CLOCK_MONOTONIC, &ts);
