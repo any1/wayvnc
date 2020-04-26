@@ -25,6 +25,7 @@
 #include "dmabuf.h"
 #include "wlr-export-dmabuf-unstable-v1.h"
 #include "render.h"
+#include "usdt.h"
 
 static void dmabuf_close_fds(struct dmabuf_capture* self)
 {
@@ -100,6 +101,8 @@ static void dmabuf_frame_ready(void* data,
 	struct dmabuf_capture* self = data;
 	struct frame_capture* fc = data;
 
+	DTRACE_PROBE1(wayvnc, dmabuf_frame_ready, self);
+
 	dmabuf_capture_stop(fc);
 
 	fc->status = CAPTURE_DONE;
@@ -114,6 +117,8 @@ static void dmabuf_frame_cancel(void* data,
 {
 	struct dmabuf_capture* self = data;
 	struct frame_capture* fc = data;
+
+	DTRACE_PROBE1(wayvnc, dmabuf_frame_cancel, self);
 
 	dmabuf_capture_stop(fc);
 	fc->status = reason == ZWLR_EXPORT_DMABUF_FRAME_V1_CANCEL_REASON_PERMANENT
@@ -136,6 +141,8 @@ static int dmabuf_capture_start(struct frame_capture* fc,
 		.ready = dmabuf_frame_ready,
 		.cancel = dmabuf_frame_cancel,
 	};
+
+	DTRACE_PROBE1(wayvnc, dmabuf_capture_start, self);
 
 	self->zwlr_frame =
 		zwlr_export_dmabuf_manager_v1_capture_output(self->manager,
