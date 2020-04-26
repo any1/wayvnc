@@ -58,6 +58,7 @@ trackers = [
     StateTracker('Framebuffer update', 'sdt_neatvnc', 'update_fb_start', 'update_fb_done'),
     StateTracker('Framebuffer update (only sending)', 'sdt_neatvnc', 'send_fb_start', 'send_fb_done'),
     StateTracker('Screencopy', 'sdt_wayvnc', 'screencopy_start', 'screencopy_ready'),
+    StateTracker('Dmabuf', 'sdt_wayvnc', 'dmabuf_capture_start', 'dmabuf_frame_ready'),
     StateTracker('Render', 'sdt_wayvnc', 'render_framebuffer_start', 'render_framebuffer_end'),
     StateTracker('Copy damage map', 'sdt_wayvnc', 'render_read_damage_start', 'render_read_damage_end'),
     StateTracker('Copy frame pixels', 'sdt_wayvnc', 'render_read_frame_start', 'render_read_frame_end'),
