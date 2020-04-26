@@ -49,9 +49,6 @@ struct dmabuf_capture {
 	struct zwlr_export_dmabuf_manager_v1* manager;
 	struct zwlr_export_dmabuf_frame_v1* zwlr_frame;
 	struct dmabuf_frame frame;
-
-	uint64_t last_time;
-	struct aml_timer* timer;
 };
 
 void dmabuf_capture_init(struct dmabuf_capture* self);

@@ -18,17 +18,13 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <wayland-client.h>
-#include <aml.h>
 #include <wayland-util.h>
 
 #include "frame-capture.h"
 #include "logging.h"
 #include "dmabuf.h"
 #include "wlr-export-dmabuf-unstable-v1.h"
-#include "time-util.h"
 #include "render.h"
-
-#define RATE_LIMIT 20.0 // Hz
 
 static void dmabuf_close_fds(struct dmabuf_capture* self)
 {
@@ -41,9 +37,6 @@ static void dmabuf_close_fds(struct dmabuf_capture* self)
 static void dmabuf_capture_stop(struct frame_capture* fc)
 {
 	struct dmabuf_capture* self = (void*)fc;
-
-	if (aml_stop(aml_get_default(), self->timer) >= 0)
-		dmabuf_close_fds(self);
 
 	fc->status = CAPTURE_STOPPED;
 
@@ -65,7 +58,6 @@ static void dmabuf_frame_start(void* data,
 	struct dmabuf_capture* self = data;
 	struct frame_capture* fc = data;
 
-	aml_stop(aml_get_default(), self->timer);
 	dmabuf_close_fds(self);
 
 	uint64_t mod = ((uint64_t)mod_high << 32) | (uint64_t)mod_low;
@@ -100,22 +92,6 @@ static void dmabuf_frame_object(void* data,
 	self->frame.plane[plane_index].pitch = stride;
 }
 
-static void dmabuf_timer_ready(void* timer)
-{
-	struct dmabuf_capture* self = aml_get_userdata(timer);
-	struct frame_capture* fc = (struct frame_capture*)self;
-
-	if (fc->status != CAPTURE_IN_PROGRESS)
-		return;
-
-	self->last_time = gettime_us();
-
-	fc->status = CAPTURE_DONE;
-	fc->on_done(fc);
-
-	dmabuf_close_fds(self);
-}
-
 static void dmabuf_frame_ready(void* data,
 			       struct zwlr_export_dmabuf_frame_v1* frame,
 			       uint32_t tv_sec_hi, uint32_t tv_sec_lo,
@@ -125,19 +101,6 @@ static void dmabuf_frame_ready(void* data,
 	struct frame_capture* fc = data;
 
 	dmabuf_capture_stop(fc);
-
-	uint64_t now = gettime_us();
-	double dt = (now - self->last_time) * 1.0e-6;
-	double time_left = (1.0 / RATE_LIMIT - dt) * 1.0e3;
-
-	if (time_left >= 0.0) {
-		aml_set_duration(self->timer, time_left);
-		aml_start(aml_get_default(), self->timer);
-		frame_capture_start(fc, 0);
-		return;
-	}
-
-	self->last_time = now;
 
 	fc->status = CAPTURE_DONE;
 	fc->on_done(fc);
@@ -198,9 +161,6 @@ static void dmabuf_capture_render(struct frame_capture* fc,
 
 void dmabuf_capture_init(struct dmabuf_capture* self)
 {
-	self->timer = aml_timer_new(0, dmabuf_timer_ready, self, NULL);
-	assert(self->timer);
-
 	self->fc.backend.start = dmabuf_capture_start;
 	self->fc.backend.stop = dmabuf_capture_stop;
 	self->fc.backend.render = dmabuf_capture_render;
