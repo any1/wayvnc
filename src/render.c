@@ -694,6 +694,7 @@ int render_dmabuf(struct renderer* self, struct dmabuf_frame* frame)
 	eglDestroyImageKHR(self->display, image);
 
 	render_frame(self);
+	glFinish();
 
 	glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0);
 	glDeleteTextures(1, &tex);
