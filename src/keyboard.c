@@ -276,26 +276,30 @@ static void keyboard_apply_mods(struct keyboard* self, xkb_keycode_t code,
 	                                  latched, locked, group);
 }
 
-bool keyboard_symbol_is_mod(xkb_keysym_t symbol)
+static struct table_entry* match_level(struct keyboard* self,
+                                       struct table_entry* entry)
 {
-	switch (symbol) {
-	case XKB_KEY_Shift_L:
-	case XKB_KEY_Shift_R:
-	case XKB_KEY_Control_L:
-	case XKB_KEY_Caps_Lock:
-	case XKB_KEY_Shift_Lock:
-	case XKB_KEY_Meta_L:
-	case XKB_KEY_Meta_R:
-	case XKB_KEY_Alt_L:
-	case XKB_KEY_Alt_R:
-	case XKB_KEY_Super_L:
-	case XKB_KEY_Super_R:
-	case XKB_KEY_Hyper_L:
-	case XKB_KEY_Hyper_R:
-		return true;
+	xkb_keysym_t symbol = entry->symbol;
+
+	while (true) {
+		int layout, level;
+
+		layout = xkb_state_key_get_layout(self->state, entry->code);
+		level = xkb_state_key_get_level(self->state, entry->code, layout);
+
+		if (entry->level == level)
+			return entry;
+
+		if (++entry >= &self->lookup_table[self->lookup_table_length] ||
+		    entry->symbol != symbol)
+			break;
 	}
 
-	return false;
+	char name[256];
+	log_debug("Failed to match level on symbol: %s\n",
+	          get_symbol_name(symbol, name, sizeof(name)));
+
+	return NULL;
 }
 
 void keyboard_feed(struct keyboard* self, xkb_keysym_t symbol, bool is_pressed)
@@ -308,23 +312,9 @@ void keyboard_feed(struct keyboard* self, xkb_keysym_t symbol, bool is_pressed)
 		return;
 	}
 
-	while (!keyboard_symbol_is_mod(symbol)) {
-		int layout, level;
-
-		layout = xkb_state_key_get_layout(self->state, entry->code);
-		level = xkb_state_key_get_level(self->state, entry->code, layout);
-
-		if (entry->level == level)
-			break;
-
-		if (++entry >= &self->lookup_table[self->lookup_table_length] ||
-		    entry->symbol != symbol) {
-			char name[256];
-			log_error("Failed to match level on symbol: %s\n",
-			          get_symbol_name(symbol, name, sizeof(name)));
-			return;
-		}
-	}
+	struct table_entry* level_entry = match_level(self, entry);
+	if (level_entry)
+		entry = level_entry;
 
 	bool was_pressed = intset_is_set(&self->key_state, entry->code);
 	if (was_pressed == is_pressed)
