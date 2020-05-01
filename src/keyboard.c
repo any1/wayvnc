@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 Andri Yngvason
+ * Copyright (c) 2019 - 2020 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -116,11 +116,20 @@ static int create_lookup_table(struct keyboard* self)
 	return 0;
 }
 
+static char* get_symbol_name(xkb_keysym_t sym, char* dst, size_t size)
+{
+	if (xkb_keysym_get_name(sym, dst, size) >= 0)
+		return dst;
+
+	snprintf(dst, size, "UNKNOWN (%x)", sym);
+	return dst;
+}
+
 static void keyboard__dump_entry(const struct keyboard* self,
                                  const struct table_entry* entry)
 {
 	char sym_name[256];
-	xkb_keysym_get_name(entry->symbol, sym_name, sizeof(sym_name));
+	get_symbol_name(entry->symbol, sym_name, sizeof(sym_name));
 
 	const char* code_name =
 		xkb_keymap_key_get_name(self->keymap, entry->code);
@@ -292,8 +301,12 @@ bool keyboard_symbol_is_mod(xkb_keysym_t symbol)
 void keyboard_feed(struct keyboard* self, xkb_keysym_t symbol, bool is_pressed)
 {
 	struct table_entry* entry = keyboard_find_symbol(self, symbol);
-	if (!entry)
-		return; // TODO: Notify the user about this
+	if (!entry) {
+		char name[256];
+		log_error("Failed to look up keyboard symbol: %s\n",
+		          get_symbol_name(symbol, name, sizeof(name)));
+		return;
+	}
 
 	while (!keyboard_symbol_is_mod(symbol)) {
 		int layout, level;
@@ -304,11 +317,13 @@ void keyboard_feed(struct keyboard* self, xkb_keysym_t symbol, bool is_pressed)
 		if (entry->level == level)
 			break;
 
-		if (++entry >= &self->lookup_table[self->lookup_table_length])
-			return; // TODO: Notify the user about this
-
-		if (entry->symbol != symbol)
-			return; // TODO: Notify the user about this
+		if (++entry >= &self->lookup_table[self->lookup_table_length] ||
+		    entry->symbol != symbol) {
+			char name[256];
+			log_error("Failed to match level on symbol: %s\n",
+			          get_symbol_name(symbol, name, sizeof(name)));
+			return;
+		}
 	}
 
 	bool was_pressed = intset_is_set(&self->key_state, entry->code);
