@@ -50,6 +50,10 @@ struct dmabuf_capture {
 	struct zwlr_export_dmabuf_frame_v1* zwlr_frame;
 	struct dmabuf_frame frame;
 	uint64_t render_finish_time;
+	uint64_t start_time;
+
+	struct aml_timer* timer;
 };
 
 void dmabuf_capture_init(struct dmabuf_capture* self);
+void dmabuf_capture_destroy(struct dmabuf_capture* self);

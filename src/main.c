@@ -885,7 +885,10 @@ int main(int argc, char* argv[])
 	nvnc_display_unref(self.nvnc_display);
 	nvnc_close(self.nvnc);
 	renderer_destroy(&self.renderer);
-	screencopy_destroy(&self.screencopy_backend);
+	if (self.screencopy_backend.manager)
+		screencopy_destroy(&self.screencopy_backend);
+	if (self.dmabuf_backend.manager)
+		dmabuf_capture_destroy(&self.dmabuf_backend);
 	wayvnc_destroy(&self);
 	aml_unref(aml);
 

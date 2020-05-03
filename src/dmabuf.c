@@ -29,7 +29,13 @@
 #include "render.h"
 #include "usdt.h"
 
+#define RATE_LIMIT 30.0
+#define MIN_PERIOD ((uint64_t)(1000.0 / RATE_LIMIT))
+
 #define PROCESSING_DURATION_LIMIT 16 /* ms */
+
+static int dmabuf_capture_start_now(struct frame_capture* fc,
+                                    enum frame_capture_options options);
 
 static void dmabuf_close_fds(struct dmabuf_capture* self)
 {
@@ -42,6 +48,8 @@ static void dmabuf_close_fds(struct dmabuf_capture* self)
 static void dmabuf_capture_stop(struct frame_capture* fc)
 {
 	struct dmabuf_capture* self = (void*)fc;
+
+	aml_stop(aml_get_default(), self->timer);
 
 	fc->status = CAPTURE_STOPPED;
 
@@ -150,8 +158,38 @@ static void dmabuf_frame_cancel(void* data,
 	dmabuf_close_fds(self);
 }
 
+static void dmabuf__poll(void* obj)
+{
+	struct dmabuf_capture* self = aml_get_userdata(obj);
+	struct frame_capture* fc = (struct frame_capture*)self;
+
+	dmabuf_capture_start_now(fc, 0);
+}
+
 static int dmabuf_capture_start(struct frame_capture* fc,
                                 enum frame_capture_options options)
+{
+	struct dmabuf_capture* self = (void*)fc;
+
+	if (fc->status == CAPTURE_IN_PROGRESS)
+		return -1;
+
+	uint64_t now = gettime_ms();
+	uint64_t dt = now - self->start_time;
+
+	fc->status = CAPTURE_IN_PROGRESS;
+
+	if (dt < MIN_PERIOD) {
+		uint64_t time_left = MIN_PERIOD - dt;
+		aml_set_duration(self->timer, time_left);
+		return aml_start(aml_get_default(), self->timer);
+	}
+
+	return dmabuf_capture_start_now(fc, options);
+}
+
+static int dmabuf_capture_start_now(struct frame_capture* fc,
+                                    enum frame_capture_options options)
 {
 	struct dmabuf_capture* self = (void*)fc;
 
@@ -172,7 +210,7 @@ static int dmabuf_capture_start(struct frame_capture* fc,
 	if (!self->zwlr_frame)
 		return -1;
 
-	fc->status = CAPTURE_IN_PROGRESS;
+	self->start_time = gettime_ms();
 
 	zwlr_export_dmabuf_frame_v1_add_listener(self->zwlr_frame,
 			&dmabuf_frame_listener, self);
@@ -190,7 +228,16 @@ static void dmabuf_capture_render(struct frame_capture* fc,
 
 void dmabuf_capture_init(struct dmabuf_capture* self)
 {
+	self->timer = aml_timer_new(0, dmabuf__poll, self, NULL);
+	assert(self->timer);
+
 	self->fc.backend.start = dmabuf_capture_start;
 	self->fc.backend.stop = dmabuf_capture_stop;
 	self->fc.backend.render = dmabuf_capture_render;
+}
+
+void dmabuf_capture_destroy(struct dmabuf_capture* self)
+{
+	aml_stop(aml_get_default(), self->timer);
+	aml_unref(self->timer);
 }
