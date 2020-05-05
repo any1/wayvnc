@@ -16,7 +16,7 @@ c_args = [
 	'-D_GNU_SOURCE',
 ]
 
-if buildtype == 'release' or buildtype == 'plain'
+if buildtype != 'debug' and buildtype != 'debugoptimized'
 	c_args += '-DNDEBUG'
 endif
 
