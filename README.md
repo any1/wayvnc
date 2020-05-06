@@ -28,6 +28,11 @@ cd -
 pkg install wayvnc
 ```
 
+### Fedora
+```
+dnf install wayvnc
+```
+
 ## Building
 ### Runtime Dependencies
  * aml
