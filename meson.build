@@ -114,3 +114,5 @@ executable(
 	include_directories: inc,
 	install: true,
 )
+
+subdir('test')

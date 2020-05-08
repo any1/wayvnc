@@ -22,6 +22,12 @@
 struct pixman_region16;
 struct pixman_box16;
 
+void damage_check_row(uint8_t* dst, const uint8_t* src, uint32_t width);
+
+void damage_check_tile_row(struct pixman_region16* damage,
+                           uint8_t* row_buffer, const uint8_t* buffer,
+			   uint32_t y_start, uint32_t width, uint32_t height);
+
 void damage_check(struct pixman_region16* damage, const uint8_t* buffer,
                   uint32_t width, uint32_t height, struct pixman_box16* hint);
 
