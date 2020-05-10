@@ -745,6 +745,8 @@ void renderer_read_pixels(struct renderer* self, void* dst, uint32_t y,
 	glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &read_type);
 
 	glFinish();
+
+	glPixelStorei(GL_PACK_ALIGNMENT, 1);
 	glReadPixels(0, y, width, height, read_format, read_type, dst);
 }
 
