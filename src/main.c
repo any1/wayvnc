@@ -325,17 +325,20 @@ void on_wayland_event(void* obj)
 {
 	struct wayvnc* self = aml_get_userdata(obj);
 
-	if (wl_display_prepare_read(self->display) < 0) {
-		wl_display_cancel_read(self->display);
-		return;
+	int rc = wl_display_prepare_read(self->display);
+	assert(rc == 0);
+
+	if (wl_display_read_events(self->display) < 0) {
+		if (errno == EPIPE) {
+			log_error("Compositor has gone away. Exiting...\n");
+			wayvnc_exit(self);
+		} else {
+			log_error("Failed to read wayland events: %m\n");
+		}
 	}
 
-	if (wl_display_read_events(self->display) < 0 && errno == EPIPE) {
-		log_error("Compositor has gone away. Exiting...\n");
-		wayvnc_exit(self);
-	}
-
-	wl_display_dispatch_pending(self->display);
+	if (wl_display_dispatch_pending(self->display) < 0)
+		log_error("Failed to dispatch pending\n");
 }
 
 void wayvnc_exit(struct wayvnc* self)
