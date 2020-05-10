@@ -76,12 +76,14 @@ void damage_check_tile_row(struct pixman_region16* damage,
                            uint8_t* row_buffer, const uint8_t* buffer,
 			   uint32_t y_start, uint32_t width, uint32_t height)
 {
-	memset(row_buffer, 0, width / 32);
+	uint32_t tiled_width = UDIV_UP(width, 32);
+
+	memset(row_buffer, 0, tiled_width);
 
 	for (uint32_t y = y_start; y < y_start + height; ++y)
 		damage_check_row(row_buffer, buffer + y * width, width);
 
-	for (uint32_t x = 0; x < width / 32; ++x)
+	for (uint32_t x = 0; x < tiled_width; ++x)
 		if (row_buffer[x])
 			pixman_region_union_rect(damage, damage,
 			                         x * 32, y_start, 32, 32);
