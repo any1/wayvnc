@@ -185,7 +185,7 @@ int keyboard_init(struct keyboard* self, const char* layout)
 	if (keymap_fd < 0)
 		goto fd_failure;
 
-	int written = 0;
+	size_t written = 0;
 	while (written < keymap_size) {
 		ssize_t ret = write(keymap_fd, keymap_string + written, keymap_size - written);
 		if (ret == -1 && errno == EINTR)
