@@ -302,6 +302,28 @@ static struct table_entry* match_level(struct keyboard* self,
 	return NULL;
 }
 
+static bool keyboard_symbol_is_mod(xkb_keysym_t symbol)
+{
+	switch (symbol) {
+	case XKB_KEY_Shift_L:
+	case XKB_KEY_Shift_R:
+	case XKB_KEY_Control_L:
+	case XKB_KEY_Caps_Lock:
+	case XKB_KEY_Shift_Lock:
+	case XKB_KEY_Meta_L:
+	case XKB_KEY_Meta_R:
+	case XKB_KEY_Alt_L:
+	case XKB_KEY_Alt_R:
+	case XKB_KEY_Super_L:
+	case XKB_KEY_Super_R:
+	case XKB_KEY_Hyper_L:
+	case XKB_KEY_Hyper_R:
+		return true;
+	}
+
+	return false;
+}
+
 void keyboard_feed(struct keyboard* self, xkb_keysym_t symbol, bool is_pressed)
 {
 	struct table_entry* entry = keyboard_find_symbol(self, symbol);
@@ -312,9 +334,11 @@ void keyboard_feed(struct keyboard* self, xkb_keysym_t symbol, bool is_pressed)
 		return;
 	}
 
-	struct table_entry* level_entry = match_level(self, entry);
-	if (level_entry)
-		entry = level_entry;
+	if (!keyboard_symbol_is_mod(symbol)) {
+		struct table_entry* level_entry = match_level(self, entry);
+		if (level_entry)
+			entry = level_entry;
+	}
 
 	bool was_pressed = intset_is_set(&self->key_state, entry->code);
 	if (was_pressed == is_pressed)
