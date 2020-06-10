@@ -512,22 +512,30 @@ void renderer_destroy(struct renderer* self)
 int renderer_init(struct renderer* self, const struct output* output,
                   enum renderer_input_type input_type)
 {
-	if (!eglBindAPI(EGL_OPENGL_ES_API))
+	if (!eglBindAPI(EGL_OPENGL_ES_API)) {
+		log_error("Failed to bind EGL API\n");
 		return -1;
+	}
 
-	if (gl_load_early_extensions() < 0)
+	if (gl_load_early_extensions() < 0) {
+		log_error("Failed to load early GL extensions\n");
 		return -1;
+	}
 
 	gl_debug_init();
 
 	self->display =
 		eglGetPlatformDisplayEXT(EGL_PLATFORM_SURFACELESS_MESA,
 					 EGL_DEFAULT_DISPLAY, NULL);
-	if (!self->display)
+	if (!self->display) {
+		log_error("Failed to get EGL display\n");
 		return -1;
+	}
 
-	if (!eglInitialize(self->display, NULL, NULL))
+	if (!eglInitialize(self->display, NULL, NULL)) {
+		log_error("Failed to get initialize EGL\n");
 		return -1;
+	}
 
 	static const EGLint cfg_attr[] = {
 		EGL_SURFACE_TYPE, 0,
@@ -541,8 +549,10 @@ int renderer_init(struct renderer* self, const struct output* output,
 	EGLConfig cfg;
 	EGLint cfg_count;
 
-	if (!eglChooseConfig(self->display, cfg_attr, &cfg, 1, &cfg_count))
+	if (!eglChooseConfig(self->display, cfg_attr, &cfg, 1, &cfg_count)) {
+		log_error("Could not choose EGL config\n");
 		return -1;
+	}
 
 	static const EGLint ctx_attr[] = {
 		EGL_CONTEXT_CLIENT_VERSION, 2,
@@ -551,29 +561,43 @@ int renderer_init(struct renderer* self, const struct output* output,
 
 	self->context = eglCreateContext(self->display, cfg, EGL_NO_CONTEXT,
 					 ctx_attr);
-	if (!self->context)
+	if (!self->context) {
+		log_error("Failed to create EGL context\n");
 		return -1;
+	}
 
 	if (!eglMakeCurrent(self->display, EGL_NO_SURFACE, EGL_NO_SURFACE,
-			    self->context))
+			    self->context)) {
+		log_error("Failed to make EGL context current\n");
 		goto make_current_failure;
+	}
 
 	log_debug("%s\n", glGetString(GL_VERSION));
 
-	if (gl_load_late_extensions() < 0)
+	if (gl_load_late_extensions() < 0) {
+		log_error("Failed to load late GL extensions\n");
 		goto late_extension_failure;
+	}
 
 	uint32_t tf_width = output_get_transformed_width(output);
 	uint32_t tf_height = output_get_transformed_height(output);
 
-	if (create_textured_fbo(&self->frame_fbo[0], GL_RGBA, tf_width, tf_height) < 0)
+	if (create_textured_fbo(&self->frame_fbo[0], GL_RGBA, tf_width,
+	                        tf_height) < 0) {
+		log_error("Failed to create frame FBO 0\n");
 		goto frame_fbo_failure_0;
+	}
 
-	if (create_textured_fbo(&self->frame_fbo[1], GL_RGBA, tf_width, tf_height) < 0)
+	if (create_textured_fbo(&self->frame_fbo[1], GL_RGBA, tf_width,
+	                        tf_height) < 0) {
+		log_error("Failed to create frame FBO 1\n");
 		goto frame_fbo_failure_1;
+	}
 
-	if (create_fbo(&self->damage_fbo, GL_R8_EXT, tf_width, tf_height) < 0)
+	if (create_fbo(&self->damage_fbo, GL_R8_EXT, tf_width, tf_height) < 0) {
+		log_error("Failed to create damage FBO\n");
 		goto damage_fbo_failure;
+	}
 
 	glBindFramebuffer(GL_FRAMEBUFFER, self->frame_fbo[0].fbo);
 
