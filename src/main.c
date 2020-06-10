@@ -556,8 +556,8 @@ void wayvnc_process_frame(struct wayvnc* self)
 		};
 
 		size_t alignment = MAX(4, sizeof(void*));
-		size_t damage_buffer_size = ALIGN_UP(width * height, alignment);
-		uint8_t* damage_buffer =
+		size_t damage_buffer_size = ALIGN_UP(width * height * 2, alignment);
+		uint16_t* damage_buffer =
 			aligned_alloc(alignment, damage_buffer_size);
 		render_damage(&self->renderer);
 		renderer_read_damage(&self->renderer, damage_buffer, 0, height);

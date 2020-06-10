@@ -61,19 +61,20 @@ bool damage_check_32_byte_block(const void* block)
 	return a[0] || a[1] || a[2] || a[3];
 }
 
-void damage_check_row(uint8_t* dst, const uint8_t* src, uint32_t width)
+void damage_check_row(uint8_t* dst, const uint16_t* src, uint32_t width)
 {
 	uint32_t aligned_width = (width / 32) * 32;
 
 	for (uint32_t x = 0; x < aligned_width; x += 32)
-		dst[x / 32] |= damage_check_32_byte_block(&src[x]);
+		dst[x / 32] |= damage_check_32_byte_block(&src[x])
+			     | damage_check_32_byte_block(&src[x + 1]);
 
 	for (uint32_t x = aligned_width; x < width; ++x)
-		dst[x / 32] |= src[x];
+		dst[x / 32] |= src[x] | src[x + 1];
 }
 
 void damage_check_tile_row(struct pixman_region16* damage,
-                           uint8_t* row_buffer, const uint8_t* buffer,
+                           uint8_t* row_buffer, const uint16_t* buffer,
 			   uint32_t y_start, uint32_t width, uint32_t height)
 {
 	uint32_t tiled_width = UDIV_UP(width, 32);
@@ -89,7 +90,7 @@ void damage_check_tile_row(struct pixman_region16* damage,
 			                         x * 32, y_start, 32, 32);
 }
 
-void damage_check(struct pixman_region16* damage, const uint8_t* buffer,
+void damage_check(struct pixman_region16* damage, const uint16_t* buffer,
                   uint32_t width, uint32_t height, struct pixman_box16* hint)
 {
 	uint32_t tiled_width = UDIV_UP(width, 32);

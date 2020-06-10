@@ -572,7 +572,7 @@ int renderer_init(struct renderer* self, const struct output* output,
 	if (create_textured_fbo(&self->frame_fbo[1], GL_RGBA, tf_width, tf_height) < 0)
 		goto frame_fbo_failure_1;
 
-	if (create_fbo(&self->damage_fbo, GL_R8_EXT, tf_width, tf_height) < 0)
+	if (create_fbo(&self->damage_fbo, GL_RGB565, tf_width, tf_height) < 0)
 		goto damage_fbo_failure;
 
 	glBindFramebuffer(GL_FRAMEBUFFER, self->frame_fbo[0].fbo);
