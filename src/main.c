@@ -212,7 +212,10 @@ static void registry_remove(void* data, struct wl_registry* registry,
 		wl_list_remove(&out->link);
 		output_destroy(out);
 
-		/* TODO: If this is the selected output, exit */
+		if (out == self->selected_output) {
+			log_error("Selected output went away. Exiting...\n");
+			wayvnc_exit(self);
+		}
 
 		return;
 	}
@@ -222,7 +225,10 @@ static void registry_remove(void* data, struct wl_registry* registry,
 		wl_list_remove(&seat->link);
 		seat_destroy(seat);
 
-		/* TODO: If this is the selected seat, exit */
+		if (seat == self->selected_seat) {
+			log_error("Selected seat went away. Exiting...\n");
+			wayvnc_exit(self);
+		}
 
 		return;
 	}
