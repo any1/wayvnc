@@ -106,6 +106,8 @@ void wayvnc_exit(struct wayvnc* self);
 void on_capture_done(struct frame_capture* capture);
 static void on_render(struct nvnc_display* display, struct nvnc_fb* fb);
 
+struct wl_shm* wl_shm = NULL;
+
 static enum frame_capture_backend_type
 frame_capture_backend_from_string(const char* str)
 {
@@ -147,8 +149,7 @@ static void registry_add(void* data, struct wl_registry* registry,
 	}
 
 	if (strcmp(interface, wl_shm_interface.name) == 0) {
-		self->screencopy_backend.wl_shm
-			= wl_registry_bind(registry, id, &wl_shm_interface, 1);
+		wl_shm = wl_registry_bind(registry, id, &wl_shm_interface, 1);
 		return;
 	}
 
@@ -241,7 +242,7 @@ void wayvnc_destroy(struct wayvnc* self)
 
 	zxdg_output_manager_v1_destroy(self->xdg_output_manager);
 
-	wl_shm_destroy(self->screencopy_backend.wl_shm);
+	wl_shm_destroy(wl_shm);
 
 	zwp_virtual_keyboard_v1_destroy(self->keyboard_backend.virtual_keyboard);
 	zwp_virtual_keyboard_manager_v1_destroy(self->keyboard_manager);
@@ -479,16 +480,48 @@ static void on_render(struct nvnc_display* display, struct nvnc_fb* fb)
 	struct nvnc* nvnc = nvnc_display_get_server(display);
 	struct wayvnc* self = nvnc_get_userdata(nvnc);
 
-	struct pixman_box16* ext = pixman_region_extents(&self->current_damage);
-	uint32_t y = ext->y1;
-	uint32_t damage_height = ext->y2 - ext->y1;
+	if (!self->screencopy_backend.back)
+		return;
 
 	uint32_t* addr = nvnc_fb_get_addr(fb);
 	uint32_t width = nvnc_fb_get_width(fb);
+	uint32_t height = nvnc_fb_get_height(fb);
 
-	renderer_read_frame(&self->renderer, addr + y * width, y, damage_height);
+	pixman_image_t* dstimg = pixman_image_create_bits_no_clear(
+			PIXMAN_x8b8g8r8, width, height, addr, 4 * width);
 
+	pixman_image_t* srcimg = self->screencopy_backend.back->image;
+
+#define F1 pixman_fixed_1
+	pixman_transform_t y_invert = {{
+		{ F1, 0, 0 },
+		{ 0, -F1, height * F1 },
+		{ 0, 0, F1},
+	}};
+#undef F1
+
+	pixman_transform_t identity;
+	pixman_transform_init_identity(&identity);
+
+	if (self->screencopy_backend.back->y_inverted)
+		pixman_image_set_transform(srcimg, &y_invert);
+	else
+		pixman_image_set_transform(srcimg, &identity);
+
+	pixman_image_set_clip_region(srcimg, &self->current_damage);
+
+	pixman_image_composite(PIXMAN_OP_OVER, srcimg, NULL, dstimg,
+			0, 0,
+			0, 0,
+			0, 0,
+			width, height);
+
+
+	pixman_image_unref(dstimg);
 	pixman_region_clear(&self->current_damage);
+
+	// XXX: This releases the buffer for now
+	frame_capture_render(self->capture_backend, &self->renderer, fb);
 }
 
 static void wayvnc_damage_region(struct wayvnc* self,
@@ -523,13 +556,13 @@ static void on_damage_check_done(struct pixman_region16* damage, void* userdata)
 
 void wayvnc_process_frame(struct wayvnc* self)
 {
-	uint32_t format = fourcc_from_gl_format(self->renderer.read_format);
+//	uint32_t format = fourcc_from_gl_format(self->renderer.read_format);
 	uint32_t width = output_get_transformed_width(self->selected_output);
 	uint32_t height = output_get_transformed_height(self->selected_output);
 	bool is_first_frame = false;
 
 	if (!self->buffer) {
-		self->buffer = nvnc_fb_new(width, height, format);
+		self->buffer = nvnc_fb_new(width, height, DRM_FORMAT_XBGR8888);
 		nvnc_display_set_buffer(self->nvnc_display, self->buffer);
 		is_first_frame = true;
 	} else {
@@ -538,10 +571,8 @@ void wayvnc_process_frame(struct wayvnc* self)
 		assert(height == nvnc_fb_get_height(self->buffer));
 	}
 
+	/*
 	struct nvnc_fb* fb = self->buffer;
-
-	// TODO: Fix constness on fb in this function
-	frame_capture_render(self->capture_backend, &self->renderer, fb);
 
 	if (!is_first_frame) {
 		uint32_t hint_x = self->capture_backend->damage_hint.x;
@@ -572,8 +603,17 @@ void wayvnc_process_frame(struct wayvnc* self)
 		                   on_damage_check_done, self);
 		return;
 	}
+	*/
 
-	wayvnc_damage_whole(self);
+	int damx = self->capture_backend->damage_hint.x;
+	int damy = self->capture_backend->damage_hint.y;
+	int damw = self->capture_backend->damage_hint.width;
+	int damh = self->capture_backend->damage_hint.height;
+
+	struct pixman_region16 damage;
+	pixman_region_init_rect(&damage, damx, damy, damw, damh);
+	wayvnc_damage_region(self, &damage);
+	pixman_region_fini(&damage);
 
 	if (wayvnc_start_capture(self, 0) < 0) {
 		log_error("Failed to start capture. Exiting...\n");

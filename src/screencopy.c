@@ -24,6 +24,8 @@
 #include <libdrm/drm_fourcc.h>
 #include <aml.h>
 
+#include "wlr-screencopy-unstable-v1.h"
+#include "buffer.h"
 #include "frame-capture.h"
 #include "shm.h"
 #include "screencopy.h"
@@ -42,48 +44,6 @@ static uint32_t fourcc_from_wl_shm(enum wl_shm_format in)
 	case WL_SHM_FORMAT_XRGB8888: return DRM_FORMAT_XRGB8888;
 	default: return in;
 	}
-}
-
-static int screencopy_buffer_init(struct screencopy* self,
-				  enum wl_shm_format format, uint32_t width,
-				  uint32_t height, uint32_t stride)
-{
-	if (self->buffer)
-		return 0;
-
-	size_t size = stride * height;
-
-	int fd = shm_alloc_fd(size);
-	if (fd < 0)
-		return -1;
-
-	void* addr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-	if (!addr)
-		goto mmap_failure;
-
-	struct wl_shm_pool* pool = wl_shm_create_pool(self->wl_shm, fd, size);
-	if (!pool)
-		goto shm_failure;
-
-	struct wl_buffer* buffer =
-		wl_shm_pool_create_buffer(pool, 0, width, height, stride,
-					  format);
-	wl_shm_pool_destroy(pool);
-	if (!buffer)
-		goto shm_failure;
-
-	self->buffer = buffer;
-	self->pixels = addr;
-	self->bufsize = size;
-
-	close(fd);
-	return 0;
-
-shm_failure:
-	munmap(addr, size);
-mmap_failure:
-	close(fd);
-	return -1;
 }
 
 static void screencopy_stop(struct frame_capture* fc)
@@ -107,34 +67,41 @@ static void screencopy_buffer(void* data,
 {
 	struct screencopy* self = data;
 
-	if (screencopy_buffer_init(self, format, width, height, stride) < 0) {
+	uint32_t fourcc = fourcc_from_wl_shm(format);
+	wv_buffer_pool_resize(self->pool, width, height, stride, fourcc);
+
+	struct wv_buffer* buffer = wv_buffer_pool_acquire(self->pool);
+	if (!buffer) {
 		self->frame_capture.status = CAPTURE_FATAL;
 		screencopy_stop(&self->frame_capture);
 		self->frame_capture.on_done(&self->frame_capture);
 	}
 
-	self->frame_capture.frame_info.fourcc_format =
-		fourcc_from_wl_shm(format);
+	buffer->y_inverted = true;
+
+	assert(!self->front);
+	self->front = buffer;
+
+	self->frame_capture.frame_info.fourcc_format = fourcc;
 	self->frame_capture.frame_info.width = width;
 	self->frame_capture.frame_info.height = height;
 	self->frame_capture.frame_info.stride = stride;
 
 	if (self->is_immediate_copy)
-		zwlr_screencopy_frame_v1_copy(self->frame, self->buffer);
+		zwlr_screencopy_frame_v1_copy(self->frame, buffer->wl_buffer);
 	else
 		zwlr_screencopy_frame_v1_copy_with_damage(self->frame,
-		                                         self->buffer);
+				buffer->wl_buffer);
 }
 
 static void screencopy_flags(void* data,
 			     struct zwlr_screencopy_frame_v1* frame,
 			     uint32_t flags)
 {
-	(void)data;
+	struct screencopy* self = data;
 	(void)frame;
-	(void)flags;
 
-	/* TODO. Assume y-invert for now */
+//	self->buffer->y_inverted = !!(flags & ZWLR_SCREENCOPY_FRAME_V1_FLAGS_Y_INVERT);
 }
 
 static void screencopy_ready(void* data,
@@ -164,6 +131,11 @@ static void screencopy_ready(void* data,
 		self->frame_capture.damage_hint.height =
 			self->frame_capture.frame_info.height;
 	}
+
+	if (self->back)
+		wv_buffer_pool_release(self->pool, self->back);
+	self->back = self->front;
+	self->front = NULL;
 
 	self->frame_capture.status = CAPTURE_DONE;
 	self->frame_capture.on_done(&self->frame_capture);
@@ -260,18 +232,21 @@ static int screencopy_start(struct frame_capture* fc,
 static void screencopy_render(struct frame_capture* fc,
                               struct renderer* renderer, struct nvnc_fb* fb)
 {
-	struct screencopy* self = (void*)fc;
-
+	/*
 	uint32_t width = fc->frame_info.width;
 	uint32_t height = fc->frame_info.height;
 	uint32_t stride = fc->frame_info.stride;
 	uint32_t format = fc->frame_info.fourcc_format;
 
 	render_framebuffer(renderer, self->pixels, format, width, height, stride);
+	*/
 }
 
 void screencopy_init(struct screencopy* self)
 {
+	self->pool = wv_buffer_pool_create(0, 0, 0, 0);
+	assert(self->pool);
+
 	self->timer = aml_timer_new(0, screencopy__poll, self, NULL);
 	assert(self->timer);
 
@@ -287,6 +262,10 @@ void screencopy_destroy(struct screencopy* self)
 	aml_stop(aml_get_default(), self->timer);
 	aml_unref(self->timer);
 
-	if (self->buffer)
-		wl_buffer_destroy(self->buffer);
+	if (self->back)
+		wv_buffer_pool_release(self->pool, self->back);
+	if (self->front)
+		wv_buffer_pool_release(self->pool, self->front);
+
+	wv_buffer_pool_destroy(self->pool);
 }
