@@ -5,7 +5,6 @@
 #include <assert.h>
 #include <sys/mman.h>
 #include <libdrm/drm_fourcc.h>
-#include <pixman.h>
 #include <wayland-client.h>
 
 #include "shm.h"
@@ -20,9 +19,6 @@ struct wv_buffer* wv_buffer_create(int width, int height, int stride,
 {
 	assert(wl_shm);
 	enum wl_shm_format wl_fmt = fourcc_to_wl_shm(fourcc);
-	pixman_format_code_t pixman_fmt = 0;
-	if (!fourcc_to_pixman_fmt(&pixman_fmt, fourcc))
-		return NULL;
 
 	struct wv_buffer* self = calloc(1, sizeof(*self));
 	if (!self)
@@ -43,11 +39,6 @@ struct wv_buffer* wv_buffer_create(int width, int height, int stride,
 	if (!self->pixels)
 		goto mmap_failure;
 
-	self->image = pixman_image_create_bits(pixman_fmt, width, height,
-			self->pixels, stride);
-	if (!self->image)
-		goto pixman_failure;
-
 	struct wl_shm_pool* pool = wl_shm_create_pool(wl_shm, fd, self->size);
 	if (!pool)
 		goto pool_failure;
@@ -63,8 +54,6 @@ struct wv_buffer* wv_buffer_create(int width, int height, int stride,
 
 shm_failure:
 pool_failure:
-	pixman_image_unref(self->image);
-pixman_failure:
 	munmap(self->pixels, self->size);
 mmap_failure:
 	close(fd);
@@ -76,7 +65,6 @@ failure:
 void wv_buffer_destroy(struct wv_buffer* self)
 {
 	wl_buffer_destroy(self->wl_buffer);
-	pixman_image_unref(self->image);
 	munmap(self->pixels, self->size);
 	free(self);
 }
