@@ -21,6 +21,7 @@
 #include "wlr-screencopy-unstable-v1.h"
 #include "frame-capture.h"
 #include "smooth.h"
+#include "buffer.h"
 
 struct zwlr_screencopy_manager_v1;
 struct zwlr_screencopy_frame_v1;
@@ -40,11 +41,9 @@ enum screencopy_status {
 struct screencopy {
 	struct frame_capture frame_capture;
 
-	struct wl_shm* wl_shm;
-	struct wl_buffer* buffer;
-
-	void* pixels;
-	size_t bufsize;
+	struct wv_buffer_pool* pool;
+	struct wv_buffer* front;
+	struct wv_buffer* back;
 
 	struct zwlr_screencopy_manager_v1* manager;
 	struct zwlr_screencopy_frame_v1* frame;

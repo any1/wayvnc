@@ -70,6 +70,7 @@ sources = [
 	'src/cfg.c',
 	'src/intset.c',
 	'src/damage.c',
+	'src/buffer.c',
 ]
 
 dependencies = [
