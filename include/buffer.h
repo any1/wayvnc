@@ -3,8 +3,8 @@
 #include "sys/queue.h"
 
 #include <unistd.h>
-#include <pixman.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 struct wl_buffer;
 
@@ -13,7 +13,6 @@ struct wv_buffer {
 	struct wl_buffer* wl_buffer;
 	void* pixels;
 	size_t size;
-	pixman_image_t* image;
 	int width, height, stride;
 	uint32_t format;
 	bool y_inverted;
