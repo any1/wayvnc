@@ -547,7 +547,9 @@ void wayvnc_process_frame(struct wayvnc* self)
 	pixman_region_init_rect(&damage, damx, damy, damw, damh);
 	pixman_region_init(&txdamage);
 	wv_region_transform(&txdamage, &damage,
-			self->selected_output->transform, width, height);
+			self->selected_output->transform,
+			self->selected_output->width,
+			self->selected_output->height);
 	wayvnc_damage_region(self, &txdamage);
 	pixman_region_fini(&txdamage);
 	pixman_region_fini(&damage);
