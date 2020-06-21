@@ -52,6 +52,7 @@
 #include "seat.h"
 #include "cfg.h"
 #include "damage.h"
+#include "pixman-renderer.h"
 
 #define DEFAULT_ADDRESS "127.0.0.1"
 #define DEFAULT_PORT 5900
@@ -483,45 +484,10 @@ static void on_render(struct nvnc_display* display, struct nvnc_fb* fb)
 	if (!self->screencopy_backend.back)
 		return;
 
-	uint32_t* addr = nvnc_fb_get_addr(fb);
-	uint32_t width = nvnc_fb_get_width(fb);
-	uint32_t height = nvnc_fb_get_height(fb);
-
-	pixman_image_t* dstimg = pixman_image_create_bits_no_clear(
-			PIXMAN_x8b8g8r8, width, height, addr, 4 * width);
-
-	pixman_image_t* srcimg = self->screencopy_backend.back->image;
-
-#define F1 pixman_fixed_1
-	pixman_transform_t y_invert = {{
-		{ F1, 0, 0 },
-		{ 0, -F1, height * F1 },
-		{ 0, 0, F1},
-	}};
-#undef F1
-
-	pixman_transform_t identity;
-	pixman_transform_init_identity(&identity);
-
-	if (self->screencopy_backend.back->y_inverted)
-		pixman_image_set_transform(srcimg, &y_invert);
-	else
-		pixman_image_set_transform(srcimg, &identity);
-
-	pixman_image_set_clip_region(srcimg, &self->current_damage);
-
-	pixman_image_composite(PIXMAN_OP_OVER, srcimg, NULL, dstimg,
-			0, 0,
-			0, 0,
-			0, 0,
-			width, height);
-
-
-	pixman_image_unref(dstimg);
+	enum wl_output_transform transform = self->selected_output->transform;
+	wv_pixman_render(fb, self->screencopy_backend.back, transform,
+			&self->current_damage);
 	pixman_region_clear(&self->current_damage);
-
-	// XXX: This releases the buffer for now
-	frame_capture_render(self->capture_backend, &self->renderer, fb);
 }
 
 static void wayvnc_damage_region(struct wayvnc* self,

@@ -71,6 +71,8 @@ sources = [
 	'src/intset.c',
 	'src/damage.c',
 	'src/buffer.c',
+	'src/pixels.c',
+	'src/pixman-renderer.c',
 ]
 
 dependencies = [
