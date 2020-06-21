@@ -53,6 +53,7 @@
 #include "cfg.h"
 #include "damage.h"
 #include "pixman-renderer.h"
+#include "transform-util.h"
 
 #define DEFAULT_ADDRESS "127.0.0.1"
 #define DEFAULT_PORT 5900
@@ -537,48 +538,18 @@ void wayvnc_process_frame(struct wayvnc* self)
 		assert(height == nvnc_fb_get_height(self->buffer));
 	}
 
-	/*
-	struct nvnc_fb* fb = self->buffer;
-
-	if (!is_first_frame) {
-		uint32_t hint_x = self->capture_backend->damage_hint.x;
-		uint32_t hint_y = self->capture_backend->damage_hint.y;
-		uint32_t hint_width = self->capture_backend->damage_hint.width;
-		uint32_t hint_height = self->capture_backend->damage_hint.height;
-
-		uint32_t tfx0, tfy0, tfx1, tfy1;
-		output_transform_box_coord(self->selected_output,
-		                           hint_x, hint_y,
-		                           hint_x + hint_width,
-		                           hint_y + hint_height,
-		                           &tfx0, &tfy0, &tfx1, &tfy1);
-
-		struct pixman_box16 hint = {
-			.x1 = tfx0, .y1 = tfy0,
-			.x2 = tfx1, .y2 = tfy1,
-		};
-
-		size_t alignment = MAX(4, sizeof(void*));
-		size_t damage_buffer_size = ALIGN_UP(width * height, alignment);
-		uint8_t* damage_buffer =
-			aligned_alloc(alignment, damage_buffer_size);
-		render_damage(&self->renderer);
-		renderer_read_damage(&self->renderer, damage_buffer, 0, height);
-
-		damage_check_async(damage_buffer, width, height, &hint,
-		                   on_damage_check_done, self);
-		return;
-	}
-	*/
-
 	int damx = self->capture_backend->damage_hint.x;
 	int damy = self->capture_backend->damage_hint.y;
 	int damw = self->capture_backend->damage_hint.width;
 	int damh = self->capture_backend->damage_hint.height;
 
-	struct pixman_region16 damage;
+	struct pixman_region16 damage, txdamage;
 	pixman_region_init_rect(&damage, damx, damy, damw, damh);
-	wayvnc_damage_region(self, &damage);
+	pixman_region_init(&txdamage);
+	wv_region_transform(&txdamage, &damage,
+			self->selected_output->transform, width, height);
+	wayvnc_damage_region(self, &txdamage);
+	pixman_region_fini(&txdamage);
 	pixman_region_fini(&damage);
 
 	if (wayvnc_start_capture(self, 0) < 0) {

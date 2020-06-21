@@ -73,6 +73,7 @@ sources = [
 	'src/buffer.c',
 	'src/pixels.c',
 	'src/pixman-renderer.c',
+	'src/transform-util.c',
 ]
 
 dependencies = [
