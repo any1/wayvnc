@@ -10,7 +10,7 @@
 #include "util.h"
 #include "murmurhash.h"
 
-#define HASH_SEED 0xdeadbeef
+#define HASH_SEED 0
 
 int damage_refinery_init(struct damage_refinery* self, uint32_t width,
 		uint32_t height)
@@ -41,6 +41,11 @@ static size_t damage_copy_tile(struct damage_refinery* self, void* tile_buffer,
 	uint32_t* pixels = buffer->pixels;
 	int pixel_stride = buffer->stride / 4;
 
+	if (buffer->y_inverted) {
+		pixels += (buffer->height - 1) * pixel_stride;
+		pixel_stride *= -1;
+	}
+
 	size_t i = 0;
 	int x_start = tx * 32;
 	int x_stop = MIN(((int)tx + 1) * 32, buffer->width);
@@ -61,19 +66,6 @@ static uint32_t* damage_tile_hash_ptr(struct damage_refinery* self,
 	return &self->hashes[tx + ty * twidth];
 }
 
-static void damage_tile(struct damage_refinery* self,
-		struct pixman_region16* refined, uint32_t tx, uint32_t ty,
-		int invert_y)
-{
-	uint32_t theight = UDIV_UP(self->height, 32);
-	if (invert_y)
-		pixman_region_union_rect(refined, refined, tx * 32,
-				(theight - ty - 1) * 32, 32, 32);
-	else
-		pixman_region_union_rect(refined, refined,
-				tx * 32, ty * 32, 32, 32);
-}
-
 static void damage_refine_tile(struct damage_refinery* self,
 		struct pixman_region16* refined, uint32_t tx, uint32_t ty,
 		const struct wv_buffer* buffer)
@@ -86,7 +78,8 @@ static void damage_refine_tile(struct damage_refinery* self,
 	*old_hash_ptr = hash;
 
 	if (is_damaged)
-		damage_tile(self, refined, tx, ty, buffer->y_inverted);
+		pixman_region_union_rect(refined, refined, tx * 32, ty * 32, 32,
+				32);
 }
 
 void damage_refine(struct damage_refinery* self,
