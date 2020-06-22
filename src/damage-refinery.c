@@ -33,11 +33,10 @@ void damage_refinery_destroy(struct damage_refinery* self)
 	free(self->hashes);
 }
 
-static size_t damage_copy_tile(struct damage_refinery* self, void* tile_buffer,
-		uint32_t tx, uint32_t ty, const struct wv_buffer* buffer)
+static uint32_t damage_hash_tile(struct damage_refinery* self, uint32_t tx,
+		uint32_t ty, const struct wv_buffer* buffer)
 {
 	// TODO: Support different pixel sizes
-	uint32_t* tile = tile_buffer;
 	uint32_t* pixels = buffer->pixels;
 	int pixel_stride = buffer->stride / 4;
 
@@ -46,17 +45,18 @@ static size_t damage_copy_tile(struct damage_refinery* self, void* tile_buffer,
 		pixel_stride *= -1;
 	}
 
-	size_t i = 0;
 	int x_start = tx * 32;
-	int x_stop = MIN(((int)tx + 1) * 32, buffer->width);
+	int x_stop = MIN((tx + 1) * 32, self->width);
 	int y_start = ty * 32;
-	int y_stop = MIN(((int)ty + 1) * 32, buffer->height);
+	int y_stop = MIN((ty + 1) * 32, self->height);
+
+	uint32_t hash = 0;
 
 	for (int y = y_start; y < y_stop; ++y)
-		for (int x = x_start; x < x_stop; ++x)
-			tile[i++] = pixels[x + y * pixel_stride];
+		hash = murmurhash((void*)&(pixels[x_start + y * pixel_stride]),
+				4 * (x_stop - x_start), hash);
 
-	return i;
+	return hash;
 }
 
 static uint32_t* damage_tile_hash_ptr(struct damage_refinery* self,
@@ -70,9 +70,7 @@ static void damage_refine_tile(struct damage_refinery* self,
 		struct pixman_region16* refined, uint32_t tx, uint32_t ty,
 		const struct wv_buffer* buffer)
 {
-	uint32_t tile[32 * 32];
-	size_t len = damage_copy_tile(self, tile, tx, ty, buffer);
-	uint32_t hash = murmurhash((void*)tile, len, HASH_SEED);
+	uint32_t hash = damage_hash_tile(self, tx, ty, buffer);
 	uint32_t* old_hash_ptr = damage_tile_hash_ptr(self, tx, ty);
 	int is_damaged = hash != *old_hash_ptr;
 	*old_hash_ptr = hash;
