@@ -54,6 +54,7 @@
 #include "damage.h"
 #include "pixman-renderer.h"
 #include "transform-util.h"
+#include "damage-refinery.h"
 
 #define DEFAULT_ADDRESS "127.0.0.1"
 #define DEFAULT_PORT 5900
@@ -99,6 +100,7 @@ struct wayvnc {
 	struct nvnc_display* nvnc_display;
 	struct nvnc_fb* buffer;
 
+	struct damage_refinery damage_refinery;
 	struct pixman_region16 current_damage;
 
 	const char* kb_layout;
@@ -531,6 +533,11 @@ void wayvnc_process_frame(struct wayvnc* self)
 	if (!self->buffer) {
 		self->buffer = nvnc_fb_new(width, height, DRM_FORMAT_XBGR8888);
 		nvnc_display_set_buffer(self->nvnc_display, self->buffer);
+
+		damage_refinery_init(&self->damage_refinery,
+			self->screencopy_backend.back->width,
+			self->screencopy_backend.back->height);
+
 		is_first_frame = true;
 	} else {
 		// TODO: Reallocate
@@ -543,16 +550,21 @@ void wayvnc_process_frame(struct wayvnc* self)
 	int damw = self->capture_backend->damage_hint.width;
 	int damh = self->capture_backend->damage_hint.height;
 
-	struct pixman_region16 damage, txdamage;
-	pixman_region_init_rect(&damage, damx, damy, damw, damh);
+	struct pixman_region16 hint, txdamage, refined;
+	pixman_region_init_rect(&hint, damx, damy, damw, damh);
 	pixman_region_init(&txdamage);
-	wv_region_transform(&txdamage, &damage,
+	pixman_region_init(&refined);
+	damage_refine(&self->damage_refinery, &refined, &hint,
+			self->screencopy_backend.back);
+	wv_region_transform(&txdamage, &refined,
 			self->selected_output->transform,
 			self->selected_output->width,
 			self->selected_output->height);
+//	damage_dump(stdout, &txdamage, width, height, 32);
 	wayvnc_damage_region(self, &txdamage);
+	pixman_region_fini(&refined);
 	pixman_region_fini(&txdamage);
-	pixman_region_fini(&damage);
+	pixman_region_fini(&hint);
 
 	if (wayvnc_start_capture(self, 0) < 0) {
 		log_error("Failed to start capture. Exiting...\n");

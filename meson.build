@@ -74,6 +74,8 @@ sources = [
 	'src/pixels.c',
 	'src/pixman-renderer.c',
 	'src/transform-util.c',
+	'src/damage-refinery.c',
+	'src/murmurhash.c',
 ]
 
 dependencies = [
