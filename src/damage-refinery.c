@@ -80,23 +80,44 @@ static void damage_refine_tile(struct damage_refinery* self,
 				32);
 }
 
+static void tile_region_from_region(struct pixman_region16* dst,
+		struct pixman_region16* src)
+{
+	int n_rects = 0;
+	struct pixman_box16* rects = pixman_region_rectangles(src, &n_rects);
+
+	for (int i = 0; i < n_rects; ++i) {
+		int x1 = rects[i].x1 / 32;
+		int y1 = rects[i].y1 / 32;
+		int x2 = UDIV_UP(rects[i].x2, 32);
+		int y2 = UDIV_UP(rects[i].y2, 32);
+
+		pixman_region_union_rect(dst, dst, x1, y1, x2 - x1, y2 - y1);
+	}
+}
+
 void damage_refine(struct damage_refinery* self,
 		struct pixman_region16* refined, 
 		struct pixman_region16* hint,
 		const struct wv_buffer* buffer)
 {
-	// TODO: Use hint
-
 	assert(self->width == (uint32_t)buffer->width &&
 	       self->height == (uint32_t)buffer->height);
 
-	uint32_t twidth = UDIV_UP(self->width, 32);
-	uint32_t theight = UDIV_UP(self->height, 32);
+	struct pixman_region16 tile_region;
+	pixman_region_init(&tile_region);
+	tile_region_from_region(&tile_region, hint);
 
-	for (uint32_t ty = 0; ty < theight; ++ty)
-		for (uint32_t tx = 0; tx < twidth; ++tx)
-			damage_refine_tile(self, refined, tx, ty, buffer);
+	int n_rects = 0;
+	struct pixman_box16* rects = pixman_region_rectangles(&tile_region,
+			&n_rects);
 
+	for (int i = 0; i < n_rects; ++i)
+		for (int ty = rects[i].y1; ty < rects[i].y2; ++ty)
+			for (int tx = rects[i].x1; tx < rects[i].x2; ++tx)
+				damage_refine_tile(self, refined, tx, ty, buffer);
+
+	pixman_region_fini(&tile_region);
 	pixman_region_intersect_rect(refined, refined, 0, 0, self->width,
 			self->height);
 }
