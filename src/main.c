@@ -111,6 +111,8 @@ void on_capture_done(struct frame_capture* capture);
 static void on_render(struct nvnc_display* display, struct nvnc_fb* fb);
 
 struct wl_shm* wl_shm = NULL;
+struct zwp_linux_dmabuf_v1* zwp_linux_dmabuf = NULL;
+struct gbm_device* gbm_device = NULL;
 
 static enum frame_capture_backend_type
 frame_capture_backend_from_string(const char* str)
