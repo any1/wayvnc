@@ -33,7 +33,6 @@ struct wv_buffer* wv_buffer_create_shm(int width,
 	self->height = height;
 	self->stride = stride;
 	self->format = fourcc;
-	self->is_ready = true;
 
 	self->size = height * stride;
 	int fd = shm_alloc_fd(self->size);
@@ -68,36 +67,6 @@ failure:
 	return NULL;
 }
 
-static void wv_buffer_dmabuf_created(void* data,
-		struct zwp_linux_buffer_params_v1* params,
-		struct wl_buffer* wl_buffer)
-{
-	(void)params;
-	struct wv_buffer* self = data;
-
-	self->wl_buffer = wl_buffer;
-	self->is_ready = true;
-
-	if (self->on_ready)
-		self->on_ready(self);
-}
-
-static void wv_buffer_dmabuf_failed(void* data,
-		struct zwp_linux_buffer_params_v1* params)
-{
-	(void)params;
-	struct wv_buffer* self = data;
-
-	if (self->on_ready)
-		self->on_ready(self);
-}
-
-static const struct zwp_linux_buffer_params_v1_listener
-wv_buffer_params_listener = {
-	.created = wv_buffer_dmabuf_created,
-	.failed = wv_buffer_dmabuf_failed,
-};
-
 static struct wv_buffer* wv_buffer_create_dmabuf(int width, int height,
 		uint32_t fourcc)
 {
@@ -131,14 +100,16 @@ static struct wv_buffer* wv_buffer_create_dmabuf(int width, int height,
 
 	zwp_linux_buffer_params_v1_add(params, fd, 0, offset, stride,
 			mod >> 32, mod & 0xffffffff);
-	zwp_linux_buffer_params_v1_add_listener(params,
-			&wv_buffer_params_listener, self);
-	zwp_linux_buffer_params_v1_create(params, width, height, fourcc,
-			/* flags */ 0);
-
+	self->wl_buffer = zwp_linux_buffer_params_v1_create_immed(params, width,
+			height, fourcc, /* flags */ 0);
 	close(fd); // TODO: Maybe keep this open?
+
+	if (!self->wl_buffer)
+		goto buffer_failure;
+
 	return self;
 
+buffer_failure:
 fd_failure:
 params_failure:
 	gbm_bo_destroy(self->bo);
