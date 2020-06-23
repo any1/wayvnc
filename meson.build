@@ -30,6 +30,7 @@ librt = cc.find_library('rt', required: false)
 pixman = dependency('pixman-1')
 egl = dependency('egl')
 glesv2 = dependency('glesv2')
+gbm = dependency('gbm')
 xkbcommon = dependency('xkbcommon')
 wayland_client = dependency('wayland-client')
 
@@ -85,6 +86,7 @@ dependencies = [
 	aml,
 	egl,
 	glesv2,
+	gbm,
 	wayland_client,
 	neatvnc,
 	xkbcommon,
