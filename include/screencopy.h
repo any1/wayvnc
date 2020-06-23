@@ -47,6 +47,7 @@ struct screencopy {
 
 	struct zwlr_screencopy_manager_v1* manager;
 	struct zwlr_screencopy_frame_v1* frame;
+	int version;
 
 	uint64_t last_time;
 	uint64_t start_time;
@@ -55,6 +56,13 @@ struct screencopy {
 	struct smooth delay_smoother;
 	double delay;
 	bool is_immediate_copy;
+
+	uint32_t wl_shm_width, wl_shm_height, wl_shm_stride;
+	enum wl_shm_format wl_shm_format;
+
+	bool have_linux_dmabuf;
+	uint32_t dmabuf_width, dmabuf_height;
+	uint32_t fourcc;
 };
 
 void screencopy_init(struct screencopy* self);

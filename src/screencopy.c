@@ -60,25 +60,49 @@ static void screencopy_stop(struct frame_capture* fc)
 	}
 }
 
-static void screencopy_buffer(void* data,
+static void screencopy_linux_dmabuf(void* data,
 			      struct zwlr_screencopy_frame_v1* frame,
-			      enum wl_shm_format format, uint32_t width,
-			      uint32_t height, uint32_t stride)
+			      uint32_t format, uint32_t width, uint32_t height)
 {
 	struct screencopy* self = data;
 
-	uint32_t fourcc = fourcc_from_wl_shm(format);
-	wv_buffer_pool_resize(self->pool, WV_BUFFER_SHM, width, height, stride,
-			fourcc);
+	self->have_linux_dmabuf = true;
+	self->dmabuf_width = width;
+	self->dmabuf_height = height;
+	self->fourcc = format;
+}
+
+static void screencopy_buffer_done(void* data,
+			      struct zwlr_screencopy_frame_v1* frame)
+{
+	struct screencopy* self = data;
+	uint32_t width, height, stride, fourcc;
+
+	if (self->have_linux_dmabuf) {
+		width = self->dmabuf_width;
+		height = self->dmabuf_height;
+		stride = 0;
+		fourcc = self->fourcc;
+		wv_buffer_pool_resize(self->pool, WV_BUFFER_DMABUF, width,
+				height, stride, fourcc);
+	} else {
+		width = self->wl_shm_width;
+		height = self->wl_shm_height;
+		stride = self->wl_shm_stride;
+		fourcc = self->fourcc;
+		wv_buffer_pool_resize(self->pool, WV_BUFFER_SHM, width,
+				height, stride, self->wl_shm_format);
+	}
 
 	struct wv_buffer* buffer = wv_buffer_pool_acquire(self->pool);
 	if (!buffer) {
 		self->frame_capture.status = CAPTURE_FATAL;
 		screencopy_stop(&self->frame_capture);
 		self->frame_capture.on_done(&self->frame_capture);
+		return;
 	}
 
-	buffer->y_inverted = true;
+	buffer->y_inverted = !self->have_linux_dmabuf;
 
 	assert(!self->front);
 	self->front = buffer;
@@ -93,6 +117,25 @@ static void screencopy_buffer(void* data,
 	else
 		zwlr_screencopy_frame_v1_copy_with_damage(self->frame,
 				buffer->wl_buffer);
+}
+
+static void screencopy_buffer(void* data,
+			      struct zwlr_screencopy_frame_v1* frame,
+			      enum wl_shm_format format, uint32_t width,
+			      uint32_t height, uint32_t stride)
+{
+	struct screencopy* self = data;
+
+	self->wl_shm_format = format;
+	self->wl_shm_width = width;
+	self->wl_shm_height = height;
+	self->wl_shm_stride = stride;
+
+	if (self->version < 3) {
+		self->have_linux_dmabuf = false;
+		screencopy_buffer_done(data, frame);
+		return;
+	}
 }
 
 static void screencopy_flags(void* data,
@@ -177,6 +220,8 @@ static int screencopy__start_capture(struct frame_capture* fc)
 
 	static const struct zwlr_screencopy_frame_v1_listener frame_listener = {
 		.buffer = screencopy_buffer,
+		.linux_dmabuf = screencopy_linux_dmabuf,
+		.buffer_done = screencopy_buffer_done,
 		.flags = screencopy_flags,
 		.ready = screencopy_ready,
 		.failed = screencopy_failed,
