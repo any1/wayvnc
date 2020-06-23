@@ -14,8 +14,8 @@
 
 extern struct wl_shm* wl_shm;
 
-struct wv_buffer* wv_buffer_create(int width, int height, int stride,
-		uint32_t fourcc)
+struct wv_buffer* wv_buffer_create(enum wv_buffer_type type, int width,
+		int height, int stride, uint32_t fourcc)
 {
 	assert(wl_shm);
 	enum wl_shm_format wl_fmt = fourcc_to_wl_shm(fourcc);
@@ -24,6 +24,7 @@ struct wv_buffer* wv_buffer_create(int width, int height, int stride,
 	if (!self)
 		return NULL;
 
+	self->type = type;
 	self->width = width;
 	self->height = height;
 	self->stride = stride;
@@ -69,14 +70,15 @@ void wv_buffer_destroy(struct wv_buffer* self)
 	free(self);
 }
 
-struct wv_buffer_pool* wv_buffer_pool_create(int width, int height, int stride,
-		uint32_t format)
+struct wv_buffer_pool* wv_buffer_pool_create(enum wv_buffer_type type,
+		int width, int height, int stride, uint32_t format)
 {
 	struct wv_buffer_pool* self = calloc(1, sizeof(*self));
 	if (!self)
 		return NULL;
 
 	TAILQ_INIT(&self->queue);
+	self->type = type;
 	self->width = width;
 	self->height = height;
 	self->stride = stride;
@@ -101,13 +103,15 @@ void wv_buffer_pool_destroy(struct wv_buffer_pool* pool)
 }
 
 void wv_buffer_pool_resize(struct wv_buffer_pool* pool,
-		int width, int height, int stride, uint32_t format)
+		enum wv_buffer_type type, int width, int height, int stride,
+		uint32_t format)
 {
-	if (pool->width != width || pool->height != height
+	if (pool->type != type || pool->width != width || pool->height != height
 	    || pool->stride != stride || pool->format != format) {
 		wv_buffer_pool_clear(pool);
 	}
 
+	pool->type = type;
 	pool->width = width;
 	pool->height = height;
 	pool->stride = stride;
@@ -118,7 +122,8 @@ struct wv_buffer* wv_buffer_pool_acquire(struct wv_buffer_pool* pool)
 {
 	struct wv_buffer* buffer = TAILQ_FIRST(&pool->queue);
 	if (buffer) {
-		assert(pool->width == buffer->width
+		assert(pool->type == buffer->type
+		       && pool->width == buffer->width
 		       && pool->height == buffer->height
 		       && pool->stride == buffer->stride
 		       && pool->format == buffer->format);
@@ -127,8 +132,8 @@ struct wv_buffer* wv_buffer_pool_acquire(struct wv_buffer_pool* pool)
 		return buffer;
 	}
 
-	return wv_buffer_create(pool->width, pool->height, pool->stride,
-			pool->format);
+	return wv_buffer_create(pool->type, pool->width, pool->height,
+			pool->stride, pool->format);
 }
 
 void wv_buffer_pool_release(struct wv_buffer_pool* pool,
