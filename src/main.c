@@ -34,6 +34,11 @@
 #include <GLES2/gl2ext.h>
 #include <pixman.h>
 #include <sys/param.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <gbm.h>
+#include <xf86drm.h>
 
 #include "frame-capture.h"
 #include "wlr-export-dmabuf-unstable-v1.h"
@@ -41,6 +46,7 @@
 #include "wlr-virtual-pointer-unstable-v1.h"
 #include "virtual-keyboard-unstable-v1.h"
 #include "xdg-output-unstable-v1.h"
+#include "linux-dmabuf-unstable-v1.h"
 #include "render.h"
 #include "dmabuf.h"
 #include "screencopy.h"
@@ -171,7 +177,8 @@ static void registry_add(void* data, struct wl_registry* registry,
 		self->screencopy_backend.manager =
 			wl_registry_bind(registry, id,
 					 &zwlr_screencopy_manager_v1_interface,
-					 2);
+					 version);
+		self->screencopy_backend.version = version;
 		return;
 	}
 
@@ -207,6 +214,12 @@ static void registry_add(void* data, struct wl_registry* registry,
 			                 1);
 		return;
 	}
+
+	if (strcmp(interface, zwp_linux_dmabuf_v1_interface.name) == 0) {
+		zwp_linux_dmabuf = wl_registry_bind(registry, id,
+				&zwp_linux_dmabuf_v1_interface, 3);
+		return;
+	}
 }
 
 static void registry_remove(void* data, struct wl_registry* registry,
@@ -239,6 +252,25 @@ static void registry_remove(void* data, struct wl_registry* registry,
 
 		return;
 	}
+}
+
+static int find_render_node(char *node, size_t maxlen) {
+	bool r = -1;
+	drmDevice *devices[64];
+
+	int n = drmGetDevices2(0, devices, sizeof(devices) / sizeof(devices[0]));
+	for (int i = 0; i < n; ++i) {
+		drmDevice *dev = devices[i];
+		if (!(dev->available_nodes & (1 << DRM_NODE_RENDER)))
+			continue;
+
+		strlcpy(node, dev->nodes[DRM_NODE_RENDER], maxlen);
+		r = 0;
+		break;
+	}
+
+	drmFreeDevices(devices, n);
+	return r;
 }
 
 void wayvnc_destroy(struct wayvnc* self)
@@ -670,6 +702,7 @@ int main(int argc, char* argv[])
 	bool overlay_cursor = false;
 
 	static const char* shortopts = "C:c:o:k:s:rh";
+	int drm_fd = -1;
 
 	static const struct option longopts[] = {
 		{ "config", required_argument, NULL, 'C' },
@@ -809,6 +842,18 @@ int main(int argc, char* argv[])
 
 	pointer_init(&self.pointer_backend);
 
+	char render_node[256];
+	if (find_render_node(render_node, sizeof(render_node)) < 0)
+		goto failure;
+
+	drm_fd = open(render_node, O_RDWR);
+	if (drm_fd < 0)
+		goto failure;
+
+	gbm_device = gbm_create_device(drm_fd);
+	if (!gbm_device)
+		goto failure;
+
 	enum renderer_input_type renderer_input_type =
 		fcbackend == FRAME_CAPTURE_BACKEND_DMABUF ?
 			RENDERER_INPUT_DMABUF : RENDERER_INPUT_FB;
@@ -887,6 +932,8 @@ int main(int argc, char* argv[])
 	nvnc_display_unref(self.nvnc_display);
 	nvnc_close(self.nvnc);
 	renderer_destroy(&self.renderer);
+	if (zwp_linux_dmabuf)
+		zwp_linux_dmabuf_v1_destroy(zwp_linux_dmabuf);
 	if (self.screencopy_backend.manager)
 		screencopy_destroy(&self.screencopy_backend);
 	if (self.dmabuf_backend.manager)
@@ -903,6 +950,9 @@ nvnc_failure:
 main_loop_failure:
 	renderer_destroy(&self.renderer);
 failure:
+	gbm_device_destroy(gbm_device);
+	if (drm_fd >= 0)
+		close(drm_fd);
 	wayvnc_destroy(&self);
 	return 1;
 }
