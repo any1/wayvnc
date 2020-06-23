@@ -68,7 +68,8 @@ static void screencopy_buffer(void* data,
 	struct screencopy* self = data;
 
 	uint32_t fourcc = fourcc_from_wl_shm(format);
-	wv_buffer_pool_resize(self->pool, width, height, stride, fourcc);
+	wv_buffer_pool_resize(self->pool, WV_BUFFER_SHM, width, height, stride,
+			fourcc);
 
 	struct wv_buffer* buffer = wv_buffer_pool_acquire(self->pool);
 	if (!buffer) {
@@ -244,7 +245,7 @@ static void screencopy_render(struct frame_capture* fc,
 
 void screencopy_init(struct screencopy* self)
 {
-	self->pool = wv_buffer_pool_create(0, 0, 0, 0);
+	self->pool = wv_buffer_pool_create(0, 0, 0, 0, 0);
 	assert(self->pool);
 
 	self->timer = aml_timer_new(0, screencopy__poll, self, NULL);
