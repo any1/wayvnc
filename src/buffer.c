@@ -14,7 +14,7 @@
 
 extern struct wl_shm* wl_shm;
 
-struct wv_buffer* wv_buffer_create(enum wv_buffer_type type, int width,
+struct wv_buffer* wv_buffer_create_shm(int width,
 		int height, int stride, uint32_t fourcc)
 {
 	assert(wl_shm);
@@ -24,7 +24,7 @@ struct wv_buffer* wv_buffer_create(enum wv_buffer_type type, int width,
 	if (!self)
 		return NULL;
 
-	self->type = type;
+	self->type = WV_BUFFER_SHM;
 	self->width = width;
 	self->height = height;
 	self->stride = stride;
@@ -63,11 +63,58 @@ failure:
 	return NULL;
 }
 
-void wv_buffer_destroy(struct wv_buffer* self)
+struct wv_buffer* wv_buffer_create(enum wv_buffer_type type, int width,
+		int height, int stride, uint32_t fourcc)
+{
+	switch (type) {
+	case WV_BUFFER_SHM:
+		return wv_buffer_create_shm(width, height, stride, fourcc);
+	case WV_BUFFER_UNSPEC:;
+	}
+
+	abort();
+	return NULL;
+}
+
+static void wv_buffer_destroy_shm(struct wv_buffer* self)
 {
 	wl_buffer_destroy(self->wl_buffer);
 	munmap(self->pixels, self->size);
 	free(self);
+}
+
+void wv_buffer_destroy(struct wv_buffer* self)
+{
+	switch (self->type) {
+	case WV_BUFFER_SHM:
+		wv_buffer_destroy_shm(self);
+		return;
+	case WV_BUFFER_UNSPEC:;
+	}
+
+	abort();
+}
+
+int wv_buffer_map(struct wv_buffer* self)
+{
+	switch (self->type) {
+	case WV_BUFFER_SHM:
+		return 0;
+	case WV_BUFFER_UNSPEC:;
+	}
+
+	abort();
+}
+
+void wv_buffer_unmap(struct wv_buffer* self)
+{
+	switch (self->type) {
+	case WV_BUFFER_SHM:
+		return;
+	case WV_BUFFER_UNSPEC:;
+	}
+
+	abort();
 }
 
 struct wv_buffer_pool* wv_buffer_pool_create(enum wv_buffer_type type,
