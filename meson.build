@@ -31,6 +31,7 @@ pixman = dependency('pixman-1')
 egl = dependency('egl')
 glesv2 = dependency('glesv2')
 gbm = dependency('gbm')
+drm = dependency('libdrm')
 xkbcommon = dependency('xkbcommon')
 wayland_client = dependency('wayland-client')
 
@@ -87,6 +88,7 @@ dependencies = [
 	egl,
 	glesv2,
 	gbm,
+	drm,
 	wayland_client,
 	neatvnc,
 	xkbcommon,
