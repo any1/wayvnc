@@ -30,10 +30,6 @@ struct wv_buffer {
 	/* The following is only applicable to DMABUF */
 	struct gbm_bo* bo;
 	void* bo_map_handle;
-
-	bool is_ready;
-	void (*on_ready)(struct wv_buffer*);
-	void* userdata;
 };
 
 TAILQ_HEAD(wv_buffer_queue, wv_buffer);
