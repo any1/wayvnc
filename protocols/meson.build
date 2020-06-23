@@ -19,6 +19,7 @@ client_protocols = [
 	'wlr-virtual-pointer-unstable-v1.xml',
 	'virtual-keyboard-unstable-v1.xml',
 	'xdg-output-unstable-v1.xml',
+	'linux-dmabuf-unstable-v1.xml',
 ]
 
 client_protos_src = []
