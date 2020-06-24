@@ -262,16 +262,37 @@ void wv_buffer_pool_resize(struct wv_buffer_pool* pool,
 	pool->format = format;
 }
 
+static bool wv_buffer_pool_match_buffer(struct wv_buffer_pool* pool,
+		struct wv_buffer* buffer)
+{
+	if (pool->type != buffer->type)
+		return false;
+
+	switch (pool->type) {
+	case WV_BUFFER_SHM:
+		if (pool->stride != buffer->stride)
+			return false;
+
+		/* fall-through */
+	case WV_BUFFER_DMABUF:
+		if (pool->width != buffer->width
+		    || pool->height != buffer->height
+		    || pool->format != buffer->format)
+			return false;
+
+		return true;
+	case WV_BUFFER_UNSPEC:
+		abort();
+	}
+
+	return false;
+}
+
 struct wv_buffer* wv_buffer_pool_acquire(struct wv_buffer_pool* pool)
 {
 	struct wv_buffer* buffer = TAILQ_FIRST(&pool->queue);
 	if (buffer) {
-		assert(pool->type == buffer->type
-		       && pool->width == buffer->width
-		       && pool->height == buffer->height
-		       && pool->stride == buffer->stride
-		       && pool->format == buffer->format);
-
+		assert(wv_buffer_pool_match_buffer(pool, buffer));
 		TAILQ_REMOVE(&pool->queue, buffer, link);
 		return buffer;
 	}
@@ -285,10 +306,7 @@ void wv_buffer_pool_release(struct wv_buffer_pool* pool,
 {
 	wv_buffer_unmap(buffer);
 
-	if (pool->width == buffer->width
-	    && pool->height == buffer->height
-	    && pool->stride == buffer->stride
-	    && pool->format == buffer->format) {
+	if (wv_buffer_pool_match_buffer(pool, buffer)) {
 		TAILQ_INSERT_TAIL(&pool->queue, buffer, link);
 	} else {
 		wv_buffer_destroy(buffer);
