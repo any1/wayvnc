@@ -37,15 +37,6 @@
 #define RATE_LIMIT 20.0 // Hz
 #define DELAY_SMOOTHER_TIME_CONSTANT 0.5 // s
 
-static uint32_t fourcc_from_wl_shm(enum wl_shm_format in)
-{
-	switch (in) {
-	case WL_SHM_FORMAT_ARGB8888: return DRM_FORMAT_ARGB8888;
-	case WL_SHM_FORMAT_XRGB8888: return DRM_FORMAT_XRGB8888;
-	default: return in;
-	}
-}
-
 static void screencopy_stop(struct frame_capture* fc)
 {
 	struct screencopy* self = (void*)fc;
@@ -180,6 +171,8 @@ static void screencopy_ready(void* data,
 		wv_buffer_pool_release(self->pool, self->back);
 	self->back = self->front;
 	self->front = NULL;
+
+	wv_buffer_map(self->back);
 
 	self->frame_capture.status = CAPTURE_DONE;
 	self->frame_capture.on_done(&self->frame_capture);
