@@ -149,6 +149,8 @@ static void wv_buffer_destroy_dmabuf(struct wv_buffer* self)
 
 void wv_buffer_destroy(struct wv_buffer* self)
 {
+	wv_buffer_unmap(self);
+
 	switch (self->type) {
 	case WV_BUFFER_SHM:
 		wv_buffer_destroy_shm(self);
@@ -164,11 +166,18 @@ void wv_buffer_destroy(struct wv_buffer* self)
 
 static int wv_buffer_map_dmabuf(struct wv_buffer* self)
 {
+	if (self->bo_map_handle)
+		return 0;
+
 	uint32_t stride = 0;
 	self->pixels = gbm_bo_map(self->bo, 0, 0, self->width, self->height,
 			GBM_BO_TRANSFER_READ, &stride, &self->bo_map_handle);
 	self->stride = stride;
-	return self->pixels ? 0 : -1;
+	if (self->pixels)
+		return 0;
+
+	self->bo_map_handle = NULL;
+	return -1;
 }
 
 int wv_buffer_map(struct wv_buffer* self)
@@ -186,7 +195,9 @@ int wv_buffer_map(struct wv_buffer* self)
 
 static void wv_buffer_unmap_dmabuf(struct wv_buffer* self)
 {
-	gbm_bo_unmap(self->bo, self->bo_map_handle);
+	if (self->bo_map_handle)
+		gbm_bo_unmap(self->bo, self->bo_map_handle);
+	self->bo_map_handle = NULL;
 }
 
 void wv_buffer_unmap(struct wv_buffer* self)
@@ -272,6 +283,8 @@ struct wv_buffer* wv_buffer_pool_acquire(struct wv_buffer_pool* pool)
 void wv_buffer_pool_release(struct wv_buffer_pool* pool,
 		struct wv_buffer* buffer)
 {
+	wv_buffer_unmap(buffer);
+
 	if (pool->width == buffer->width
 	    && pool->height == buffer->height
 	    && pool->stride == buffer->stride
