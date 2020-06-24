@@ -82,8 +82,8 @@ static struct wv_buffer* wv_buffer_create_dmabuf(int width, int height,
 	self->format = fourcc;
 
 	self->bo = gbm_bo_create(gbm_device, width, height, fourcc,
-			GBM_BO_USE_RENDERING | GBM_BO_USE_LINEAR);
-	if (self->bo)
+			GBM_BO_USE_RENDERING);
+	if (!self->bo)
 		goto bo_failure;
 
 	struct zwp_linux_buffer_params_v1* params;
