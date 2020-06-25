@@ -31,7 +31,6 @@
 #include "screencopy.h"
 #include "smooth.h"
 #include "time-util.h"
-#include "render.h"
 #include "usdt.h"
 
 #define RATE_LIMIT 20.0 // Hz
@@ -133,9 +132,9 @@ static void screencopy_flags(void* data,
 			     struct zwlr_screencopy_frame_v1* frame,
 			     uint32_t flags)
 {
-	struct screencopy* self = data;
 	(void)frame;
 
+	// TODO
 //	self->buffer->y_inverted = !!(flags & ZWLR_SCREENCOPY_FRAME_V1_FLAGS_Y_INVERT);
 }
 
@@ -271,14 +270,6 @@ static int screencopy_start(struct frame_capture* fc,
 static void screencopy_render(struct frame_capture* fc,
                               struct renderer* renderer, struct nvnc_fb* fb)
 {
-	/*
-	uint32_t width = fc->frame_info.width;
-	uint32_t height = fc->frame_info.height;
-	uint32_t stride = fc->frame_info.stride;
-	uint32_t format = fc->frame_info.fourcc_format;
-
-	render_framebuffer(renderer, self->pixels, format, width, height, stride);
-	*/
 }
 
 void screencopy_init(struct screencopy* self)
