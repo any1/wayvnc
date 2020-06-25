@@ -36,10 +36,10 @@ dnf install wayvnc
 ## Building
 ### Runtime Dependencies
  * aml
- * EGL
+ * drm
+ * gbm
  * libxkbcommon
  * neatvnc
- * OpenGL ES V2.0
  * pixman
 
 ### Build Dependencies
