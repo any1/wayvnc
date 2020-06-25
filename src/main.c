@@ -28,10 +28,7 @@
 #include <aml.h>
 #include <signal.h>
 #include <libdrm/drm_fourcc.h>
-#include <wayland-client-protocol.h>
 #include <wayland-client.h>
-#include <GLES2/gl2.h>
-#include <GLES2/gl2ext.h>
 #include <pixman.h>
 #include <sys/param.h>
 #include <sys/types.h>
@@ -41,14 +38,11 @@
 #include <xf86drm.h>
 
 #include "frame-capture.h"
-#include "wlr-export-dmabuf-unstable-v1.h"
 #include "wlr-screencopy-unstable-v1.h"
 #include "wlr-virtual-pointer-unstable-v1.h"
 #include "virtual-keyboard-unstable-v1.h"
 #include "xdg-output-unstable-v1.h"
 #include "linux-dmabuf-unstable-v1.h"
-#include "render.h"
-#include "dmabuf.h"
 #include "screencopy.h"
 #include "strlcpy.h"
 #include "logging.h"
@@ -57,7 +51,6 @@
 #include "keyboard.h"
 #include "seat.h"
 #include "cfg.h"
-#include "damage.h"
 #include "pixman-renderer.h"
 #include "transform-util.h"
 #include "damage-refinery.h"
@@ -67,12 +60,6 @@
 
 #define UDIV_UP(a, b) (((a) + (b) - 1) / (b))
 #define ALIGN_UP(n, a) (UDIV_UP(n, a) * a)
-
-enum frame_capture_backend_type {
-	FRAME_CAPTURE_BACKEND_NONE = 0,
-	FRAME_CAPTURE_BACKEND_SCREENCOPY,
-	FRAME_CAPTURE_BACKEND_DMABUF,
-};
 
 struct wayvnc {
 	bool do_exit;
@@ -89,11 +76,9 @@ struct wayvnc {
 
 	int pointer_manager_version;
 
-	struct renderer renderer;
 	const struct output* selected_output;
 	const struct seat* selected_seat;
 
-	struct dmabuf_capture dmabuf_backend;
 	struct screencopy screencopy_backend;
 	struct frame_capture* capture_backend;
 	struct pointer pointer_backend;
@@ -119,18 +104,6 @@ static void on_render(struct nvnc_display* display, struct nvnc_fb* fb);
 struct wl_shm* wl_shm = NULL;
 struct zwp_linux_dmabuf_v1* zwp_linux_dmabuf = NULL;
 struct gbm_device* gbm_device = NULL;
-
-static enum frame_capture_backend_type
-frame_capture_backend_from_string(const char* str)
-{
-	if (strcmp(str, "screencopy") == 0)
-		return FRAME_CAPTURE_BACKEND_SCREENCOPY;
-
-	if (strcmp(str, "dmabuf") == 0)
-		return FRAME_CAPTURE_BACKEND_DMABUF;
-
-	return FRAME_CAPTURE_BACKEND_NONE;
-}
 
 static void registry_add(void* data, struct wl_registry* registry,
 			 uint32_t id, const char* interface,
@@ -162,14 +135,6 @@ static void registry_add(void* data, struct wl_registry* registry,
 
 	if (strcmp(interface, wl_shm_interface.name) == 0) {
 		wl_shm = wl_registry_bind(registry, id, &wl_shm_interface, 1);
-		return;
-	}
-
-	if (strcmp(interface, zwlr_export_dmabuf_manager_v1_interface.name) == 0) {
-		self->dmabuf_backend.manager =
-			wl_registry_bind(registry, id,
-					 &zwlr_export_dmabuf_manager_v1_interface,
-					 1);
 		return;
 	}
 
@@ -292,9 +257,6 @@ void wayvnc_destroy(struct wayvnc* self)
 	if (self->screencopy_backend.manager)
 		zwlr_screencopy_manager_v1_destroy(self->screencopy_backend.manager);
 
-	if (self->dmabuf_backend.manager)
-		zwlr_export_dmabuf_manager_v1_destroy(self->dmabuf_backend.manager);
-
 	wl_display_disconnect(self->display);
 }
 
@@ -348,13 +310,10 @@ static int init_wayland(struct wayvnc* self)
 	wl_display_dispatch(self->display);
 	wl_display_roundtrip(self->display);
 
-	if (!self->dmabuf_backend.manager && !self->screencopy_backend.manager) {
-		log_error("Compositor supports neither screencopy nor export-dmabuf! Exiting.\n");
+	if (!self->screencopy_backend.manager) {
+		log_error("Compositor doesn't support screencopy! Exiting.\n");
 		goto failure;
 	}
-
-	self->dmabuf_backend.fc.on_done = on_capture_done;
-	self->dmabuf_backend.fc.userdata = self;
 
 	self->screencopy_backend.frame_capture.on_done = on_capture_done;
 	self->screencopy_backend.frame_capture.userdata = self;
@@ -423,16 +382,6 @@ int init_main_loop(struct wayvnc* self)
 		return -1;
 
 	return 0;
-}
-
-uint32_t fourcc_from_gl_format(uint32_t format)
-{
-	switch (format) {
-	case GL_BGRA_EXT: return DRM_FORMAT_XRGB8888;
-	case GL_RGBA: return DRM_FORMAT_XBGR8888;
-	}
-
-	return DRM_FORMAT_INVALID;
 }
 
 static void on_pointer_event(struct nvnc_client* client, uint16_t x, uint16_t y,
@@ -534,35 +483,10 @@ static void wayvnc_damage_region(struct wayvnc* self,
 	nvnc_display_damage_region(self->nvnc_display, damage);
 }
 
-static void wayvnc_damage_whole(struct wayvnc* self)
-{
-	uint16_t width = nvnc_fb_get_width(self->buffer);
-	uint16_t height = nvnc_fb_get_height(self->buffer);
-
-	struct pixman_region16 damage;
-	pixman_region_init_rect(&damage, 0, 0, width, height);
-	wayvnc_damage_region(self, &damage);
-	pixman_region_fini(&damage);
-}
-
-static void on_damage_check_done(struct pixman_region16* damage, void* userdata)
-{
-	struct wayvnc* self = userdata;
-
-	wayvnc_damage_region(self, damage);
-
-	if (wayvnc_start_capture(self, 0) < 0) {
-		log_error("Failed to start capture. Exiting...\n");
-		wayvnc_exit(self);
-	}
-}
-
 void wayvnc_process_frame(struct wayvnc* self)
 {
-//	uint32_t format = fourcc_from_gl_format(self->renderer.read_format);
 	uint32_t width = output_get_transformed_width(self->selected_output);
 	uint32_t height = output_get_transformed_height(self->selected_output);
-	bool is_first_frame = false;
 
 	if (!self->buffer) {
 		self->buffer = nvnc_fb_new(width, height, DRM_FORMAT_XBGR8888);
@@ -571,8 +495,6 @@ void wayvnc_process_frame(struct wayvnc* self)
 		damage_refinery_init(&self->damage_refinery,
 			self->screencopy_backend.back->width,
 			self->screencopy_backend.back->height);
-
-		is_first_frame = true;
 	} else {
 		// TODO: Reallocate
 		assert(width == nvnc_fb_get_width(self->buffer));
@@ -637,7 +559,6 @@ int wayvnc_usage(FILE* stream, int rc)
 "Usage: wayvnc [options] [address [port]]\n"
 "\n"
 "    -C,--config=<path>                        Select a config file.\n"
-"    -c,--frame-capturing=screencopy|dmabuf    Select frame capturing backend.\n"
 "    -o,--output=<name>                        Select output to capture.\n"
 "    -k,--keyboard=<layout>                    Select keyboard layout.\n"
 "    -s,--seat=<name>                          Select seat by name.\n"
@@ -696,7 +617,6 @@ int main(int argc, char* argv[])
 	int port = 0;
 
 	const char* output_name = NULL;
-	enum frame_capture_backend_type fcbackend = FRAME_CAPTURE_BACKEND_NONE;
 	const char* seat_name = NULL;
 	
 	bool overlay_cursor = false;
@@ -706,7 +626,6 @@ int main(int argc, char* argv[])
 
 	static const struct option longopts[] = {
 		{ "config", required_argument, NULL, 'C' },
-		{ "frame-capturing", required_argument, NULL, 'c' },
 		{ "output", required_argument, NULL, 'o' },
 		{ "keyboard", required_argument, NULL, 'k' },
 		{ "seat", required_argument, NULL, 's' },
@@ -723,15 +642,6 @@ int main(int argc, char* argv[])
 		switch (c) {
 		case 'C':
 			cfg_file = optarg;
-			break;
-		case 'c':
-			fcbackend = frame_capture_backend_from_string(optarg);
-			if (fcbackend == FRAME_CAPTURE_BACKEND_NONE) {
-				fprintf(stderr, "Invalid backend: %s\n\n",
-					optarg);
-
-				return wayvnc_usage(stderr, 1);
-			}
 			break;
 		case 'o':
 			output_name = optarg;
@@ -821,7 +731,6 @@ int main(int argc, char* argv[])
 
 	self.selected_output = out;
 	self.selected_seat = seat;
-	self.dmabuf_backend.fc.wl_output = out->wl_output;
 	self.screencopy_backend.frame_capture.wl_output = out->wl_output;
 
 	self.keyboard_backend.virtual_keyboard =
@@ -854,15 +763,6 @@ int main(int argc, char* argv[])
 	if (!gbm_device)
 		goto failure;
 
-	enum renderer_input_type renderer_input_type =
-		fcbackend == FRAME_CAPTURE_BACKEND_DMABUF ?
-			RENDERER_INPUT_DMABUF : RENDERER_INPUT_FB;
-	if (renderer_init(&self.renderer, self.selected_output,
-	                  renderer_input_type) < 0) {
-		log_error("Failed to initialise renderer\n");
-		goto failure;
-	}
-
 	struct aml* aml = aml_new(NULL, 0);
 	if (!aml)
 		goto main_loop_failure;
@@ -878,35 +778,12 @@ int main(int argc, char* argv[])
 	if (self.screencopy_backend.manager)
 		screencopy_init(&self.screencopy_backend);
 
-	if (self.dmabuf_backend.manager)
-		dmabuf_capture_init(&self.dmabuf_backend);
-
-	switch (fcbackend) {
-	case FRAME_CAPTURE_BACKEND_SCREENCOPY:
-		if (!self.screencopy_backend.manager) {
-			log_error("screencopy is not supported by compositor\n");
-			goto capture_failure;
-		}
-
-		self.capture_backend = &self.screencopy_backend.frame_capture;
-		break;
-	case FRAME_CAPTURE_BACKEND_DMABUF:
-		if (!self.screencopy_backend.manager) {
-			log_error("export-dmabuf is not supported by compositor\n");
-			goto capture_failure;
-		}
-
-		self.capture_backend = &self.dmabuf_backend.fc;
-		break;
-	case FRAME_CAPTURE_BACKEND_NONE:
-		if (self.screencopy_backend.manager)
-			self.capture_backend = &self.screencopy_backend.frame_capture;
-		else if (self.dmabuf_backend.manager)
-			self.capture_backend = &self.dmabuf_backend.fc;
-		else
-			goto capture_failure;
-		break;
+	if (!self.screencopy_backend.manager) {
+		log_error("screencopy is not supported by compositor\n");
+		goto capture_failure;
 	}
+
+	self.capture_backend = &self.screencopy_backend.frame_capture;
 
 	pixman_region_init(&self.current_damage);
 
@@ -931,13 +808,10 @@ int main(int argc, char* argv[])
 
 	nvnc_display_unref(self.nvnc_display);
 	nvnc_close(self.nvnc);
-	renderer_destroy(&self.renderer);
 	if (zwp_linux_dmabuf)
 		zwp_linux_dmabuf_v1_destroy(zwp_linux_dmabuf);
 	if (self.screencopy_backend.manager)
 		screencopy_destroy(&self.screencopy_backend);
-	if (self.dmabuf_backend.manager)
-		dmabuf_capture_destroy(&self.dmabuf_backend);
 	wayvnc_destroy(&self);
 	aml_unref(aml);
 
@@ -948,7 +822,6 @@ capture_failure:
 	nvnc_close(self.nvnc);
 nvnc_failure:
 main_loop_failure:
-	renderer_destroy(&self.renderer);
 failure:
 	gbm_device_destroy(gbm_device);
 	if (drm_fd >= 0)

@@ -28,8 +28,6 @@ libm = cc.find_library('m', required: false)
 librt = cc.find_library('rt', required: false)
 
 pixman = dependency('pixman-1')
-egl = dependency('egl')
-glesv2 = dependency('glesv2')
 gbm = dependency('gbm')
 drm = dependency('libdrm')
 xkbcommon = dependency('xkbcommon')
@@ -59,8 +57,6 @@ subdir('protocols')
 
 sources = [
 	'src/main.c',
-	'src/render.c',
-	'src/dmabuf.c',
 	'src/strlcpy.c',
 	'src/shm.c',
 	'src/screencopy.c',
@@ -71,7 +67,6 @@ sources = [
 	'src/smooth.c',
 	'src/cfg.c',
 	'src/intset.c',
-	'src/damage.c',
 	'src/buffer.c',
 	'src/pixels.c',
 	'src/pixman-renderer.c',
@@ -85,8 +80,6 @@ dependencies = [
 	librt,
 	pixman,
 	aml,
-	egl,
-	glesv2,
 	gbm,
 	drm,
 	wayland_client,
@@ -124,5 +117,3 @@ executable(
 	include_directories: inc,
 	install: true,
 )
-
-subdir('test')
