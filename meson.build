@@ -108,8 +108,6 @@ configure_file(
 	configuration: config,
 )
 
-install_subdir('shaders', install_dir: 'share/wayvnc')
-
 executable(
 	'wayvnc',
 	sources,
