@@ -26,7 +26,6 @@
 
 #include "wlr-screencopy-unstable-v1.h"
 #include "buffer.h"
-#include "frame-capture.h"
 #include "shm.h"
 #include "screencopy.h"
 #include "smooth.h"
@@ -36,13 +35,12 @@
 #define RATE_LIMIT 20.0 // Hz
 #define DELAY_SMOOTHER_TIME_CONSTANT 0.5 // s
 
-static void screencopy_stop(struct frame_capture* fc)
+void screencopy_stop(struct screencopy* self)
 {
-	struct screencopy* self = (void*)fc;
 
 	aml_stop(aml_get_default(), self->timer);
 
-	self->frame_capture.status = CAPTURE_STOPPED;
+	self->status = SCREENCOPY_STOPPED;
 
 	if (self->frame) {
 		zwlr_screencopy_frame_v1_destroy(self->frame);
@@ -86,9 +84,9 @@ static void screencopy_buffer_done(void* data,
 
 	struct wv_buffer* buffer = wv_buffer_pool_acquire(self->pool);
 	if (!buffer) {
-		self->frame_capture.status = CAPTURE_FATAL;
-		screencopy_stop(&self->frame_capture);
-		self->frame_capture.on_done(&self->frame_capture);
+		screencopy_stop(self);
+		self->status = SCREENCOPY_FATAL;
+		self->on_done(self);
 		return;
 	}
 
@@ -96,11 +94,6 @@ static void screencopy_buffer_done(void* data,
 
 	assert(!self->front);
 	self->front = buffer;
-
-	self->frame_capture.frame_info.fourcc_format = fourcc;
-	self->frame_capture.frame_info.width = width;
-	self->frame_capture.frame_info.height = height;
-	self->frame_capture.frame_info.stride = stride;
 
 	if (self->is_immediate_copy)
 		zwlr_screencopy_frame_v1_copy(self->frame, buffer->wl_buffer);
@@ -150,7 +143,7 @@ static void screencopy_ready(void* data,
 
 	DTRACE_PROBE1(wayvnc, screencopy_ready, self);
 
-	screencopy_stop(&self->frame_capture);
+	screencopy_stop(self);
 
 	self->last_time = gettime_us();
 
@@ -167,8 +160,8 @@ static void screencopy_ready(void* data,
 
 	wv_buffer_map(self->back);
 
-	self->frame_capture.status = CAPTURE_DONE;
-	self->frame_capture.on_done(&self->frame_capture);
+	self->status = SCREENCOPY_DONE;
+	self->on_done(self);
 }
 
 static void screencopy_failed(void* data,
@@ -178,9 +171,9 @@ static void screencopy_failed(void* data,
 
 	DTRACE_PROBE1(wayvnc, screencopy_failed, self);
 
-	screencopy_stop(&self->frame_capture);
-	self->frame_capture.status = CAPTURE_FAILED;
-	self->frame_capture.on_done(&self->frame_capture);
+	screencopy_stop(self);
+	self->status = SCREENCOPY_FAILED;
+	self->on_done(self);
 }
 
 static void screencopy_damage(void* data,
@@ -195,10 +188,8 @@ static void screencopy_damage(void* data,
 	wv_buffer_damage_rect(self->front, x, y, width, height);
 }
 
-static int screencopy__start_capture(struct frame_capture* fc)
+static int screencopy__start_capture(struct screencopy* self)
 {
-	struct screencopy* self = (void*)fc;
-
 	DTRACE_PROBE1(wayvnc, screencopy_start, self);
 
 	static const struct zwlr_screencopy_frame_v1_listener frame_listener = {
@@ -213,10 +204,8 @@ static int screencopy__start_capture(struct frame_capture* fc)
 
 	self->start_time = gettime_us();
 
-	self->frame =
-		zwlr_screencopy_manager_v1_capture_output(self->manager, 
-							  fc->overlay_cursor,
-							  fc->wl_output);
+	self->frame = zwlr_screencopy_manager_v1_capture_output(self->manager,
+			self->overlay_cursor, self->wl_output);
 	if (!self->frame)
 		return -1;
 
@@ -229,38 +218,40 @@ static int screencopy__start_capture(struct frame_capture* fc)
 static void screencopy__poll(void* obj)
 {
 	struct screencopy* self = aml_get_userdata(obj);
-	struct frame_capture* fc = (struct frame_capture*)self;
 
-	screencopy__start_capture(fc);
+	screencopy__start_capture(self);
 }
 
-static int screencopy_start(struct frame_capture* fc,
-                            enum frame_capture_options options)
+static int screencopy__start(struct screencopy* self, bool is_immediate_copy)
 {
-	struct screencopy* self = (void*)fc;
 
-	if (fc->status == CAPTURE_IN_PROGRESS)
+	if (self->status == SCREENCOPY_IN_PROGRESS)
 		return -1;
 
-	self->is_immediate_copy = !!(options & CAPTURE_NOW);
+	self->is_immediate_copy = is_immediate_copy;
 
 	uint64_t now = gettime_us();
 	double dt = (now - self->last_time) * 1.0e-6;
 	double time_left = (1.0 / RATE_LIMIT - dt - self->delay) * 1.0e3;
 
-	fc->status = CAPTURE_IN_PROGRESS;
+	self->status = SCREENCOPY_IN_PROGRESS;
 
 	if (time_left > 0) {
 		aml_set_duration(self->timer, time_left);
 		return aml_start(aml_get_default(), self->timer);
 	}
 
-	return screencopy__start_capture(fc);
+	return screencopy__start_capture(self);
 }
 
-static void screencopy_render(struct frame_capture* fc,
-                              struct renderer* renderer, struct nvnc_fb* fb)
+int screencopy_start(struct screencopy* self)
 {
+	return screencopy__start(self, false);
+}
+
+int screencopy_start_immediate(struct screencopy* self)
+{
+	return screencopy__start(self, true);
 }
 
 void screencopy_init(struct screencopy* self)
@@ -272,10 +263,6 @@ void screencopy_init(struct screencopy* self)
 	assert(self->timer);
 
 	self->delay_smoother.time_constant = DELAY_SMOOTHER_TIME_CONSTANT;
-
-	self->frame_capture.backend.start = screencopy_start;
-	self->frame_capture.backend.stop = screencopy_stop;
-	self->frame_capture.backend.render = screencopy_render;
 }
 
 void screencopy_destroy(struct screencopy* self)
