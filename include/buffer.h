@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <pixman.h>
 
 struct wl_buffer;
 struct gbm_bo;
@@ -27,6 +28,8 @@ struct wv_buffer {
 	uint32_t format;
 	bool y_inverted;
 
+	struct pixman_region16 damage;
+
 	/* The following is only applicable to DMABUF */
 	struct gbm_bo* bo;
 	void* bo_map_handle;
@@ -47,6 +50,11 @@ void wv_buffer_destroy(struct wv_buffer* self);
 
 int wv_buffer_map(struct wv_buffer* self);
 void wv_buffer_unmap(struct wv_buffer* self);
+
+void wv_buffer_damage_rect(struct wv_buffer* self, int x, int y, int width,
+		int height);
+void wv_buffer_damage_whole(struct wv_buffer* self);
+void wv_buffer_damage_clear(struct wv_buffer* self);
 
 struct wv_buffer_pool* wv_buffer_pool_create(enum wv_buffer_type, int width,
 		int height, int stride, uint32_t format);
