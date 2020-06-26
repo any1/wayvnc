@@ -58,9 +58,6 @@
 #define DEFAULT_ADDRESS "127.0.0.1"
 #define DEFAULT_PORT 5900
 
-#define UDIV_UP(a, b) (((a) + (b) - 1) / (b))
-#define ALIGN_UP(n, a) (UDIV_UP(n, a) * a)
-
 struct wayvnc {
 	bool do_exit;
 
@@ -501,16 +498,11 @@ void wayvnc_process_frame(struct wayvnc* self)
 		assert(height == nvnc_fb_get_height(self->buffer));
 	}
 
-	int damx = self->capture_backend->damage_hint.x;
-	int damy = self->capture_backend->damage_hint.y;
-	int damw = self->capture_backend->damage_hint.width;
-	int damh = self->capture_backend->damage_hint.height;
-
-	struct pixman_region16 hint, txdamage, refined;
-	pixman_region_init_rect(&hint, damx, damy, damw, damh);
+	struct pixman_region16 txdamage, refined;
 	pixman_region_init(&txdamage);
 	pixman_region_init(&refined);
-	damage_refine(&self->damage_refinery, &refined, &hint,
+	damage_refine(&self->damage_refinery, &refined,
+			&self->screencopy_backend.back->damage,
 			self->screencopy_backend.back);
 	wv_region_transform(&txdamage, &refined,
 			self->selected_output->transform,
@@ -520,7 +512,6 @@ void wayvnc_process_frame(struct wayvnc* self)
 	wayvnc_damage_region(self, &txdamage);
 	pixman_region_fini(&refined);
 	pixman_region_fini(&txdamage);
-	pixman_region_fini(&hint);
 
 	if (wayvnc_start_capture(self, 0) < 0) {
 		log_error("Failed to start capture. Exiting...\n");
@@ -621,7 +612,7 @@ int main(int argc, char* argv[])
 	
 	bool overlay_cursor = false;
 
-	static const char* shortopts = "C:c:o:k:s:rh";
+	static const char* shortopts = "C:o:k:s:rh";
 	int drm_fd = -1;
 
 	static const struct option longopts[] = {
