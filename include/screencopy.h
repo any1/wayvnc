@@ -19,7 +19,6 @@
 #include <stdbool.h>
 
 #include "wlr-screencopy-unstable-v1.h"
-#include "frame-capture.h"
 #include "smooth.h"
 #include "buffer.h"
 
@@ -32,14 +31,15 @@ struct aml_timer;
 struct renderer;
 
 enum screencopy_status {
-	SCREENCOPY_STATUS_CAPTURING = 0,
-	SCREENCOPY_STATUS_FATAL,
-	SCREENCOPY_STATUS_FAILED,
-	SCREENCOPY_STATUS_DONE,
+	SCREENCOPY_STOPPED = 0,
+	SCREENCOPY_IN_PROGRESS,
+	SCREENCOPY_FAILED,
+	SCREENCOPY_FATAL,
+	SCREENCOPY_DONE,
 };
 
 struct screencopy {
-	struct frame_capture frame_capture;
+	enum screencopy_status status;
 
 	struct wv_buffer_pool* pool;
 	struct wv_buffer* front;
@@ -49,6 +49,9 @@ struct screencopy {
 	struct zwlr_screencopy_frame_v1* frame;
 	int version;
 
+	void* userdata;
+	void (*on_done)(struct screencopy*);
+
 	uint64_t last_time;
 	uint64_t start_time;
 	struct aml_timer* timer;
@@ -56,6 +59,8 @@ struct screencopy {
 	struct smooth delay_smoother;
 	double delay;
 	bool is_immediate_copy;
+	bool overlay_cursor;
+	struct wl_output* wl_output;
 
 	uint32_t wl_shm_width, wl_shm_height, wl_shm_stride;
 	enum wl_shm_format wl_shm_format;
@@ -67,3 +72,8 @@ struct screencopy {
 
 void screencopy_init(struct screencopy* self);
 void screencopy_destroy(struct screencopy* self);
+
+int screencopy_start(struct screencopy* self);
+int screencopy_start_immediate(struct screencopy* self);
+
+void screencopy_stop(struct screencopy* self);
