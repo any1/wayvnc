@@ -157,14 +157,8 @@ static void screencopy_ready(void* data,
 	double delay = (self->last_time - self->start_time) * 1.0e-6;
 	self->delay = smooth(&self->delay_smoother, delay);
 
-	if (self->is_immediate_copy) {
-		self->frame_capture.damage_hint.x = 0;
-		self->frame_capture.damage_hint.y = 0;
-		self->frame_capture.damage_hint.width =
-			self->frame_capture.frame_info.width;
-		self->frame_capture.damage_hint.height =
-			self->frame_capture.frame_info.height;
-	}
+	if (self->is_immediate_copy)
+		wv_buffer_damage_whole(self->front);
 
 	if (self->back)
 		wv_buffer_pool_release(self->pool, self->back);
@@ -198,10 +192,7 @@ static void screencopy_damage(void* data,
 
 	DTRACE_PROBE1(wayvnc, screencopy_damage, self);
 
-	self->frame_capture.damage_hint.x = x;
-	self->frame_capture.damage_hint.y = y;
-	self->frame_capture.damage_hint.width = width;
-	self->frame_capture.damage_hint.height = height;
+	wv_buffer_damage_rect(self->front, x, y, width, height);
 }
 
 static int screencopy__start_capture(struct frame_capture* fc)

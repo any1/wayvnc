@@ -52,13 +52,6 @@ struct frame_capture {
 	} frame_info;
 
 	struct {
-		uint32_t x;
-		uint32_t y;
-		uint32_t width;
-		uint32_t height;
-	} damage_hint;
-
-	struct {
 		void (*render)(struct frame_capture*, struct renderer*,
 		               struct nvnc_fb* fb);
 		int (*start)(struct frame_capture*, enum frame_capture_options);
