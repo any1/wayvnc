@@ -7,6 +7,7 @@
 #include <libdrm/drm_fourcc.h>
 #include <wayland-client.h>
 #include <gbm.h>
+#include <pixman.h>
 
 #include "linux-dmabuf-unstable-v1.h"
 #include "shm.h"
@@ -53,6 +54,8 @@ struct wv_buffer* wv_buffer_create_shm(int width,
 	wl_shm_pool_destroy(pool);
 	if (!self->wl_buffer)
 		goto shm_failure;
+
+	pixman_region_init(&self->damage);
 
 	close(fd);
 	return self;
@@ -149,6 +152,7 @@ static void wv_buffer_destroy_dmabuf(struct wv_buffer* self)
 
 void wv_buffer_destroy(struct wv_buffer* self)
 {
+	pixman_region_fini(&self->damage);
 	wv_buffer_unmap(self);
 
 	switch (self->type) {
@@ -212,6 +216,23 @@ void wv_buffer_unmap(struct wv_buffer* self)
 	}
 
 	abort();
+}
+
+void wv_buffer_damage_rect(struct wv_buffer* self, int x, int y, int width,
+		int height)
+{
+	pixman_region_union_rect(&self->damage, &self->damage, x, y, width,
+			height);
+}
+
+void wv_buffer_damage_whole(struct wv_buffer* self)
+{
+	wv_buffer_damage_rect(self, 0, 0, self->width, self->height);
+}
+
+void wv_buffer_damage_clear(struct wv_buffer* self)
+{
+	pixman_region_clear(&self->damage);
 }
 
 struct wv_buffer_pool* wv_buffer_pool_create(enum wv_buffer_type type,
@@ -304,6 +325,7 @@ struct wv_buffer* wv_buffer_pool_acquire(struct wv_buffer_pool* pool)
 void wv_buffer_pool_release(struct wv_buffer_pool* pool,
 		struct wv_buffer* buffer)
 {
+	wv_buffer_damage_clear(buffer);
 	wv_buffer_unmap(buffer);
 
 	if (wv_buffer_pool_match_buffer(pool, buffer)) {
