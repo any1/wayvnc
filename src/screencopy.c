@@ -32,7 +32,7 @@
 #include "time-util.h"
 #include "usdt.h"
 
-#define RATE_LIMIT 20.0 // Hz
+#define RATE_LIMIT 30.0 // Hz
 #define DELAY_SMOOTHER_TIME_CONSTANT 0.5 // s
 
 void screencopy_stop(struct screencopy* self)
