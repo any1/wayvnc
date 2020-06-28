@@ -37,7 +37,6 @@
 
 void screencopy_stop(struct screencopy* self)
 {
-
 	aml_stop(aml_get_default(), self->timer);
 
 	self->status = SCREENCOPY_STOPPED;
@@ -90,8 +89,6 @@ static void screencopy_buffer_done(void* data,
 		return;
 	}
 
-	buffer->y_inverted = !self->have_linux_dmabuf;
-
 	assert(!self->front);
 	self->front = buffer;
 
@@ -127,8 +124,10 @@ static void screencopy_flags(void* data,
 {
 	(void)frame;
 
-	// TODO
-//	self->buffer->y_inverted = !!(flags & ZWLR_SCREENCOPY_FRAME_V1_FLAGS_Y_INVERT);
+	struct screencopy* self = data;
+
+	self->front->y_inverted =
+		!!(flags & ZWLR_SCREENCOPY_FRAME_V1_FLAGS_Y_INVERT);
 }
 
 static void screencopy_ready(void* data,
