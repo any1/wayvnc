@@ -804,6 +804,7 @@ int main(int argc, char* argv[])
 		zwp_linux_dmabuf_v1_destroy(zwp_linux_dmabuf);
 	if (self.screencopy.manager)
 		screencopy_destroy(&self.screencopy);
+	gbm_device_destroy(gbm_device);
 	wayvnc_destroy(&self);
 	aml_unref(aml);
 
