@@ -825,7 +825,7 @@ int main(int argc, char* argv[])
 		goto failure;
 	}
 
-	struct aml* aml = aml_new(NULL, 0);
+	struct aml* aml = aml_new();
 	if (!aml)
 		goto main_loop_failure;
 
