@@ -794,7 +794,10 @@ int main(int argc, char* argv[])
 
 	screencopy_stop(&self.screencopy);
 
-	if (self.buffer) nvnc_fb_unref(self.buffer);
+	if (self.buffer) {
+		damage_refinery_destroy(&self.damage_refinery);
+		nvnc_fb_unref(self.buffer);
+	}
 
 	pixman_region_fini(&self.current_damage);
 
