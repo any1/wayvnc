@@ -1,0 +1,7 @@
+{
+	Ignore dlopen bug.
+	Memcheck:Leak
+	...
+	fun:_dl_*
+	...
+}
