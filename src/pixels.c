@@ -21,6 +21,7 @@
 #include <assert.h>
 #include <libdrm/drm_fourcc.h>
 #include <stdbool.h>
+#include <endian.h>
 
 enum wl_shm_format fourcc_to_wl_shm(uint32_t in)
 {
@@ -38,18 +39,65 @@ bool fourcc_to_pixman_fmt(pixman_format_code_t* dst, uint32_t src)
 {
 	assert(!(src & DRM_FORMAT_BIG_ENDIAN));
 
-	/* TODO: Add more, perhaps with the help of
-	 * https://github.com/afrantzis/pixel-format-guide
-	 */
+#define LOWER_R r
+#define LOWER_G g
+#define LOWER_B b
+#define LOWER_A a
+#define LOWER_X x
+#define LOWER_
+#define LOWER(x) LOWER_##x
+
+#define CONCAT_(a, b) a ## b
+#define CONCAT(a, b) CONCAT_(a, b)
+
+#define FMT_DRM(x, y, z, v, a, b, c, d) DRM_FORMAT_##x##y##z##v##a##b##c##d
+
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+#define FMT_PIXMAN(x, y, z, v, a, b, c, d) \
+	CONCAT(CONCAT(CONCAT(CONCAT(CONCAT(CONCAT(CONCAT(CONCAT(\
+	PIXMAN_, LOWER(x)), a), LOWER(y)), b), LOWER(z)), c), LOWER(v)), d)
+#elif
+#define FMT_PIXMAN(x, y, z, v, a, b, c, d) \
+	CONCAT(CONCAT(CONCAT(CONCAT(CONCAT(CONCAT(CONCAT(CONCAT(\
+	PIXMAN_, LOWER(v)), d), LOWER(z)), c), LOWER(y)), b), LOWER(x)), a)
+#endif
+
 	switch (src) {
-	case DRM_FORMAT_ARGB8888: *dst = PIXMAN_a8r8g8b8; break;
-	case DRM_FORMAT_XRGB8888: *dst = PIXMAN_x8r8g8b8; break;
-	case DRM_FORMAT_ABGR8888: *dst = PIXMAN_a8b8g8r8; break;
-	case DRM_FORMAT_XBGR8888: *dst = PIXMAN_x8b8g8r8; break;
-	case DRM_FORMAT_RGBA8888: *dst = PIXMAN_r8g8b8a8; break;
-	case DRM_FORMAT_RGBX8888: *dst = PIXMAN_r8g8b8x8; break;
-	case DRM_FORMAT_BGRA8888: *dst = PIXMAN_b8g8r8a8; break;
-	case DRM_FORMAT_BGRX8888: *dst = PIXMAN_b8g8r8x8; break;
+#define X(...) \
+	case FMT_DRM(__VA_ARGS__): *dst = FMT_PIXMAN(__VA_ARGS__); break
+
+	/* 32 bits */
+	X(A,R,G,B,8,8,8,8);
+	X(A,B,G,R,8,8,8,8);
+	X(X,R,G,B,8,8,8,8);
+	X(X,B,G,R,8,8,8,8);
+	X(R,G,B,A,8,8,8,8);
+	X(B,G,R,A,8,8,8,8);
+	X(R,G,B,X,8,8,8,8);
+	X(B,G,R,X,8,8,8,8);
+
+	/* 24 bits */
+	X(R,G,B,,8,8,8,);
+	X(B,G,R,,8,8,8,);
+
+	/* 16 bits */
+	X(R,G,B,,5,6,5,);
+	X(B,G,R,,5,6,5,);
+
+	/* These are incompatible on big endian */
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+	X(A,R,G,B,1,5,5,5);
+	X(A,B,G,R,1,5,5,5);
+	X(X,R,G,B,1,5,5,5);
+	X(X,B,G,R,1,5,5,5);
+	X(A,R,G,B,4,4,4,4);
+	X(A,B,G,R,4,4,4,4);
+	X(X,R,G,B,4,4,4,4);
+	X(X,B,G,R,4,4,4,4);
+#endif
+
+#undef X
+
 	default: return false;
 	}
 
