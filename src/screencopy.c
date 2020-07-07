@@ -32,7 +32,6 @@
 #include "time-util.h"
 #include "usdt.h"
 
-#define RATE_LIMIT 30.0 // Hz
 #define DELAY_SMOOTHER_TIME_CONSTANT 0.5 // s
 
 void screencopy_stop(struct screencopy* self)
@@ -231,7 +230,7 @@ static int screencopy__start(struct screencopy* self, bool is_immediate_copy)
 
 	uint64_t now = gettime_us();
 	double dt = (now - self->last_time) * 1.0e-6;
-	double time_left = (1.0 / RATE_LIMIT - dt - self->delay) * 1.0e3;
+	double time_left = (1.0 / self->rate_limit - dt - self->delay) * 1.0e3;
 
 	self->status = SCREENCOPY_IN_PROGRESS;
 
