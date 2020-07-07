@@ -252,6 +252,7 @@ void wayvnc_destroy(struct wayvnc* self)
 	if (self->screencopy.manager)
 		zwlr_screencopy_manager_v1_destroy(self->screencopy.manager);
 
+	wl_registry_destroy(self->registry);
 	wl_display_disconnect(self->display);
 }
 
