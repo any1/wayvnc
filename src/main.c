@@ -571,6 +571,7 @@ int wayvnc_usage(FILE* stream, int rc)
 "    -k,--keyboard=<layout>                    Select keyboard layout.\n"
 "    -s,--seat=<name>                          Select seat by name.\n"
 "    -r,--render-cursor                        Enable overlay cursor rendering.\n"
+"    -f,--max-fps=<fps>                        Set the rate limit (default 30).\n"
 "    -h,--help                                 Get help (this text).\n"
 "\n";
 
@@ -628,8 +629,9 @@ int main(int argc, char* argv[])
 	const char* seat_name = NULL;
 	
 	bool overlay_cursor = false;
+	int max_rate = 30;
 
-	static const char* shortopts = "C:o:k:s:rh";
+	static const char* shortopts = "C:o:k:s:rf:h";
 	int drm_fd = -1;
 
 	static const struct option longopts[] = {
@@ -638,6 +640,7 @@ int main(int argc, char* argv[])
 		{ "keyboard", required_argument, NULL, 'k' },
 		{ "seat", required_argument, NULL, 's' },
 		{ "render-cursor", no_argument, NULL, 'r' },
+		{ "max-fps", required_argument, NULL, 'f' },
 		{ "help", no_argument, NULL, 'h' },
 		{ NULL, 0, NULL, 0 }
 	};
@@ -662,6 +665,9 @@ int main(int argc, char* argv[])
 			break;
 		case 'r':
 			overlay_cursor = true;
+			break;
+		case 'f':
+			max_rate = atoi(optarg);
 			break;
 		case 'h':
 			return wayvnc_usage(stdout, 0);
@@ -740,6 +746,7 @@ int main(int argc, char* argv[])
 	self.selected_output = out;
 	self.selected_seat = seat;
 	self.screencopy.wl_output = out->wl_output;
+	self.screencopy.rate_limit = max_rate;
 
 	self.keyboard_backend.virtual_keyboard =
 		zwp_virtual_keyboard_manager_v1_create_virtual_keyboard(

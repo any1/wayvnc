@@ -68,6 +68,8 @@ struct screencopy {
 	bool have_linux_dmabuf;
 	uint32_t dmabuf_width, dmabuf_height;
 	uint32_t fourcc;
+
+	double rate_limit;
 };
 
 void screencopy_init(struct screencopy* self);
