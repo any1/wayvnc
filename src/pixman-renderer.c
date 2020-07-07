@@ -18,6 +18,7 @@
 #include <pixman.h>
 #include <wayland-client.h>
 #include <neatvnc.h>
+#include <assert.h>
 
 #include "buffer.h"
 #include "pixels.h"
@@ -30,12 +31,17 @@ void wv_pixman_render(struct nvnc_fb* dst, const struct wv_buffer* src,
 	uint32_t* dst_pixels = nvnc_fb_get_addr(dst);
 	uint32_t dst_width = nvnc_fb_get_width(dst);
 	uint32_t dst_height = nvnc_fb_get_height(dst);
+	bool ok __attribute__((unused));
 
 	// TODO: Check that both buffers have the same dimensions after applying
 	// transform
 
+	pixman_format_code_t dst_fmt = 0;
+	ok = fourcc_to_pixman_fmt(&dst_fmt, nvnc_fb_get_fourcc_format(dst));
+	assert(ok);
+
 	pixman_image_t* dstimg = pixman_image_create_bits_no_clear(
-			PIXMAN_x8b8g8r8, dst_width, dst_height, dst_pixels,
+			dst_fmt, dst_width, dst_height, dst_pixels,
 			4 * dst_width);
 
 	intptr_t src_offset = src->y_inverted ?
@@ -44,7 +50,9 @@ void wv_pixman_render(struct nvnc_fb* dst, const struct wv_buffer* src,
 	int src_stride = src->y_inverted ? -src->stride : src->stride;
 
 	pixman_format_code_t src_fmt = 0;
-	fourcc_to_pixman_fmt(&src_fmt, src->format);
+	ok = fourcc_to_pixman_fmt(&src_fmt, src->format);
+	assert(ok);
+
 	pixman_image_t* srcimg = pixman_image_create_bits_no_clear(
 			src_fmt, src->width, src->height, src_pixels,
 			src_stride);
