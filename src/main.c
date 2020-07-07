@@ -487,9 +487,10 @@ void wayvnc_process_frame(struct wayvnc* self)
 {
 	uint32_t width = output_get_transformed_width(self->selected_output);
 	uint32_t height = output_get_transformed_height(self->selected_output);
+	uint32_t format = self->screencopy.back->format;
 
 	if (!self->buffer) {
-		self->buffer = nvnc_fb_new(width, height, DRM_FORMAT_XBGR8888);
+		self->buffer = nvnc_fb_new(width, height, format);
 		nvnc_display_set_buffer(self->nvnc_display, self->buffer);
 
 		damage_refinery_init(&self->damage_refinery,
