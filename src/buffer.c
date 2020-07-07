@@ -121,7 +121,8 @@ static struct wv_buffer* wv_buffer_create_dmabuf(int width, int height,
 			mod >> 32, mod & 0xffffffff);
 	self->wl_buffer = zwp_linux_buffer_params_v1_create_immed(params, width,
 			height, fourcc, /* flags */ 0);
-	close(fd); // TODO: Maybe keep this open?
+	zwp_linux_buffer_params_v1_destroy(params);
+	close(fd);
 
 	if (!self->wl_buffer)
 		goto buffer_failure;
@@ -130,6 +131,7 @@ static struct wv_buffer* wv_buffer_create_dmabuf(int width, int height,
 
 buffer_failure:
 fd_failure:
+	zwp_linux_buffer_params_v1_destroy(params);
 params_failure:
 	gbm_bo_destroy(self->bo);
 bo_failure:
