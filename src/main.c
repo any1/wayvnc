@@ -53,6 +53,7 @@
 #include "pixman-renderer.h"
 #include "transform-util.h"
 #include "damage-refinery.h"
+#include "usdt.h"
 
 #define DEFAULT_ADDRESS "127.0.0.1"
 #define DEFAULT_PORT 5900
@@ -471,10 +472,14 @@ static void on_render(struct nvnc_display* display, struct nvnc_fb* fb)
 	if (!self->screencopy.back)
 		return;
 
+	DTRACE_PROBE(wayvnc, render_start);
+
 	enum wl_output_transform transform = self->selected_output->transform;
 	wv_pixman_render(fb, self->screencopy.back, transform,
 			&self->current_damage);
 	pixman_region_clear(&self->current_damage);
+
+	DTRACE_PROBE(wayvnc, render_end);
 }
 
 static void wayvnc_damage_region(struct wayvnc* self,
@@ -506,6 +511,8 @@ void wayvnc_process_frame(struct wayvnc* self)
 		}
 	}
 
+	DTRACE_PROBE(wayvnc, refine_damage_start);
+
 	struct pixman_region16 txdamage, refined;
 	pixman_region_init(&txdamage);
 	pixman_region_init(&refined);
@@ -520,6 +527,8 @@ void wayvnc_process_frame(struct wayvnc* self)
 	wayvnc_damage_region(self, &txdamage);
 	pixman_region_fini(&refined);
 	pixman_region_fini(&txdamage);
+
+	DTRACE_PROBE(wayvnc, refine_damage_end);
 
 	if (wayvnc_start_capture(self) < 0) {
 		log_error("Failed to start capture. Exiting...\n");
