@@ -497,8 +497,11 @@ void wayvnc_process_frame(struct wayvnc* self)
 			self->screencopy.back->height);
 	} else {
 		// TODO: Reallocate
-		assert(width == nvnc_fb_get_width(self->buffer));
-		assert(height == nvnc_fb_get_height(self->buffer));
+		if (width != nvnc_fb_get_width(self->buffer) ||
+		    height != nvnc_fb_get_height(self->buffer)) {
+			wayvnc_exit(self);
+			return;
+		}
 	}
 
 	struct pixman_region16 txdamage, refined;
