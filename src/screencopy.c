@@ -31,6 +31,7 @@
 #include "smooth.h"
 #include "time-util.h"
 #include "usdt.h"
+#include "pixels.h"
 
 #define DELAY_SMOOTHER_TIME_CONSTANT 0.5 // s
 
@@ -63,22 +64,23 @@ static void screencopy_buffer_done(void* data,
 {
 	struct screencopy* self = data;
 	uint32_t width, height, stride, fourcc;
+	enum wv_buffer_type type = WV_BUFFER_UNSPEC;
 
 	if (self->have_linux_dmabuf) {
 		width = self->dmabuf_width;
 		height = self->dmabuf_height;
 		stride = 0;
 		fourcc = self->fourcc;
-		wv_buffer_pool_resize(self->pool, WV_BUFFER_DMABUF, width,
-				height, stride, fourcc);
+		type = WV_BUFFER_DMABUF;
 	} else {
 		width = self->wl_shm_width;
 		height = self->wl_shm_height;
 		stride = self->wl_shm_stride;
-		fourcc = self->fourcc;
-		wv_buffer_pool_resize(self->pool, WV_BUFFER_SHM, width,
-				height, stride, self->wl_shm_format);
+		fourcc = fourcc_from_wl_shm(self->wl_shm_format);
+		type = WV_BUFFER_SHM;
 	}
+
+	wv_buffer_pool_resize(self->pool, type, width, height, stride, fourcc);
 
 	struct wv_buffer* buffer = wv_buffer_pool_acquire(self->pool);
 	if (!buffer) {
