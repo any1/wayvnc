@@ -21,7 +21,6 @@
 #include <assert.h>
 #include <libdrm/drm_fourcc.h>
 #include <stdbool.h>
-#include <endian.h>
 
 enum wl_shm_format fourcc_to_wl_shm(uint32_t in)
 {
@@ -52,11 +51,11 @@ bool fourcc_to_pixman_fmt(pixman_format_code_t* dst, uint32_t src)
 
 #define FMT_DRM(x, y, z, v, a, b, c, d) DRM_FORMAT_##x##y##z##v##a##b##c##d
 
-#if __BYTE_ORDER == __LITTLE_ENDIAN
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 #define FMT_PIXMAN(x, y, z, v, a, b, c, d) \
 	CONCAT(CONCAT(CONCAT(CONCAT(CONCAT(CONCAT(CONCAT(CONCAT(\
 	PIXMAN_, LOWER(x)), a), LOWER(y)), b), LOWER(z)), c), LOWER(v)), d)
-#elif
+#else
 #define FMT_PIXMAN(x, y, z, v, a, b, c, d) \
 	CONCAT(CONCAT(CONCAT(CONCAT(CONCAT(CONCAT(CONCAT(CONCAT(\
 	PIXMAN_, LOWER(v)), d), LOWER(z)), c), LOWER(y)), b), LOWER(x)), a)
