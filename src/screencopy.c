@@ -51,12 +51,14 @@ static void screencopy_linux_dmabuf(void* data,
 			      struct zwlr_screencopy_frame_v1* frame,
 			      uint32_t format, uint32_t width, uint32_t height)
 {
+#ifdef ENABLE_SCREENCOPY_DMABUF
 	struct screencopy* self = data;
 
 	self->have_linux_dmabuf = true;
 	self->dmabuf_width = width;
 	self->dmabuf_height = height;
 	self->fourcc = format;
+#endif
 }
 
 static void screencopy_buffer_done(void* data,
