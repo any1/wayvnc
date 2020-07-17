@@ -172,6 +172,10 @@ static void screencopy_failed(void* data,
 	DTRACE_PROBE1(wayvnc, screencopy_failed, self);
 
 	screencopy_stop(self);
+
+	wv_buffer_pool_release(self->pool, self->front);
+	self->front = NULL;
+
 	self->status = SCREENCOPY_FAILED;
 	self->on_done(self);
 }
@@ -224,7 +228,6 @@ static void screencopy__poll(void* obj)
 
 static int screencopy__start(struct screencopy* self, bool is_immediate_copy)
 {
-
 	if (self->status == SCREENCOPY_IN_PROGRESS)
 		return -1;
 
@@ -232,7 +235,7 @@ static int screencopy__start(struct screencopy* self, bool is_immediate_copy)
 
 	uint64_t now = gettime_us();
 	double dt = (now - self->last_time) * 1.0e-6;
-	double time_left = (1.0 / self->rate_limit - dt - self->delay) * 1.0e3;
+	int32_t time_left = (1.0 / self->rate_limit - dt - self->delay) * 1.0e3;
 
 	self->status = SCREENCOPY_IN_PROGRESS;
 
