@@ -95,7 +95,7 @@ bool fourcc_to_pixman_fmt(pixman_format_code_t* dst, uint32_t src)
 	X(B,G,R,,5,6,5,);
 
 	/* These are incompatible on big endian */
-#if __BYTE_ORDER__ == __LITTLE_ENDIAN__
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 	X(A,R,G,B,1,5,5,5);
 	X(A,B,G,R,1,5,5,5);
 	X(X,R,G,B,1,5,5,5);
