@@ -16,9 +16,9 @@
 
 #pragma once
 
-#include <wayland-client-protocol.h>
 #include <wayland-client.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 struct zxdg_output_v1;
 
@@ -41,6 +41,14 @@ struct output {
 	char model[256];
 	char name[256];
 	char description[256];
+
+	bool is_dimension_changed;
+	bool is_transform_changed;
+
+	void (*on_dimension_change)(struct output*);
+	void (*on_transform_change)(struct output*);
+
+	void* userdata;
 };
 
 struct output* output_new(struct wl_output* wl_output, uint32_t id);
