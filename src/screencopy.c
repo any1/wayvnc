@@ -35,7 +35,7 @@
 
 #define DELAY_SMOOTHER_TIME_CONSTANT 0.5 // s
 
-void screencopy_stop(struct screencopy* self)
+static void screencopy__stop(struct screencopy* self)
 {
 	aml_stop(aml_get_default(), self->timer);
 
@@ -45,6 +45,15 @@ void screencopy_stop(struct screencopy* self)
 		zwlr_screencopy_frame_v1_destroy(self->frame);
 		self->frame = NULL;
 	}
+}
+
+void screencopy_stop(struct screencopy* self)
+{
+	if (self->front)
+		wv_buffer_pool_release(self->pool, self->front);
+	self->front = NULL;
+
+	return screencopy__stop(self);
 }
 
 static void screencopy_linux_dmabuf(void* data,
@@ -86,7 +95,7 @@ static void screencopy_buffer_done(void* data,
 
 	struct wv_buffer* buffer = wv_buffer_pool_acquire(self->pool);
 	if (!buffer) {
-		screencopy_stop(self);
+		screencopy__stop(self);
 		self->status = SCREENCOPY_FATAL;
 		self->on_done(self);
 		return;
@@ -145,7 +154,7 @@ static void screencopy_ready(void* data,
 
 	DTRACE_PROBE1(wayvnc, screencopy_ready, self);
 
-	screencopy_stop(self);
+	screencopy__stop(self);
 
 	self->last_time = gettime_us();
 
@@ -173,7 +182,7 @@ static void screencopy_failed(void* data,
 
 	DTRACE_PROBE1(wayvnc, screencopy_failed, self);
 
-	screencopy_stop(self);
+	screencopy__stop(self);
 
 	wv_buffer_pool_release(self->pool, self->front);
 	self->front = NULL;
