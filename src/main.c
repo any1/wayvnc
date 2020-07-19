@@ -456,12 +456,22 @@ failure:
 
 int wayvnc_start_capture(struct wayvnc* self)
 {
-	return screencopy_start(&self->screencopy);
+	int rc = screencopy_start(&self->screencopy);
+	if (rc < 0) {
+		log_error("Failed to start capture. Exiting...\n");
+		wayvnc_exit(self);
+	}
+	return rc;
 }
 
 int wayvnc_start_capture_immediate(struct wayvnc* self)
 {
-	return screencopy_start_immediate(&self->screencopy);
+	int rc = screencopy_start_immediate(&self->screencopy);
+	if (rc < 0) {
+		log_error("Failed to start capture. Exiting...\n");
+		wayvnc_exit(self);
+	}
+	return rc;
 }
 
 static void on_render(struct nvnc_display* display, struct nvnc_fb* fb)
@@ -489,26 +499,53 @@ static void wayvnc_damage_region(struct wayvnc* self,
 	nvnc_display_damage_region(self->nvnc_display, damage);
 }
 
+// TODO: Handle transform change too
+void on_output_dimension_change(struct output* output)
+{
+	struct wayvnc* self = output->userdata;
+	assert(self->selected_output == output);
+
+	// The buffer must have been set as a result of a screencopy frame
+	if (!self->buffer)
+		return;
+
+	log_debug("Output dimensions changed. Restarting frame capturer...\n");
+
+	screencopy_stop(&self->screencopy);
+	wayvnc_start_capture_immediate(self);
+}
+
 void wayvnc_process_frame(struct wayvnc* self)
 {
 	uint32_t width = output_get_transformed_width(self->selected_output);
 	uint32_t height = output_get_transformed_height(self->selected_output);
 	uint32_t format = self->screencopy.back->format;
 
+	if ((int)self->selected_output->width != self->screencopy.back->width
+	   || (int)self->selected_output->height != self->screencopy.back->height) {
+		log_debug("Frame dimensions don't match output. Recapturing frame...\n");
+		wayvnc_start_capture_immediate(self);
+		return;
+	}
+
+	if (self->buffer && (width != nvnc_fb_get_width(self->buffer) ||
+			height != nvnc_fb_get_height(self->buffer))) {
+		log_debug("Frame dimensions changed. Resizing...\n");
+
+		nvnc_fb_unref(self->buffer);
+		self->buffer = NULL;
+		damage_refinery_destroy(&self->damage_refinery);
+	}
+
+	// TODO: Maybe the buffer needs to be changed inside on_render?
 	if (!self->buffer) {
 		self->buffer = nvnc_fb_new(width, height, format);
 		nvnc_display_set_buffer(self->nvnc_display, self->buffer);
+		log_debug("Set nvnc buffer: %p\n", self->buffer);
 
 		damage_refinery_init(&self->damage_refinery,
 			self->screencopy.back->width,
 			self->screencopy.back->height);
-	} else {
-		// TODO: Reallocate
-		if (width != nvnc_fb_get_width(self->buffer) ||
-		    height != nvnc_fb_get_height(self->buffer)) {
-			wayvnc_exit(self);
-			return;
-		}
 	}
 
 	DTRACE_PROBE(wayvnc, refine_damage_start);
@@ -530,10 +567,7 @@ void wayvnc_process_frame(struct wayvnc* self)
 
 	DTRACE_PROBE(wayvnc, refine_damage_end);
 
-	if (wayvnc_start_capture(self) < 0) {
-		log_error("Failed to start capture. Exiting...\n");
-		wayvnc_exit(self);
-	}
+	wayvnc_start_capture(self);
 }
 
 void on_capture_done(struct screencopy* sc)
@@ -550,10 +584,7 @@ void on_capture_done(struct screencopy* sc)
 		wayvnc_exit(self);
 		break;
 	case SCREENCOPY_FAILED:
-		if (wayvnc_start_capture_immediate(self) < 0) {
-			log_error("Failed to start capture. Exiting...\n");
-			wayvnc_exit(self);
-		}
+		wayvnc_start_capture_immediate(self);
 		break;
 	case SCREENCOPY_DONE:
 		wayvnc_process_frame(self);
@@ -765,6 +796,9 @@ int main(int argc, char* argv[])
 			self.pointer_manager, self.selected_seat->wl_seat);
 
 	pointer_init(&self.pointer_backend);
+
+	out->on_dimension_change = on_output_dimension_change;
+	out->userdata = &self;
 
 	char render_node[256];
 	if (find_render_node(render_node, sizeof(render_node)) < 0)
