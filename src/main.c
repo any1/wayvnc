@@ -92,6 +92,7 @@ struct wayvnc {
 
 	const char* kb_layout;
 
+	uint32_t damage_area_sum;
 	uint32_t n_frames_captured;
 	uint32_t n_frames_rendered;
 };
@@ -520,13 +521,28 @@ void on_output_dimension_change(struct output* output)
 	wayvnc_start_capture_immediate(self);
 }
 
+static uint32_t calculate_region_area(struct pixman_region16* region)
+{
+	uint32_t area = 0;
+
+	int n_rects = 0;
+	struct pixman_box16* rects = pixman_region_rectangles(region,
+		&n_rects);
+
+	for (int i = 0; i < n_rects; ++i) {
+		int width = rects[i].x2 - rects[i].x1;
+		int height = rects[i].y2 - rects[i].y1;
+		area += width * height;
+	}
+
+	return area;
+}
+
 void wayvnc_process_frame(struct wayvnc* self)
 {
 	uint32_t width = output_get_transformed_width(self->selected_output);
 	uint32_t height = output_get_transformed_height(self->selected_output);
 	uint32_t format = self->screencopy.back->format;
-
-	self->n_frames_captured++;
 
 	if ((int)self->selected_output->width != self->screencopy.back->width
 	   || (int)self->selected_output->height != self->screencopy.back->height) {
@@ -554,6 +570,10 @@ void wayvnc_process_frame(struct wayvnc* self)
 			self->screencopy.back->width,
 			self->screencopy.back->height);
 	}
+
+	self->n_frames_captured++;
+	self->damage_area_sum +=
+		calculate_region_area(&self->screencopy.back->damage);
 
 	DTRACE_PROBE(wayvnc, refine_damage_start);
 
@@ -659,11 +679,17 @@ static void on_perf_tick(void* obj)
 {
 	struct wayvnc* self = aml_get_userdata(obj);
 
-	printf("Frames captured: %"PRIu32", rendered: %"PRIu32"\n",
-			self->n_frames_captured, self->n_frames_rendered);
+	double total_area = self->selected_output->width * self->selected_output->height;
+	double area_avg = (double)self->damage_area_sum / (double)self->n_frames_captured;
+	double relative_area_avg = 100.0 * area_avg / total_area;
+
+	printf("Frames captured: %"PRIu32", rendered: %"PRIu32", average reported frame damage: %.1f %%\n",
+			self->n_frames_captured, self->n_frames_rendered,
+			relative_area_avg);
 
 	self->n_frames_captured = 0;
 	self->n_frames_rendered = 0;
+	self->damage_area_sum = 0;
 }
 
 static void start_performance_ticker(struct wayvnc* self)
