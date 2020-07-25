@@ -91,6 +91,9 @@ struct wayvnc {
 	struct pixman_region16 current_damage;
 
 	const char* kb_layout;
+
+	uint32_t n_frames_captured;
+	uint32_t n_frames_rendered;
 };
 
 void wayvnc_exit(struct wayvnc* self);
@@ -482,6 +485,8 @@ static void on_render(struct nvnc_display* display, struct nvnc_fb* fb)
 	if (!self->screencopy.back)
 		return;
 
+	self->n_frames_rendered++;
+
 	DTRACE_PROBE(wayvnc, render_start);
 
 	enum wl_output_transform transform = self->selected_output->transform;
@@ -520,6 +525,8 @@ void wayvnc_process_frame(struct wayvnc* self)
 	uint32_t width = output_get_transformed_width(self->selected_output);
 	uint32_t height = output_get_transformed_height(self->selected_output);
 	uint32_t format = self->screencopy.back->format;
+
+	self->n_frames_captured++;
 
 	if ((int)self->selected_output->width != self->screencopy.back->width
 	   || (int)self->selected_output->height != self->screencopy.back->height) {
@@ -647,6 +654,28 @@ int check_cfg_sanity(struct cfg* cfg)
 	return 0;
 }
 
+static void on_perf_tick(void* obj)
+{
+	struct wayvnc* self = aml_get_userdata(obj);
+
+	printf("Frames captured: %"PRIu32", rendered: %"PRIu32"\n",
+			self->n_frames_captured, self->n_frames_rendered);
+
+	self->n_frames_captured = 0;
+	self->n_frames_rendered = 0;
+}
+
+static void start_performance_ticker(struct wayvnc* self)
+{
+	struct aml_ticker* ticker = aml_ticker_new(1000, on_perf_tick, self,
+		NULL);
+	if (!ticker)
+		return;
+
+	aml_start(aml_get_default(), ticker);
+	aml_unref(ticker);
+}
+
 int main(int argc, char* argv[])
 {
 	struct wayvnc self = { 0 };
@@ -660,9 +689,10 @@ int main(int argc, char* argv[])
 	const char* seat_name = NULL;
 	
 	bool overlay_cursor = false;
+	bool show_performance = false;
 	int max_rate = 30;
 
-	static const char* shortopts = "C:o:k:s:rf:h";
+	static const char* shortopts = "C:o:k:s:rf:hp";
 	int drm_fd = -1;
 
 	static const struct option longopts[] = {
@@ -673,6 +703,7 @@ int main(int argc, char* argv[])
 		{ "render-cursor", no_argument, NULL, 'r' },
 		{ "max-fps", required_argument, NULL, 'f' },
 		{ "help", no_argument, NULL, 'h' },
+		{ "show-performance", no_argument, NULL, 'p' },
 		{ NULL, 0, NULL, 0 }
 	};
 
@@ -699,6 +730,9 @@ int main(int argc, char* argv[])
 			break;
 		case 'f':
 			max_rate = atoi(optarg);
+			break;
+		case 'p':
+			show_performance = true;
 			break;
 		case 'h':
 			return wayvnc_usage(stdout, 0);
@@ -838,6 +872,9 @@ int main(int argc, char* argv[])
 
 	if (wayvnc_start_capture(&self) < 0)
 		goto capture_failure;
+
+	if (show_performance)
+		start_performance_ticker(&self);
 
 	wl_display_dispatch(self.display);
 
