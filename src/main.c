@@ -610,6 +610,7 @@ int wayvnc_usage(FILE* stream, int rc)
 "    -s,--seat=<name>                          Select seat by name.\n"
 "    -r,--render-cursor                        Enable overlay cursor rendering.\n"
 "    -f,--max-fps=<fps>                        Set the rate limit (default 30).\n"
+"    -p,--show-performance                     Show performance counters.\n"
 "    -h,--help                                 Get help (this text).\n"
 "\n";
 
