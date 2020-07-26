@@ -101,6 +101,14 @@ void wayvnc_exit(struct wayvnc* self);
 void on_capture_done(struct screencopy* sc);
 static void on_render(struct nvnc_display* display, struct nvnc_fb* fb);
 
+#if defined(GIT_VERSION)
+static const char wayvnc_version[] = GIT_VERSION;
+#elif defined(PROJECT_VERSION)
+static const char wayvnc_version[] = PROJECT_VERSION;
+#else
+static const char wayvnc_version[] = "UNKNOWN";
+#endif
+
 struct wl_shm* wl_shm = NULL;
 struct zwp_linux_dmabuf_v1* zwp_linux_dmabuf = NULL;
 struct gbm_device* gbm_device = NULL;
@@ -631,6 +639,7 @@ int wayvnc_usage(FILE* stream, int rc)
 "    -r,--render-cursor                        Enable overlay cursor rendering.\n"
 "    -f,--max-fps=<fps>                        Set the rate limit (default 30).\n"
 "    -p,--show-performance                     Show performance counters.\n"
+"    -V,--version                              Show version info.\n"
 "    -h,--help                                 Get help (this text).\n"
 "\n";
 
@@ -703,6 +712,14 @@ static void start_performance_ticker(struct wayvnc* self)
 	aml_unref(ticker);
 }
 
+int show_version(void)
+{
+	printf("wayvnc: %s\n", wayvnc_version);
+	printf("neatvnc: %s\n", nvnc_version);
+	printf("aml: %s\n", aml_version);
+	return 0;
+}
+
 int main(int argc, char* argv[])
 {
 	struct wayvnc self = { 0 };
@@ -719,7 +736,7 @@ int main(int argc, char* argv[])
 	bool show_performance = false;
 	int max_rate = 30;
 
-	static const char* shortopts = "C:o:k:s:rf:hp";
+	static const char* shortopts = "C:o:k:s:rf:hpV";
 	int drm_fd = -1;
 
 	static const struct option longopts[] = {
@@ -731,6 +748,7 @@ int main(int argc, char* argv[])
 		{ "max-fps", required_argument, NULL, 'f' },
 		{ "help", no_argument, NULL, 'h' },
 		{ "show-performance", no_argument, NULL, 'p' },
+		{ "version", no_argument, NULL, 'V' },
 		{ NULL, 0, NULL, 0 }
 	};
 
@@ -761,6 +779,8 @@ int main(int argc, char* argv[])
 		case 'p':
 			show_performance = true;
 			break;
+		case 'V':
+			return show_version();
 		case 'h':
 			return wayvnc_usage(stdout, 0);
 		default:
