@@ -58,6 +58,8 @@
 #define DEFAULT_ADDRESS "127.0.0.1"
 #define DEFAULT_PORT 5900
 
+#define MAYBE_UNUSED __attribute__((unused))
+
 struct wayvnc {
 	bool do_exit;
 
@@ -338,7 +340,7 @@ void on_wayland_event(void* obj)
 {
 	struct wayvnc* self = aml_get_userdata(obj);
 
-	int rc = wl_display_prepare_read(self->display);
+	int rc MAYBE_UNUSED = wl_display_prepare_read(self->display);
 	assert(rc == 0);
 
 	if (wl_display_read_events(self->display) < 0) {
