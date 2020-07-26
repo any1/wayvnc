@@ -30,6 +30,7 @@
 #include "sys/queue.h"
 #include "buffer.h"
 #include "pixels.h"
+#include "config.h"
 
 extern struct wl_shm* wl_shm;
 extern struct zwp_linux_dmabuf_v1* zwp_linux_dmabuf;
@@ -42,8 +43,10 @@ enum wv_buffer_type wv_buffer_get_available_types(void)
 	if (wl_shm)
 		type |= WV_BUFFER_SHM;
 
+#ifdef ENABLE_SCREENCOPY_DMABUF
 	if (zwp_linux_dmabuf && gbm_device)
 		type |= WV_BUFFER_DMABUF;
+#endif
 
 	return type;
 }
@@ -99,6 +102,7 @@ failure:
 	return NULL;
 }
 
+#ifdef ENABLE_SCREENCOPY_DMABUF
 static struct wv_buffer* wv_buffer_create_dmabuf(int width, int height,
 		uint32_t fourcc)
 {
@@ -152,6 +156,7 @@ bo_failure:
 	free(self);
 	return NULL;
 }
+#endif
 
 struct wv_buffer* wv_buffer_create(enum wv_buffer_type type, int width,
 		int height, int stride, uint32_t fourcc)
@@ -159,8 +164,10 @@ struct wv_buffer* wv_buffer_create(enum wv_buffer_type type, int width,
 	switch (type) {
 	case WV_BUFFER_SHM:
 		return wv_buffer_create_shm(width, height, stride, fourcc);
+#ifdef ENABLE_SCREENCOPY_DMABUF
 	case WV_BUFFER_DMABUF:
 		return wv_buffer_create_dmabuf(width, height, fourcc);
+#endif
 	case WV_BUFFER_UNSPEC:;
 	}
 
@@ -175,12 +182,14 @@ static void wv_buffer_destroy_shm(struct wv_buffer* self)
 	free(self);
 }
 
+#ifdef ENABLE_SCREENCOPY_DMABUF
 static void wv_buffer_destroy_dmabuf(struct wv_buffer* self)
 {
 	wl_buffer_destroy(self->wl_buffer);
 	gbm_bo_destroy(self->bo);
 	free(self);
 }
+#endif
 
 void wv_buffer_destroy(struct wv_buffer* self)
 {
@@ -191,15 +200,18 @@ void wv_buffer_destroy(struct wv_buffer* self)
 	case WV_BUFFER_SHM:
 		wv_buffer_destroy_shm(self);
 		return;
+#ifdef ENABLE_SCREENCOPY_DMABUF
 	case WV_BUFFER_DMABUF:
 		wv_buffer_destroy_dmabuf(self);
 		return;
+#endif
 	case WV_BUFFER_UNSPEC:;
 	}
 
 	abort();
 }
 
+#ifdef ENABLE_SCREENCOPY_DMABUF
 static int wv_buffer_map_dmabuf(struct wv_buffer* self)
 {
 	if (self->bo_map_handle)
@@ -215,34 +227,41 @@ static int wv_buffer_map_dmabuf(struct wv_buffer* self)
 	self->bo_map_handle = NULL;
 	return -1;
 }
+#endif
 
 int wv_buffer_map(struct wv_buffer* self)
 {
 	switch (self->type) {
 	case WV_BUFFER_SHM:
 		return 0;
+#ifdef ENABLE_SCREENCOPY_DMABUF
 	case WV_BUFFER_DMABUF:
 		return wv_buffer_map_dmabuf(self);
+#endif
 	case WV_BUFFER_UNSPEC:;
 	}
 
 	abort();
 }
 
+#ifdef ENABLE_SCREENCOPY_DMABUF
 static void wv_buffer_unmap_dmabuf(struct wv_buffer* self)
 {
 	if (self->bo_map_handle)
 		gbm_bo_unmap(self->bo, self->bo_map_handle);
 	self->bo_map_handle = NULL;
 }
+#endif
 
 void wv_buffer_unmap(struct wv_buffer* self)
 {
 	switch (self->type) {
 	case WV_BUFFER_SHM:
 		return;
+#ifdef ENABLE_SCREENCOPY_DMABUF
 	case WV_BUFFER_DMABUF:
 		return wv_buffer_unmap_dmabuf(self);
+#endif
 	case WV_BUFFER_UNSPEC:;
 
 	}
@@ -327,12 +346,13 @@ static bool wv_buffer_pool_match_buffer(struct wv_buffer_pool* pool,
 			return false;
 
 		/* fall-through */
+#ifdef ENABLE_SCREENCOPY_DMABUF
 	case WV_BUFFER_DMABUF:
 		if (pool->width != buffer->width
 		    || pool->height != buffer->height
 		    || pool->format != buffer->format)
 			return false;
-
+#endif
 		return true;
 	case WV_BUFFER_UNSPEC:
 		abort();

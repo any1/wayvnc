@@ -41,7 +41,7 @@ libm = cc.find_library('m', required: false)
 librt = cc.find_library('rt', required: false)
 
 pixman = dependency('pixman-1')
-gbm = dependency('gbm')
+gbm = dependency('gbm', required: get_option('screencopy-dmabuf'))
 drm = dependency('libdrm')
 xkbcommon = dependency('xkbcommon')
 wayland_client = dependency('wayland-client')
@@ -114,6 +114,10 @@ if cc.has_function('memfd_create')
 	config.set('HAVE_MEMFD_CREATE', true)
 elif cc.has_function('SYS_memfd_create', prefix : '#include <sys/syscall.h>')
 	config.set('HAVE_MEMFD', true)
+endif
+
+if gbm.found() and not get_option('screencopy-dmabuf').disabled()
+	config.set('ENABLE_SCREENCOPY_DMABUF', true)
 endif
 
 configure_file(

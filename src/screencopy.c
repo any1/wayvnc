@@ -32,6 +32,7 @@
 #include "time-util.h"
 #include "usdt.h"
 #include "pixels.h"
+#include "config.h"
 
 #define DELAY_SMOOTHER_TIME_CONSTANT 0.5 // s
 
@@ -63,6 +64,9 @@ static void screencopy_linux_dmabuf(void* data,
 #ifdef ENABLE_SCREENCOPY_DMABUF
 	struct screencopy* self = data;
 
+	if (!(wv_buffer_get_available_types() & WV_BUFFER_DMABUF))
+		return;
+
 	self->have_linux_dmabuf = true;
 	self->dmabuf_width = width;
 	self->dmabuf_height = height;
@@ -77,13 +81,16 @@ static void screencopy_buffer_done(void* data,
 	uint32_t width, height, stride, fourcc;
 	enum wv_buffer_type type = WV_BUFFER_UNSPEC;
 
+#ifdef ENABLE_SCREENCOPY_DMABUF
 	if (self->have_linux_dmabuf) {
 		width = self->dmabuf_width;
 		height = self->dmabuf_height;
 		stride = 0;
 		fourcc = self->fourcc;
 		type = WV_BUFFER_DMABUF;
-	} else {
+	} else
+#endif
+	{
 		width = self->wl_shm_width;
 		height = self->wl_shm_height;
 		stride = self->wl_shm_stride;

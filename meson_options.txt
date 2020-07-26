@@ -1,0 +1,2 @@
+option('screencopy-dmabuf', type: 'feature', value: 'disabled',
+	description: 'Enable GPU-side screencopy (experimental)')

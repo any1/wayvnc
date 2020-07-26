@@ -17,6 +17,7 @@
 #pragma once
 
 #include "sys/queue.h"
+#include "config.h"
 
 #include <unistd.h>
 #include <stdbool.h>
@@ -29,7 +30,9 @@ struct gbm_bo;
 enum wv_buffer_type {
 	WV_BUFFER_UNSPEC = 0,
 	WV_BUFFER_SHM,
+#ifdef ENABLE_SCREENCOPY_DMABUF
 	WV_BUFFER_DMABUF,
+#endif
 };
 
 struct wv_buffer {

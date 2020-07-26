@@ -34,8 +34,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <gbm.h>
-#include <xf86drm.h>
 
 #include "wlr-screencopy-unstable-v1.h"
 #include "wlr-virtual-pointer-unstable-v1.h"
@@ -54,6 +52,11 @@
 #include "transform-util.h"
 #include "damage-refinery.h"
 #include "usdt.h"
+
+#ifdef ENABLE_SCREENCOPY_DMABUF
+#include <gbm.h>
+#include <xf86drm.h>
+#endif
 
 #define DEFAULT_ADDRESS "127.0.0.1"
 #define DEFAULT_PORT 5900
@@ -229,6 +232,7 @@ static void registry_remove(void* data, struct wl_registry* registry,
 	}
 }
 
+#ifdef ENABLE_SCREENCOPY_DMABUF
 static int find_render_node(char *node, size_t maxlen) {
 	bool r = -1;
 	drmDevice *devices[64];
@@ -247,6 +251,26 @@ static int find_render_node(char *node, size_t maxlen) {
 	drmFreeDevices(devices, n);
 	return r;
 }
+
+static int init_render_node(int* fd)
+{
+	char render_node[256];
+	if (find_render_node(render_node, sizeof(render_node)) < 0)
+		return -1;
+
+	*fd = open(render_node, O_RDWR);
+	if (*fd < 0)
+		return -1;
+
+	gbm_device = gbm_create_device(*fd);
+	if (!gbm_device) {
+		close(*fd);
+		return -1;
+	}
+
+	return 0;
+}
+#endif
 
 void wayvnc_destroy(struct wayvnc* self)
 {
@@ -739,7 +763,7 @@ int main(int argc, char* argv[])
 	int max_rate = 30;
 
 	static const char* shortopts = "C:o:k:s:rf:hpV";
-	int drm_fd = -1;
+	int drm_fd MAYBE_UNUSED = -1;
 
 	static const struct option longopts[] = {
 		{ "config", required_argument, NULL, 'C' },
@@ -883,17 +907,11 @@ int main(int argc, char* argv[])
 	out->on_dimension_change = on_output_dimension_change;
 	out->userdata = &self;
 
-	char render_node[256];
-	if (find_render_node(render_node, sizeof(render_node)) < 0)
-		goto failure;
-
-	drm_fd = open(render_node, O_RDWR);
-	if (drm_fd < 0)
-		goto failure;
-
-	gbm_device = gbm_create_device(drm_fd);
-	if (!gbm_device)
-		goto failure;
+#ifdef ENABLE_SCREENCOPY_DMABUF
+	if (init_render_node(&drm_fd) < 0) {
+		log_error("Failed to initialise DRM render node. No GPU acceleration will be available.\n");
+	}
+#endif
 
 	struct aml* aml = aml_new();
 	if (!aml)
@@ -948,7 +966,12 @@ int main(int argc, char* argv[])
 		zwp_linux_dmabuf_v1_destroy(zwp_linux_dmabuf);
 	if (self.screencopy.manager)
 		screencopy_destroy(&self.screencopy);
-	gbm_device_destroy(gbm_device);
+#ifdef ENABLE_SCREENCOPY_DMABUF
+	if (gbm_device) {
+		gbm_device_destroy(gbm_device);
+		close(drm_fd);
+	}
+#endif
 	wayvnc_destroy(&self);
 	aml_unref(aml);
 
@@ -960,9 +983,12 @@ capture_failure:
 nvnc_failure:
 main_loop_failure:
 failure:
-	gbm_device_destroy(gbm_device);
+#ifdef ENABLE_SCREENCOPY_DMABUF
+	if (gbm_device)
+		gbm_device_destroy(gbm_device);
 	if (drm_fd >= 0)
 		close(drm_fd);
+#endif
 	wayvnc_destroy(&self);
 	return 1;
 }
