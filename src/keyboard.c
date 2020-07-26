@@ -34,6 +34,8 @@
 #include "logging.h"
 #include "intset.h"
 
+#define MAYBE_UNUSED __attribute__((unused))
+
 struct table_entry {
 	xkb_keysym_t symbol;
 	xkb_keycode_t code;
@@ -131,10 +133,11 @@ static void keyboard__dump_entry(const struct keyboard* self,
 	char sym_name[256];
 	get_symbol_name(entry->symbol, sym_name, sizeof(sym_name));
 
-	const char* code_name =
+	const char* code_name MAYBE_UNUSED =
 		xkb_keymap_key_get_name(self->keymap, entry->code);
 
-	bool is_pressed = intset_is_set(&self->key_state, entry->code);
+	bool is_pressed MAYBE_UNUSED =
+		intset_is_set(&self->key_state, entry->code);
 
 	log_debug("symbol=%s level=%d code=%s %s\n", sym_name, entry->level,
 	          code_name, is_pressed ? "pressed" : "released");
@@ -295,7 +298,7 @@ static struct table_entry* match_level(struct keyboard* self,
 			break;
 	}
 
-	char name[256];
+	char name[256] MAYBE_UNUSED;
 	log_debug("Failed to match level on symbol: %s\n",
 	          get_symbol_name(symbol, name, sizeof(name)));
 
