@@ -35,6 +35,19 @@ extern struct wl_shm* wl_shm;
 extern struct zwp_linux_dmabuf_v1* zwp_linux_dmabuf;
 extern struct gbm_device* gbm_device;
 
+enum wv_buffer_type wv_buffer_get_available_types(void)
+{
+	enum wv_buffer_type type = 0;
+
+	if (wl_shm)
+		type |= WV_BUFFER_SHM;
+
+	if (zwp_linux_dmabuf && gbm_device)
+		type |= WV_BUFFER_DMABUF;
+
+	return type;
+}
+
 struct wv_buffer* wv_buffer_create_shm(int width,
 		int height, int stride, uint32_t fourcc)
 {
@@ -90,6 +103,7 @@ static struct wv_buffer* wv_buffer_create_dmabuf(int width, int height,
 		uint32_t fourcc)
 {
 	assert(zwp_linux_dmabuf);
+	assert(gbm_device);
 
 	struct wv_buffer* self = calloc(1, sizeof(*self));
 	if (!self)

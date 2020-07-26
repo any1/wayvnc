@@ -60,6 +60,8 @@ struct wv_buffer_pool {
 	uint32_t format;
 };
 
+enum wv_buffer_type wv_buffer_get_available_types(void);
+
 struct wv_buffer* wv_buffer_create(enum wv_buffer_type, int width, int height,
 		int stride, uint32_t fourcc);
 void wv_buffer_destroy(struct wv_buffer* self);
