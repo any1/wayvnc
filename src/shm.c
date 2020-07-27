@@ -31,7 +31,7 @@ static inline int memfd_create(const char *name, unsigned int flags) {
 }
 #endif
 
-#ifndef HAVE_MEMFD
+#if !defined(HAVE_MEMFD) && !defined(__FreeBSD__)
 static void randname(char *buf)
 {
 	struct timespec ts;
