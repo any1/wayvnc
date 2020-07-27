@@ -22,7 +22,6 @@
 #include <sys/mman.h>
 #include <libdrm/drm_fourcc.h>
 #include <wayland-client.h>
-#include <gbm.h>
 #include <pixman.h>
 
 #include "linux-dmabuf-unstable-v1.h"
@@ -31,6 +30,10 @@
 #include "buffer.h"
 #include "pixels.h"
 #include "config.h"
+
+#ifdef ENABLE_SCREENCOPY_DMABUF
+#include <gbm.h>
+#endif
 
 extern struct wl_shm* wl_shm;
 extern struct zwp_linux_dmabuf_v1* zwp_linux_dmabuf;
