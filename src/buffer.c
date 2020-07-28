@@ -351,11 +351,12 @@ static bool wv_buffer_pool_match_buffer(struct wv_buffer_pool* pool,
 		/* fall-through */
 #ifdef ENABLE_SCREENCOPY_DMABUF
 	case WV_BUFFER_DMABUF:
+#endif
 		if (pool->width != buffer->width
 		    || pool->height != buffer->height
 		    || pool->format != buffer->format)
 			return false;
-#endif
+
 		return true;
 	case WV_BUFFER_UNSPEC:
 		abort();
@@ -366,6 +367,7 @@ static bool wv_buffer_pool_match_buffer(struct wv_buffer_pool* pool,
 
 struct wv_buffer* wv_buffer_pool_acquire(struct wv_buffer_pool* pool)
 {
+
 	struct wv_buffer* buffer = TAILQ_FIRST(&pool->queue);
 	if (buffer) {
 		assert(wv_buffer_pool_match_buffer(pool, buffer));
