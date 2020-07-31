@@ -12,15 +12,7 @@ support, join the #wayvnc IRC channel on freenode.
 ## Installing
 ### archlinux
 ```
-git clone https://aur.archlinux.org/neatvnc.git
-cd neatvnc
-makepkg -si
-cd -
-
-git clone https://aur.archlinux.org/wayvnc.git
-cd wayvnc
-makepkg -si
-cd -
+yay -S wayvnc
 ```
 
 ### FreeBSD
