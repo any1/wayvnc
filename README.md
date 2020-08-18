@@ -25,6 +25,12 @@ pkg install wayvnc
 dnf install wayvnc
 ```
 
+### openSUSE Tumbleweed
+
+```
+zypper install wayvnc
+```
+
 ## Building
 ### Runtime Dependencies
  * aml
