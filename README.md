@@ -31,6 +31,12 @@ dnf install wayvnc
 zypper install wayvnc
 ```
 
+### Void Linux
+
+```
+xbps-install wayvnc
+```
+
 ## Building
 ### Runtime Dependencies
  * aml
