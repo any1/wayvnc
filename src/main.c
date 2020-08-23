@@ -475,9 +475,12 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port)
 
 	nvnc_display_set_render_fn(self->nvnc_display, on_render);
 
-	if (self->cfg.enable_auth)
-		nvnc_enable_auth(self->nvnc, self->cfg.private_key_file,
-		                 self->cfg.certificate_file, on_auth, self);
+	if (self->cfg.enable_auth &&
+	    nvnc_enable_auth(self->nvnc, self->cfg.private_key_file,
+	                     self->cfg.certificate_file, on_auth, self) < 0) {
+		log_error("Failed to enable authentication\n");
+		goto failure;
+	}
 
 	if (self->pointer_manager)
 		nvnc_set_pointer_fn(self->nvnc, on_pointer_event);
