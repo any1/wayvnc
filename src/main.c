@@ -274,6 +274,8 @@ static int init_render_node(int* fd)
 
 void wayvnc_destroy(struct wayvnc* self)
 {
+	cfg_destroy(&self->cfg);
+
 	output_list_destroy(&self->outputs);
 	seat_list_destroy(&self->seats);
 

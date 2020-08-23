@@ -129,11 +129,13 @@ int cfg_load(struct cfg* self, const char* requested_path)
 			goto failure;
 	}
 
+	free(line);
 	fclose(stream);
 	return 0;
 
 failure:
 	cfg_destroy(self);
+	free(line);
 	fclose(stream);
 	return lineno;
 }
