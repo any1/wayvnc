@@ -986,6 +986,7 @@ capture_failure:
 	nvnc_display_unref(self.nvnc_display);
 	nvnc_close(self.nvnc);
 nvnc_failure:
+	aml_unref(aml);
 main_loop_failure:
 failure:
 #ifdef ENABLE_SCREENCOPY_DMABUF
