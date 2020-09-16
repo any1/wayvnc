@@ -41,6 +41,7 @@
 #include "xdg-output-unstable-v1.h"
 #include "linux-dmabuf-unstable-v1.h"
 #include "screencopy.h"
+#include "data-control.h"
 #include "strlcpy.h"
 #include "logging.h"
 #include "output.h"
@@ -84,6 +85,7 @@ struct wayvnc {
 	struct screencopy screencopy;
 	struct pointer pointer_backend;
 	struct keyboard keyboard_backend;
+	struct data_control data_control;
 
 	struct aml_handler* wayland_handler;
 	struct aml_signal* signal_handler;
@@ -198,6 +200,12 @@ static void registry_add(void* data, struct wl_registry* registry,
 				&zwp_linux_dmabuf_v1_interface, 3);
 		return;
 	}
+
+	if (strcmp(interface, zwlr_data_control_manager_v1_interface.name) == 0) {
+		self->data_control.manager = wl_registry_bind(registry, id,
+				&zwlr_data_control_manager_v1_interface, 2);
+		return;
+	}
 }
 
 static void registry_remove(void* data, struct wl_registry* registry,
@@ -292,6 +300,8 @@ void wayvnc_destroy(struct wayvnc* self)
 
 	if (self->screencopy.manager)
 		zwlr_screencopy_manager_v1_destroy(self->screencopy.manager);
+	if (self->data_control.manager)
+		zwlr_data_control_manager_v1_destroy(self->data_control.manager);
 
 	wl_registry_destroy(self->registry);
 	wl_display_disconnect(self->display);
@@ -444,6 +454,13 @@ static void on_key_event(struct nvnc_client* client, uint32_t symbol,
 	keyboard_feed(&wayvnc->keyboard_backend, symbol, is_pressed);
 }
 
+static void on_client_cut_text(struct nvnc* server, const char* text, uint32_t len)
+{
+	struct wayvnc* wayvnc = nvnc_get_userdata(server);
+
+	data_control_to_clipboard(&wayvnc->data_control, text, len);
+}
+
 bool on_auth(const char* username, const char* password, void* ud)
 {
 	struct wayvnc* self = ud;
@@ -489,6 +506,8 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port)
 
 	if (self->keyboard_backend.virtual_keyboard)
 		nvnc_set_key_fn(self->nvnc, on_key_event);
+
+	nvnc_set_cut_text_receive_fn(self->nvnc, on_client_cut_text);
 
 	return 0;
 
@@ -938,6 +957,9 @@ int main(int argc, char* argv[])
 		goto capture_failure;
 	}
 
+	data_control_init(&self.data_control, self.display, self.nvnc,
+		self.selected_seat->wl_seat);
+
 	pixman_region_init(&self.current_damage);
 
 	self.screencopy.overlay_cursor = overlay_cursor;
@@ -971,6 +993,8 @@ int main(int argc, char* argv[])
 		zwp_linux_dmabuf_v1_destroy(zwp_linux_dmabuf);
 	if (self.screencopy.manager)
 		screencopy_destroy(&self.screencopy);
+	if (self.data_control.manager)
+		data_control_destroy(&self.data_control);
 #ifdef ENABLE_SCREENCOPY_DMABUF
 	if (gbm_device) {
 		gbm_device_destroy(gbm_device);
