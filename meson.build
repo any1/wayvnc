@@ -73,6 +73,7 @@ sources = [
 	'src/strlcpy.c',
 	'src/shm.c',
 	'src/screencopy.c',
+	'src/data-control.c',
 	'src/output.c',
 	'src/pointer.c',
 	'src/keyboard.c',
