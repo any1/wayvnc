@@ -253,8 +253,6 @@ void data_control_destroy(struct data_control* self)
 		self->primary_selection = NULL;
 	}
 	free(self->cb_data);
-
-	zwlr_data_control_manager_v1_destroy(self->manager);
 }
 
 void data_control_to_clipboard(struct data_control* self, const char* text, size_t len)
