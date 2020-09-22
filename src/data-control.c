@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2020 Scott Moreau
+ * Copyright (c) 2020 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -28,15 +29,30 @@
 struct receive_context {
 	struct data_control* data_control;
 	struct zwlr_data_control_offer_v1* offer;
+	int fd;
 	FILE* mem_fp;
 	size_t mem_size;
 	char* mem_data;
 };
 
+static void destroy_receive_context(void* raw_ctx)
+{
+	struct receive_context* ctx = raw_ctx;
+	int fd = ctx->fd;
+
+	if (ctx->mem_fp)
+		fclose(ctx->mem_fp);
+	free(ctx->mem_data);
+	zwlr_data_control_offer_v1_destroy(ctx->offer);
+	close(fd);
+	free(ctx);
+}
+
 static void on_receive(void* handler)
 {
 	struct receive_context* ctx = aml_get_userdata(handler);
 	int fd = aml_get_fd(handler);
+	assert(ctx->fd == fd);
 
 	char buf[4096];
 
@@ -47,15 +63,13 @@ static void on_receive(void* handler)
 	}
 
 	fclose(ctx->mem_fp);
+	ctx->mem_fp = NULL;
 
 	if (ctx->mem_size)
 		nvnc_send_cut_text(ctx->data_control->server, ctx->mem_data,
 				ctx->mem_size);
 
-	free(ctx->mem_data);
-	zwlr_data_control_offer_v1_destroy(ctx->offer);
 	aml_stop(aml_get_default(), handler);
-	close(fd);
 }
 
 static void receive_data(void* data,
@@ -71,7 +85,7 @@ static void receive_data(void* data,
 
 	struct receive_context* ctx = calloc(1, sizeof(*ctx));
 	if (!ctx) {
-		log_error("OOM");
+		log_error("OOM\n");
 		close(pipe_fd[0]);
 		close(pipe_fd[1]);
 		return;
@@ -81,21 +95,22 @@ static void receive_data(void* data,
 	wl_display_flush(self->wl_display);
 	close(pipe_fd[1]);
 
+	ctx->fd = pipe_fd[0];
 	ctx->data_control = self;
 	ctx->offer = offer;
 	ctx->mem_fp = open_memstream(&ctx->mem_data, &ctx->mem_size);
 	if (!ctx->mem_fp) {
 		free(ctx);
-		close(pipe_fd[0]);
+		close(ctx->fd);
 		log_error("open_memstream() failed: %m\n");
 		return;
 	}
 
-	struct aml_handler* handler = aml_handler_new(pipe_fd[0], on_receive,
-			ctx, free);
+	struct aml_handler* handler = aml_handler_new(ctx->fd, on_receive,
+			ctx, destroy_receive_context);
 	if (!handler) {
 		free(ctx);
-		close(pipe_fd[0]);
+		close(ctx->fd);
 		return;
 	}
 
