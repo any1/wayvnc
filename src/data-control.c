@@ -267,6 +267,7 @@ void data_control_destroy(struct data_control* self)
 		zwlr_data_control_source_v1_destroy(self->primary_selection);
 		self->primary_selection = NULL;
 	}
+	zwlr_data_control_device_v1_destroy(self->device);
 	free(self->cb_data);
 }
 
