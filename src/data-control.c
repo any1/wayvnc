@@ -20,50 +20,87 @@
 #include <stdbool.h>
 #include <unistd.h>
 #include <assert.h>
+#include <aml.h>
 
 #include "logging.h"
 #include "data-control.h"
 
+struct receive_context {
+	struct data_control* data_control;
+	struct zwlr_data_control_offer_v1* offer;
+	FILE* mem_fp;
+	size_t mem_size;
+	char* mem_data;
+};
+
+static void on_receive(void* handler)
+{
+	struct receive_context* ctx = aml_get_userdata(handler);
+	int fd = aml_get_fd(handler);
+
+	char buf[4096];
+
+	ssize_t ret = read(fd, &buf, sizeof(buf));
+	if (ret > 0) {
+		fwrite(&buf, 1, ret, ctx->mem_fp);
+		return;
+	}
+
+	fclose(ctx->mem_fp);
+
+	if (ctx->mem_size)
+		nvnc_send_cut_text(ctx->data_control->server, ctx->mem_data,
+				ctx->mem_size);
+
+	free(ctx->mem_data);
+	zwlr_data_control_offer_v1_destroy(ctx->offer);
+	aml_stop(aml_get_default(), handler);
+	close(fd);
+}
+
 static void receive_data(void* data,
-	struct zwlr_data_control_offer_v1* zwlr_data_control_offer_v1)
+	struct zwlr_data_control_offer_v1* offer)
 {
 	struct data_control* self = data;
-	char buf[4096];
-	FILE* mem_fp;
-	char* mem_data;
-	size_t mem_size = 0;
 	int pipe_fd[2];
-	int ret;
 
 	if (pipe(pipe_fd) == -1) {
 		log_error("pipe() failed: %m\n");
 		return;
 	}
 
-	zwlr_data_control_offer_v1_receive(zwlr_data_control_offer_v1, self->mime_type, pipe_fd[1]);
+	struct receive_context* ctx = calloc(1, sizeof(*ctx));
+	if (!ctx) {
+		log_error("OOM");
+		close(pipe_fd[0]);
+		close(pipe_fd[1]);
+		return;
+	}
+
+	zwlr_data_control_offer_v1_receive(offer, self->mime_type, pipe_fd[1]);
 	wl_display_flush(self->wl_display);
 	close(pipe_fd[1]);
 
-	mem_fp = open_memstream(&mem_data, &mem_size);
-	if (!mem_fp) {
+	ctx->data_control = self;
+	ctx->offer = offer;
+	ctx->mem_fp = open_memstream(&ctx->mem_data, &ctx->mem_size);
+	if (!ctx->mem_fp) {
+		free(ctx);
+		close(pipe_fd[0]);
 		log_error("open_memstream() failed: %m\n");
+		return;
+	}
+
+	struct aml_handler* handler = aml_handler_new(pipe_fd[0], on_receive,
+			ctx, free);
+	if (!handler) {
+		free(ctx);
 		close(pipe_fd[0]);
 		return;
 	}
 
-	// TODO: Make this asynchronous
-	while ((ret = read(pipe_fd[0], &buf, sizeof(buf))) > 0)
-		if (fwrite(&buf, 1, ret, mem_fp) != ret)
-			break;
-
-	fclose(mem_fp);
-
-	if (mem_size)
-		nvnc_send_cut_text(self->server, mem_data, mem_size);
-
-	free(mem_data);
-	close(pipe_fd[0]);
-	zwlr_data_control_offer_v1_destroy(zwlr_data_control_offer_v1);
+	aml_start(aml_get_default(), handler);
+	aml_unref(handler);
 }
 
 static void data_control_offer(void* data,
@@ -146,7 +183,7 @@ data_control_source_send(void* data,
 
 	ret = write(fd, d, len);
 
-	if (ret < len)
+	if (ret < (int)len)
 		log_error("write from clipboard incomplete\n");
 
 	close(fd);
@@ -236,7 +273,6 @@ void data_control_to_clipboard(struct data_control* self, const char* text, size
 
 	memcpy(self->cb_data, text, len);
 	self->cb_len = len;
-
 	// Set copy/paste buffer
 	self->selection = set_selection(self, false);
 	// Set highlight/middle_click buffer
