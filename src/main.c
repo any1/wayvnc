@@ -957,8 +957,9 @@ int main(int argc, char* argv[])
 		goto capture_failure;
 	}
 
-	data_control_init(&self.data_control, self.display, self.nvnc,
-		self.selected_seat->wl_seat);
+	if (self.data_control.manager)
+		data_control_init(&self.data_control, self.display, self.nvnc,
+				self.selected_seat->wl_seat);
 
 	pixman_region_init(&self.current_damage);
 
