@@ -1,2 +1,4 @@
 option('screencopy-dmabuf', type: 'feature', value: 'disabled',
 	description: 'Enable GPU-side screencopy (experimental)')
+option('man-pages', type: 'feature', value: 'auto',
+	description: 'Generate and install man pages')
