@@ -1,7 +1,7 @@
 project(
 	'wayvnc',
 	'c',
-	version: '0.2.0',
+	version: '0.3.0',
 	license: 'ISC',
 	default_options: [
 		'c_std=gnu11',
@@ -46,9 +46,12 @@ drm = dependency('libdrm')
 xkbcommon = dependency('xkbcommon')
 wayland_client = dependency('wayland-client')
 
+neatvnc_version = '>=0.3.0'
+
 neatvnc_project = subproject(
 	'neatvnc',
 	required: false,
+	version: neatvnc_version,
 )
 
 aml_project = subproject('aml', required: false)
@@ -61,7 +64,7 @@ endif
 if neatvnc_project.found()
 	neatvnc = neatvnc_project.get_variable('neatvnc_dep')
 else
-	neatvnc = dependency('neatvnc')
+	neatvnc = dependency('neatvnc', version: neatvnc_version)
 endif
 
 inc = include_directories('include')
