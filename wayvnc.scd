@@ -137,4 +137,4 @@ _XDG_CONFIG_HOME_
 
 Maintained by Andri Yngvason <andri@yngvason.is>. Up-to-date sources can be
 found at https://github.com/any1/wayvnc and bugs reports or patches can be
-submitted to GitHub's version tracker.
+submitted to GitHub's issue tracker.
