@@ -100,8 +100,8 @@ static void receive_data(void* data,
 	ctx->offer = offer;
 	ctx->mem_fp = open_memstream(&ctx->mem_data, &ctx->mem_size);
 	if (!ctx->mem_fp) {
-		free(ctx);
 		close(ctx->fd);
+		free(ctx);
 		log_error("open_memstream() failed: %m\n");
 		return;
 	}
@@ -109,8 +109,8 @@ static void receive_data(void* data,
 	struct aml_handler* handler = aml_handler_new(ctx->fd, on_receive,
 			ctx, destroy_receive_context);
 	if (!handler) {
-		free(ctx);
 		close(ctx->fd);
+		free(ctx);
 		return;
 	}
 
