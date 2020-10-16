@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Andri Yngvason
+ * Copyright (c) 2020 Nicholas Sica
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -17,27 +17,5 @@
 #pragma once
 
 #include <stdbool.h>
-#include <stdint.h>
 
-#define X_CFG_LIST \
-	X(bool, enable_auth) \
-	X(string, private_key_file) \
-	X(string, certificate_file) \
-	X(string, username) \
-	X(string, password) \
-	X(string, address) \
-	X(uint, port) \
-	X(bool, enable_pam) \
-
-struct cfg {
-#define string char*
-#define uint uint32_t
-#define X(type, name) type name;
-	X_CFG_LIST
-#undef X
-#undef uint
-#undef string
-};
-
-int cfg_load(struct cfg* self, const char* path);
-void cfg_destroy(struct cfg* self);
+bool pam_auth(const char* username, const char* password);

@@ -54,6 +54,10 @@
 #include "damage-refinery.h"
 #include "usdt.h"
 
+#ifdef ENABLE_PAM
+#include "pam_auth.h"
+#endif
+
 #ifdef ENABLE_SCREENCOPY_DMABUF
 #include <gbm.h>
 #include <xf86drm.h>
@@ -466,12 +470,16 @@ bool on_auth(const char* username, const char* password, void* ud)
 {
 	struct wayvnc* self = ud;
 
+#ifdef ENABLE_PAM
+	if (self->cfg.enable_pam)
+		return pam_auth(username, password);
+#endif
+
 	if (strcmp(username, self->cfg.username) != 0)
 		return false;
 
 	if (strcmp(password, self->cfg.password) != 0)
 		return false;
-
 	return true;
 }
 
@@ -719,17 +727,15 @@ int check_cfg_sanity(struct cfg* cfg)
 			log_error("Authentication enabled, but missing private_key_file\n");
 			rc = -1;
 		}
-
-		if (!cfg->username) {
+		if (!cfg->username && !cfg->enable_pam) {
 			log_error("Authentication enabled, but missing username\n");
 			rc = -1;
 		}
 
-		if (!cfg->password) {
+		if (!cfg->password && !cfg->enable_pam) {
 			log_error("Authentication enabled, but missing password\n");
 			rc = -1;
 		}
-
 		return rc;
 	}
 
