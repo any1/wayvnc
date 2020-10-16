@@ -98,6 +98,7 @@ struct wayvnc {
 	struct pixman_region16 current_damage;
 
 	const char* kb_layout;
+	const char* kb_variant;
 
 	uint32_t damage_area_sum;
 	uint32_t n_frames_captured;
@@ -684,7 +685,7 @@ int wayvnc_usage(FILE* stream, int rc)
 "\n"
 "    -C,--config=<path>                        Select a config file.\n"
 "    -o,--output=<name>                        Select output to capture.\n"
-"    -k,--keyboard=<layout>                    Select keyboard layout.\n"
+"    -k,--keyboard=<layout>[-<variant>]        Select keyboard layout with an optional variant.\n"
 "    -s,--seat=<name>                          Select seat by name.\n"
 "    -r,--render-cursor                        Enable overlay cursor rendering.\n"
 "    -f,--max-fps=<fps>                        Set the rate limit (default 30).\n"
@@ -762,6 +763,18 @@ static void start_performance_ticker(struct wayvnc* self)
 	aml_unref(ticker);
 }
 
+void parse_keyboard_option(struct wayvnc* self, char* arg)
+{
+	// Find optional variant, separated by -
+	char* index = strchr(arg, '-');
+	if (index != NULL) {
+		self->kb_variant = index + 1;
+		// layout needs to be 0-terminated, replace the - by 0
+		*index = 0;
+	}
+	self->kb_layout = arg;
+}
+
 int show_version(void)
 {
 	printf("wayvnc: %s\n", wayvnc_version);
@@ -781,7 +794,7 @@ int main(int argc, char* argv[])
 
 	const char* output_name = NULL;
 	const char* seat_name = NULL;
-	
+
 	bool overlay_cursor = false;
 	bool show_performance = false;
 	int max_rate = 30;
@@ -815,7 +828,7 @@ int main(int argc, char* argv[])
 			output_name = optarg;
 			break;
 		case 'k':
-			self.kb_layout = optarg;
+			parse_keyboard_option(&self, optarg);
 			break;
 		case 's':
 			seat_name = optarg;
@@ -914,7 +927,7 @@ int main(int argc, char* argv[])
 		zwp_virtual_keyboard_manager_v1_create_virtual_keyboard(
 			self.keyboard_manager, self.selected_seat->wl_seat);
 
-	keyboard_init(&self.keyboard_backend, self.kb_layout);
+	keyboard_init(&self.keyboard_backend, self.kb_layout, self.kb_variant);
 
 	self.pointer_backend.vnc = self.nvnc;
 	self.pointer_backend.output = self.selected_output;

@@ -149,7 +149,7 @@ void keyboard_dump_lookup_table(const struct keyboard* self)
 		keyboard__dump_entry(self, &self->lookup_table[i]);
 }
 
-int keyboard_init(struct keyboard* self, const char* layout)
+int keyboard_init(struct keyboard* self, const char* layout, const char* variant)
 {
 	self->context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
 	if (!self->context)
@@ -161,6 +161,7 @@ int keyboard_init(struct keyboard* self, const char* layout)
 	struct xkb_rule_names rule_names = {
 		.layout = layout,
 		.model = "pc105",
+		.variant = variant,
 	};
 
 	self->keymap = xkb_keymap_new_from_names(self->context, &rule_names, 0);
@@ -321,6 +322,8 @@ static bool keyboard_symbol_is_mod(xkb_keysym_t symbol)
 	case XKB_KEY_Super_R:
 	case XKB_KEY_Hyper_L:
 	case XKB_KEY_Hyper_R:
+	case XKB_KEY_ISO_Level5_Shift:
+	case XKB_KEY_ISO_Level5_Lock:
 		return true;
 	}
 
