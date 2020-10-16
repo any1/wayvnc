@@ -39,6 +39,8 @@ cc = meson.get_compiler('c')
 
 libm = cc.find_library('m', required: false)
 librt = cc.find_library('rt', required: false)
+libpam = cc.find_library('pam', required: get_option('pam'))
+libpam_misc = cc.find_library('pam_misc', required: get_option('pam'))
 
 pixman = dependency('pixman-1')
 gbm = dependency('gbm', required: get_option('screencopy-dmabuf'))
@@ -122,6 +124,12 @@ endif
 
 if gbm.found() and not get_option('screencopy-dmabuf').disabled()
 	config.set('ENABLE_SCREENCOPY_DMABUF', true)
+endif
+
+if libpam.found()
+	dependencies += libpam
+	dependencies += libpam_misc
+	config.set('ENABLE_PAM', true)
 endif
 
 configure_file(
