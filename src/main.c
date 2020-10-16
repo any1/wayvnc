@@ -106,10 +106,12 @@ struct wayvnc {
 	uint32_t n_frames_rendered;
 };
 
+#ifdef ENABLE_PAM
 struct credentials {
         const char *user;
         const char *password;
 };
+#endif
 
 void wayvnc_exit(struct wayvnc* self);
 void on_capture_done(struct screencopy* sc);
