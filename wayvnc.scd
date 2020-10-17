@@ -16,8 +16,8 @@ wayvnc - A VNC server for wlroots based Wayland compositors.
 *-o, --output=<name>*
 	Select output to capture.
 
-*-k, --keyboard=<layout>*
-	Select keyboard layout.
+*-k, --keyboard=<layout>[-variant]*
+	Select keyboard layout. The variant can be appended if needed.
 
 *-s, --seat=<name>*
 	Select seat by name.
