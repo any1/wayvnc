@@ -126,7 +126,7 @@ if gbm.found() and not get_option('screencopy-dmabuf').disabled()
 	config.set('ENABLE_SCREENCOPY_DMABUF', true)
 endif
 
-if libpam.found()
+if libpam.found() and libpam_misc.found()
 	dependencies += libpam
 	dependencies += libpam_misc
 	config.set('ENABLE_PAM', true)

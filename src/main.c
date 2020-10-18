@@ -108,8 +108,8 @@ struct wayvnc {
 
 #ifdef ENABLE_PAM
 struct credentials {
-        const char *user;
-        const char *password;
+	const char* user;
+	const char* password;
 };
 #endif
 
@@ -471,26 +471,26 @@ static void on_client_cut_text(struct nvnc* server, const char* text, uint32_t l
 }
 
 #ifdef ENABLE_PAM
-static int pam_return_pwd(int num_msg, const struct pam_message **msgm, struct pam_response **response, void *appdata_ptr)
+static int pam_return_pwd(int num_msg, const struct pam_message** msgm,
+			  struct pam_response** response, void* appdata_ptr)
 {
-    struct credentials *cred = (struct credentials *) appdata_ptr;
-    struct pam_response *resp = (struct pam_response *)malloc(sizeof(struct pam_response) * num_msg);
-    for(int i = 0; i < num_msg; i++)
-    {
-        resp[i].resp_retcode = PAM_SUCCESS;
-        switch(msgm[i]->msg_style)
-        {
-        case PAM_TEXT_INFO:
-        case PAM_ERROR_MSG:
-            resp[i].resp = 0;
-            break;
-        case PAM_PROMPT_ECHO_ON:
-            resp[i].resp = cred->user;
-            break;
-        case PAM_PROMPT_ECHO_OFF:
-            resp[i].resp = cred->password;
-            break;
-        }
+    struct credentials* cred = appdata_ptr;
+    struct pam_response* resp = calloc(sizeof(*response), num_msg);
+    for (int i = 0; i < num_msg; i++) {
+	resp[i].resp_retcode = PAM_SUCCESS;
+	switch(msgm[i]->msg_style)
+	{
+	case PAM_TEXT_INFO:
+	case PAM_ERROR_MSG:
+	    resp[i].resp = 0;
+	    break;
+	case PAM_PROMPT_ECHO_ON:
+	    resp[i].resp = cred->user;
+	    break;
+	case PAM_PROMPT_ECHO_OFF:
+	    resp[i].resp = cred->password;
+	    break;
+	}
     }
 
     *response = resp;
@@ -500,34 +500,43 @@ static int pam_return_pwd(int num_msg, const struct pam_message **msgm, struct p
 
 bool on_auth(const char* username, const char* password, void* ud)
 {
-#ifdef ENABLE_PAM
-        struct credentials cred = { strdup(username), strdup(password) };
-        struct pam_conv conv = { &pam_return_pwd, &cred };
-        int result;
-        const char *service = "wayvnc";
-        pam_handle_t *pamh;
-        if((result = pam_start(service, username, &conv, &pamh)) != PAM_SUCCESS)
-        {
-            fprintf(stderr, "ERROR: PAM start failed: %d\n", result);
-            return false;
-        }
-        else if((result = pam_authenticate(pamh, PAM_SILENT|PAM_DISALLOW_NULL_AUTHTOK)) != PAM_SUCCESS)
-        {
-            fprintf(stderr, "PAM authenticate failed: %d\n", result);
-            return false;
-        }
-        else if((result = pam_acct_mgmt(pamh, 0)) != PAM_SUCCESS)
-        {
-            fprintf(stderr, "PAM account management failed: %d\n", result);
-            return false;
-        }
-#else
 	struct wayvnc* self = ud;
-        if (strcmp(username, self->cfg.username) != 0)
+#ifdef ENABLE_PAM
+	if (self->cfg.enable_pam) {
+	    struct credentials cred = { strdup(username), strdup(password) };
+	    struct pam_conv conv = { &pam_return_pwd, &cred };
+	    int result;
+	    const char* service = "wayvnc";
+	    pam_handle_t* pamh;
+	    if ((result = pam_start(service, username, &conv, &pamh)) != PAM_SUCCESS) {
+		log_error("ERROR: PAM start failed: %d\n", result);
+		return false;
+	    }
+	    
+	    if ((result = pam_authenticate(pamh, PAM_SILENT|PAM_DISALLOW_NULL_AUTHTOK)) != PAM_SUCCESS) {
+		log_error("PAM authenticate failed: %d\n", result);
+		return false;
+	    }
+
+	    if ((result = pam_acct_mgmt(pamh, 0)) != PAM_SUCCESS) {
+		log_error("PAM account management failed: %d\n", result);
+		return false;
+	    }
+
+	    if ((result = pam_end(pamh, result)) != PAM_SUCCESS) {
+		log_error("ERROR: PAM end failed: %d\n", result);
+		return false;
+	    }
+	}
+	else {
+#endif
+	    if (strcmp(username, self->cfg.username) != 0)
 		return false;
 
-	if (strcmp(password, self->cfg.password) != 0)
+	    if (strcmp(password, self->cfg.password) != 0)
 		return false;
+#ifdef ENABLE_PAM
+	}
 #endif
 	return true;
 }
@@ -775,17 +784,15 @@ int check_cfg_sanity(struct cfg* cfg)
 			log_error("Authentication enabled, but missing private_key_file\n");
 			rc = -1;
 		}
-#ifndef ENABLE_PAM
-		if (!cfg->username) {
+		if (!cfg->username && !cfg->enable_pam) {
 			log_error("Authentication enabled, but missing username\n");
 			rc = -1;
 		}
 
-		if (!cfg->password) {
+		if (!cfg->password && !cfg->enable_pam) {
 			log_error("Authentication enabled, but missing password\n");
 			rc = -1;
 		}
-#endif
 		return rc;
 	}
 

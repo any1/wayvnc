@@ -27,7 +27,8 @@
 	X(string, password) \
 	X(string, address) \
 	X(uint, port) \
-
+	X(bool, enable_pam) \
+            
 struct cfg {
 #define string char*
 #define uint uint32_t
