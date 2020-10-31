@@ -4,3 +4,5 @@ option('pam', type: 'feature', value: 'auto',
 	description: 'Enable PAM authentication')
 option('man-pages', type: 'feature', value: 'auto',
 	description: 'Generate and install man pages')
+option('systemtap', type: 'boolean', value: false,
+	description: 'Enable tracing using sdt')
