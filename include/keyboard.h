@@ -30,7 +30,6 @@ struct keyboard {
 
 	struct xkb_context* context;
 	struct xkb_keymap* keymap;
-	struct xkb_state* state;
 
 	size_t lookup_table_size;
 	size_t lookup_table_length;

@@ -168,10 +168,6 @@ int keyboard_init(struct keyboard* self, const char* layout, const char* variant
 	if (!self->keymap)
 		goto keymap_failure;
 
-	self->state = xkb_state_new(self->keymap);
-	if (!self->state)
-		goto state_failure;
-
 	if (create_lookup_table(self) < 0)
 		goto table_failure;
 
@@ -216,8 +212,6 @@ fd_failure:
 keymap_string_failure:
 	free(self->lookup_table);
 table_failure:
-	xkb_state_unref(self->state);
-state_failure:
 	xkb_keymap_unref(self->keymap);
 keymap_failure:
 	intset_destroy(&self->key_state);
@@ -229,7 +223,6 @@ key_state_failure:
 void keyboard_destroy(struct keyboard* self)
 {
 	free(self->lookup_table);
-	xkb_state_unref(self->state);
 	xkb_keymap_unref(self->keymap);
 	intset_destroy(&self->key_state);
 	xkb_context_unref(self->context);
@@ -253,85 +246,10 @@ struct table_entry* keyboard_find_symbol(const struct keyboard* self,
 	return entry;
 }
 
-static void keyboard_apply_mods(struct keyboard* self, xkb_keycode_t code,
-                                bool is_pressed)
-{
-	enum xkb_state_component comp, compmask;
-	xkb_mod_mask_t depressed, latched, locked, group;
-
-	comp = xkb_state_update_key(self->state, code,
-	                            is_pressed ? XKB_KEY_DOWN : XKB_KEY_UP);
-
-	compmask = XKB_STATE_MODS_DEPRESSED |
-	           XKB_STATE_MODS_LATCHED |
-	           XKB_STATE_MODS_LOCKED |
-	           XKB_STATE_MODS_EFFECTIVE;
-
-	if (!(comp & compmask))
-		return;
-
-	depressed = xkb_state_serialize_mods(self->state, XKB_STATE_MODS_DEPRESSED);
-	latched = xkb_state_serialize_mods(self->state, XKB_STATE_MODS_LATCHED);
-	locked = xkb_state_serialize_mods(self->state, XKB_STATE_MODS_LOCKED);
-	group = xkb_state_serialize_mods(self->state, XKB_STATE_MODS_EFFECTIVE);
-
-	// TODO: Handle errors
-	zwp_virtual_keyboard_v1_modifiers(self->virtual_keyboard, depressed,
-	                                  latched, locked, group);
-}
-
-static struct table_entry* match_level(struct keyboard* self,
-                                       struct table_entry* entry)
-{
-	xkb_keysym_t symbol = entry->symbol;
-
-	while (true) {
-		int layout, level;
-
-		layout = xkb_state_key_get_layout(self->state, entry->code);
-		level = xkb_state_key_get_level(self->state, entry->code, layout);
-
-		if (entry->level == level)
-			return entry;
-
-		if (++entry >= &self->lookup_table[self->lookup_table_length] ||
-		    entry->symbol != symbol)
-			break;
-	}
-
-	char name[256] MAYBE_UNUSED;
-	log_debug("Failed to match level on symbol: %s\n",
-	          get_symbol_name(symbol, name, sizeof(name)));
-
-	return NULL;
-}
-
-static bool keyboard_symbol_is_mod(xkb_keysym_t symbol)
-{
-	switch (symbol) {
-	case XKB_KEY_Shift_L:
-	case XKB_KEY_Shift_R:
-	case XKB_KEY_Control_L:
-	case XKB_KEY_Caps_Lock:
-	case XKB_KEY_Shift_Lock:
-	case XKB_KEY_Meta_L:
-	case XKB_KEY_Meta_R:
-	case XKB_KEY_Alt_L:
-	case XKB_KEY_Alt_R:
-	case XKB_KEY_Super_L:
-	case XKB_KEY_Super_R:
-	case XKB_KEY_Hyper_L:
-	case XKB_KEY_Hyper_R:
-	case XKB_KEY_ISO_Level5_Shift:
-	case XKB_KEY_ISO_Level5_Lock:
-		return true;
-	}
-
-	return false;
-}
-
 void keyboard_feed(struct keyboard* self, xkb_keysym_t symbol, bool is_pressed)
 {
+	uint32_t mods = 0;
+
 	struct table_entry* entry = keyboard_find_symbol(self, symbol);
 	if (!entry) {
 		char name[256];
@@ -340,11 +258,8 @@ void keyboard_feed(struct keyboard* self, xkb_keysym_t symbol, bool is_pressed)
 		return;
 	}
 
-	if (!keyboard_symbol_is_mod(symbol)) {
-		struct table_entry* level_entry = match_level(self, entry);
-		if (level_entry)
-			entry = level_entry;
-	}
+	xkb_keymap_key_get_mods_for_level(self->keymap, entry->code,
+			/* layout index */ 0, entry->level, &mods, 1);
 
 	bool was_pressed = intset_is_set(&self->key_state, entry->code);
 	if (was_pressed == is_pressed)
@@ -359,9 +274,16 @@ void keyboard_feed(struct keyboard* self, xkb_keysym_t symbol, bool is_pressed)
 	keyboard__dump_entry(self, entry);
 #endif
 
+	enum xkb_state_component depressed, latched, locked, group;
+	depressed = 0;
+	latched = mods;
+	locked = 0;
+	group = 0;
+
 	// TODO: This could cause some synchronisation problems with other
 	// keyboards in the seat.
-	keyboard_apply_mods(self, entry->code, is_pressed);
+	zwp_virtual_keyboard_v1_modifiers(self->virtual_keyboard, depressed,
+	                                  latched, locked, group);
 
 	// TODO: Handle errors
 	zwp_virtual_keyboard_v1_key(self->virtual_keyboard, 0, entry->code - 8,
