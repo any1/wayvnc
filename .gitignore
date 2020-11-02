@@ -5,3 +5,4 @@ subprojects
 .ycm_extra_conf.py
 perf.*
 *.pem
+.ccls-cache

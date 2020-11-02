@@ -34,8 +34,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <security/pam_appl.h>
-#include <security/pam_misc.h>
 
 #include "wlr-screencopy-unstable-v1.h"
 #include "wlr-virtual-pointer-unstable-v1.h"
@@ -55,6 +53,10 @@
 #include "transform-util.h"
 #include "damage-refinery.h"
 #include "usdt.h"
+
+#ifdef ENABLE_PAM
+#include "pam_auth.h"
+#endif
 
 #ifdef ENABLE_SCREENCOPY_DMABUF
 #include <gbm.h>
@@ -105,13 +107,6 @@ struct wayvnc {
 	uint32_t n_frames_captured;
 	uint32_t n_frames_rendered;
 };
-
-#ifdef ENABLE_PAM
-struct credentials {
-	const char* user;
-	const char* password;
-};
-#endif
 
 void wayvnc_exit(struct wayvnc* self);
 void on_capture_done(struct screencopy* sc);
@@ -468,65 +463,6 @@ static void on_client_cut_text(struct nvnc* server, const char* text, uint32_t l
 	struct wayvnc* wayvnc = nvnc_get_userdata(server);
 
 	data_control_to_clipboard(&wayvnc->data_control, text, len);
-}
-
-#ifdef ENABLE_PAM
-static int pam_return_pwd(int num_msg, const struct pam_message** msgm,
-                          struct pam_response** response, void* appdata_ptr)
-{
-	struct credentials* cred = appdata_ptr;
-	struct pam_response* resp = calloc(sizeof(*response), num_msg);
-	for (int i = 0; i < num_msg; i++) {
-		resp[i].resp_retcode = PAM_SUCCESS;
-		switch(msgm[i]->msg_style) {
-		case PAM_TEXT_INFO:
-		case PAM_ERROR_MSG:
-			resp[i].resp = 0;
-			break;
-		case PAM_PROMPT_ECHO_ON:
-			resp[i].resp = strdup(cred->user);
-			break;
-		case PAM_PROMPT_ECHO_OFF:
-			resp[i].resp = strdup(cred->password);
-			break;
-		default:
-			free(resp);
-			return PAM_CONV_ERR;
-		}
-	}
-
-	*response = resp;
-	return PAM_SUCCESS;
-}
-#endif
-
-bool pam_auth(const char* username, const char*password)
-{
-	struct credentials cred = { username, password };
-	struct pam_conv conv = { &pam_return_pwd, &cred };
-	int result;
-	const char* service = "wayvnc";
-	pam_handle_t* pamh;
-	if ((result = pam_start(service, username, &conv, &pamh)) != PAM_SUCCESS) {
-		log_error("ERROR: PAM start failed: %d\n", result);
-		return false;
-	}
-
-	if ((result = pam_authenticate(pamh, PAM_SILENT|PAM_DISALLOW_NULL_AUTHTOK)) != PAM_SUCCESS) {
-		log_error("PAM authenticate failed: %d\n", result);
-		return false;
-	}
-
-	if ((result = pam_acct_mgmt(pamh, 0)) != PAM_SUCCESS) {
-		log_error("PAM account management failed: %d\n", result);
-		return false;
-	}
-
-	if ((result = pam_end(pamh, result)) != PAM_SUCCESS) {
-		log_error("ERROR: PAM end failed: %d\n", result);
-		return false;
-	}
-	return true;
 }
 
 bool on_auth(const char* username, const char* password, void* ud)

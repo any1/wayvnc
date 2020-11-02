@@ -1,2 +1,2 @@
-auth    required pam_unix.so
-account required pam_unix.so
+auth    required pam_unix.so nodelay deny=3 unlock_time=600
+account required pam_unix.so nodelay deny=3 unlock_time=600
