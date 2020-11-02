@@ -46,19 +46,19 @@ bool pam_auth(const char* username, const char* password)
 	pam_handle_t* pamh;
 	int result = pam_start(service, username, &conv, &pamh);
 	if (result != PAM_SUCCESS) {
-		log_error("ERROR: PAM start failed: %d\n", result);
+		log_error("ERROR: PAM start failed: %s\n", pam_strerror(pamh, result));
 		return false;
 	}
 
 	result = pam_authenticate(pamh, PAM_SILENT|PAM_DISALLOW_NULL_AUTHTOK);
 	if (result != PAM_SUCCESS) {
-		log_error("PAM authenticate failed: %d\n", result);
+		log_error("PAM authenticate failed: %s\n", pam_strerror(pamh, result));
 		goto error;
 	}
 
 	result = pam_acct_mgmt(pamh, 0);
 	if (result != PAM_SUCCESS) {
-		log_error("PAM account management failed: %d\n", result);
+		log_error("PAM account management failed: %s\n", pam_strerror(pamh, result));
 		goto error;
 	}
 
