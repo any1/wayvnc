@@ -50,17 +50,19 @@ bool pam_auth(const char* username, const char* password)
 		return false;
 	}
 
-	result = pam_authenticate(pamh, PAM_SILENT|PAM_DISALLOW_NULL_AUTHTOK); 
+	result = pam_authenticate(pamh, PAM_SILENT|PAM_DISALLOW_NULL_AUTHTOK);
 	if (result != PAM_SUCCESS) {
 		log_error("PAM authenticate failed: %d\n", result);
+		goto error;
 	}
 
-	result = pam_acct_mgmt(pamh, 0); 
+	result = pam_acct_mgmt(pamh, 0);
 	if (result != PAM_SUCCESS) {
 		log_error("PAM account management failed: %d\n", result);
+		goto error;
 	}
 
+error:
 	pam_end(pamh, result);
 	return result == PAM_SUCCESS;
-
 }
