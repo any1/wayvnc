@@ -10,30 +10,20 @@ Please check the [FAQ](FAQ.md) for answers to common questions. For further
 support, join the #wayvnc IRC channel on freenode.
 
 ## Installing
-### archlinux
 ```
+# archlinux
 yay -S wayvnc
-```
 
-### FreeBSD
-```
+# FreeBSD
 pkg install wayvnc
-```
 
-### Fedora
-```
+# Fedora
 dnf install wayvnc
-```
 
-### openSUSE Tumbleweed
-
-```
+# openSUSE Tumbleweed
 zypper install wayvnc
-```
 
-### Void Linux
-
-```
+# Void Linux
 xbps-install wayvnc
 ```
 
