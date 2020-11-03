@@ -31,9 +31,10 @@ xbps-install wayvnc
 ### Runtime Dependencies
  * aml
  * drm
- * gbm
+ * gbm (optional)
  * libxkbcommon
  * neatvnc
+ * pam (optional)
  * pixman
 
 ### Build Dependencies
