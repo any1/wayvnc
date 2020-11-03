@@ -3,7 +3,7 @@
 ## Commit Messages
 
 Please, try to write good commit messages. Do your best to follow these 7 rules,
-borrowed from [Chris Beams][https://chris.beams.io/posts/git-commit/]:
+borrowed from [Chris Beams](https://chris.beams.io/posts/git-commit/):
 
  1. Separate subject from body with a blank line
  2. Limit the subject line to 50 characters
@@ -19,7 +19,7 @@ entry, linked above.
 ## Style
 
 This project follows the the
-[Linux kernel's style guide][https://www.kernel.org/doc/html/latest/process/coding-style.html#codingstyle]
+[Linux kernel's style guide](https://www.kernel.org/doc/html/latest/process/coding-style.html#codingstyle)
 as far as coding style is concererned, with the following exceptions:
 
  * When declaring pointer variables, the asterisk (`*`) is placed on the left
