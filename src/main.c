@@ -459,6 +459,15 @@ static void on_key_event(struct nvnc_client* client, uint32_t symbol,
 	keyboard_feed(&wayvnc->keyboard_backend, symbol, is_pressed);
 }
 
+static void on_key_code_event(struct nvnc_client* client, uint32_t code,
+		bool is_pressed)
+{
+	struct nvnc* nvnc = nvnc_client_get_server(client);
+	struct wayvnc* wayvnc = nvnc_get_userdata(nvnc);
+
+	keyboard_feed_code(&wayvnc->keyboard_backend, code + 8, is_pressed);
+}
+
 static void on_client_cut_text(struct nvnc* server, const char* text, uint32_t len)
 {
 	struct wayvnc* wayvnc = nvnc_get_userdata(server);
@@ -513,8 +522,10 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port)
 	if (self->pointer_manager)
 		nvnc_set_pointer_fn(self->nvnc, on_pointer_event);
 
-	if (self->keyboard_backend.virtual_keyboard)
+	if (self->keyboard_backend.virtual_keyboard) {
 		nvnc_set_key_fn(self->nvnc, on_key_event);
+		nvnc_set_key_code_fn(self->nvnc, on_key_code_event);
+	}
 
 	nvnc_set_cut_text_receive_fn(self->nvnc, on_client_cut_text);
 
