@@ -346,25 +346,31 @@ void keyboard_feed(struct keyboard* self, xkb_keysym_t symbol, bool is_pressed)
 			entry = level_entry;
 	}
 
-	bool was_pressed = intset_is_set(&self->key_state, entry->code);
-	if (was_pressed == is_pressed)
-		return;
-
-	if (is_pressed)
-		intset_set(&self->key_state, entry->code);
-	else
-		intset_clear(&self->key_state, entry->code);
-
 #ifndef NDEBUG
 	keyboard__dump_entry(self, entry);
 #endif
 
+	keyboard_feed_code(self, entry->code, is_pressed);
+}
+
+void keyboard_feed_code(struct keyboard* self, xkb_keycode_t code,
+		bool is_pressed)
+{
+	bool was_pressed = intset_is_set(&self->key_state, code);
+	if (was_pressed == is_pressed)
+		return;
+
+	if (is_pressed)
+		intset_set(&self->key_state, code);
+	else
+		intset_clear(&self->key_state, code);
+
 	// TODO: This could cause some synchronisation problems with other
 	// keyboards in the seat.
-	keyboard_apply_mods(self, entry->code, is_pressed);
+	keyboard_apply_mods(self, code, is_pressed);
 
 	// TODO: Handle errors
-	zwp_virtual_keyboard_v1_key(self->virtual_keyboard, 0, entry->code - 8,
+	zwp_virtual_keyboard_v1_key(self->virtual_keyboard, 0, code - 8,
 	                            is_pressed ? WL_KEYBOARD_KEY_STATE_PRESSED
 	                                       : WL_KEYBOARD_KEY_STATE_RELEASED);
 }
