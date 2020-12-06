@@ -47,7 +47,7 @@ drm = dependency('libdrm')
 xkbcommon = dependency('xkbcommon')
 wayland_client = dependency('wayland-client')
 
-neatvnc_version = '>=0.3.0'
+neatvnc_version = '>=0.4.0'
 
 neatvnc_project = subproject(
 	'neatvnc',
