@@ -191,7 +191,8 @@ static void screencopy_failed(void* data,
 
 	screencopy__stop(self);
 
-	wv_buffer_pool_release(self->pool, self->front);
+	if (self->front)
+		wv_buffer_pool_release(self->pool, self->front);
 	self->front = NULL;
 
 	self->status = SCREENCOPY_FAILED;
