@@ -945,7 +945,13 @@ int main(int argc, char* argv[])
 		zwp_virtual_keyboard_manager_v1_create_virtual_keyboard(
 			self.keyboard_manager, self.selected_seat->wl_seat);
 
-	keyboard_init(&self.keyboard_backend, self.kb_layout, self.kb_variant);
+	struct xkb_rule_names rule_names = {
+		.layout = self.kb_layout,
+		.model = "pc105",
+		.variant = self.kb_variant,
+	};
+
+	keyboard_init(&self.keyboard_backend, &rule_names);
 
 	self.pointer_backend.vnc = self.nvnc;
 	self.pointer_backend.output = self.selected_output;

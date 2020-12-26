@@ -39,7 +39,7 @@ struct keyboard {
 	struct intset key_state;
 };
 
-int keyboard_init(struct keyboard* self, const char* layout, const char* variant);
+int keyboard_init(struct keyboard* self, const struct xkb_rule_names* rule_names);
 void keyboard_destroy(struct keyboard* self);
 void keyboard_feed(struct keyboard* self, xkb_keysym_t symbol, bool is_pressed);
 void keyboard_feed_code(struct keyboard* self, xkb_keycode_t code,

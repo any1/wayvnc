@@ -153,7 +153,7 @@ void keyboard_dump_lookup_table(const struct keyboard* self)
 		keyboard__dump_entry(self, &self->lookup_table[i]);
 }
 
-int keyboard_init(struct keyboard* self, const char* layout, const char* variant)
+int keyboard_init(struct keyboard* self, const struct xkb_rule_names* rule_names)
 {
 	self->context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
 	if (!self->context)
@@ -162,13 +162,7 @@ int keyboard_init(struct keyboard* self, const char* layout, const char* variant
 	if (intset_init(&self->key_state, 0) < 0)
 		goto key_state_failure;
 
-	struct xkb_rule_names rule_names = {
-		.layout = layout,
-		.model = "pc105",
-		.variant = variant,
-	};
-
-	self->keymap = xkb_keymap_new_from_names(self->context, &rule_names, 0);
+	self->keymap = xkb_keymap_new_from_names(self->context, rule_names, 0);
 	if (!self->keymap)
 		goto keymap_failure;
 
