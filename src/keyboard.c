@@ -330,6 +330,28 @@ static bool keyboard_symbol_is_mod(xkb_keysym_t symbol)
 	return false;
 }
 
+static void send_key(struct keyboard* self, xkb_keycode_t code, bool is_pressed)
+{
+	zwp_virtual_keyboard_v1_key(self->virtual_keyboard, 0, code - 8,
+	                            is_pressed ? WL_KEYBOARD_KEY_STATE_PRESSED
+	                                       : WL_KEYBOARD_KEY_STATE_RELEASED);
+}
+
+static bool update_key_state(struct keyboard* self, xkb_keycode_t code,
+		bool is_pressed)
+{
+	bool was_pressed = intset_is_set(&self->key_state, code);
+	if (was_pressed == is_pressed)
+		return false;
+
+	if (is_pressed)
+		intset_set(&self->key_state, code);
+	else
+		intset_clear(&self->key_state, code);
+
+	return true;
+}
+
 void keyboard_feed(struct keyboard* self, xkb_keysym_t symbol, bool is_pressed)
 {
 	struct table_entry* entry = keyboard_find_symbol(self, symbol);
@@ -356,21 +378,8 @@ void keyboard_feed(struct keyboard* self, xkb_keysym_t symbol, bool is_pressed)
 void keyboard_feed_code(struct keyboard* self, xkb_keycode_t code,
 		bool is_pressed)
 {
-	bool was_pressed = intset_is_set(&self->key_state, code);
-	if (was_pressed == is_pressed)
-		return;
-
-	if (is_pressed)
-		intset_set(&self->key_state, code);
-	else
-		intset_clear(&self->key_state, code);
-
-	// TODO: This could cause some synchronisation problems with other
-	// keyboards in the seat.
-	keyboard_apply_mods(self, code, is_pressed);
-
-	// TODO: Handle errors
-	zwp_virtual_keyboard_v1_key(self->virtual_keyboard, 0, code - 8,
-	                            is_pressed ? WL_KEYBOARD_KEY_STATE_PRESSED
-	                                       : WL_KEYBOARD_KEY_STATE_RELEASED);
+	if (update_key_state(self, code, is_pressed)) {
+		keyboard_apply_mods(self, code, is_pressed);
+		send_key(self, code, is_pressed);
+	}
 }
