@@ -42,6 +42,10 @@ struct table_entry {
 	int level;
 };
 
+struct kb_mods {
+	xkb_mod_mask_t depressed, latched, locked;
+};
+
 static void append_entry(struct keyboard* self, xkb_keysym_t symbol,
                          xkb_keycode_t code, int level)
 {
@@ -253,11 +257,23 @@ struct table_entry* keyboard_find_symbol(const struct keyboard* self,
 	return entry;
 }
 
+static void keyboard_send_mods(struct keyboard* self)
+{
+	xkb_mod_mask_t depressed, latched, locked, group;
+
+	depressed = xkb_state_serialize_mods(self->state, XKB_STATE_MODS_DEPRESSED);
+	latched = xkb_state_serialize_mods(self->state, XKB_STATE_MODS_LATCHED);
+	locked = xkb_state_serialize_mods(self->state, XKB_STATE_MODS_LOCKED);
+	group = xkb_state_serialize_mods(self->state, XKB_STATE_MODS_EFFECTIVE);
+
+	zwp_virtual_keyboard_v1_modifiers(self->virtual_keyboard, depressed,
+	                                  latched, locked, group);
+}
+
 static void keyboard_apply_mods(struct keyboard* self, xkb_keycode_t code,
                                 bool is_pressed)
 {
 	enum xkb_state_component comp, compmask;
-	xkb_mod_mask_t depressed, latched, locked, group;
 
 	comp = xkb_state_update_key(self->state, code,
 	                            is_pressed ? XKB_KEY_DOWN : XKB_KEY_UP);
@@ -270,14 +286,7 @@ static void keyboard_apply_mods(struct keyboard* self, xkb_keycode_t code,
 	if (!(comp & compmask))
 		return;
 
-	depressed = xkb_state_serialize_mods(self->state, XKB_STATE_MODS_DEPRESSED);
-	latched = xkb_state_serialize_mods(self->state, XKB_STATE_MODS_LATCHED);
-	locked = xkb_state_serialize_mods(self->state, XKB_STATE_MODS_LOCKED);
-	group = xkb_state_serialize_mods(self->state, XKB_STATE_MODS_EFFECTIVE);
-
-	// TODO: Handle errors
-	zwp_virtual_keyboard_v1_modifiers(self->virtual_keyboard, depressed,
-	                                  latched, locked, group);
+	keyboard_send_mods(self);
 }
 
 static struct table_entry* match_level(struct keyboard* self,
@@ -298,10 +307,6 @@ static struct table_entry* match_level(struct keyboard* self,
 		    entry->symbol != symbol)
 			break;
 	}
-
-	char name[256] MAYBE_UNUSED;
-	log_debug("Failed to match level on symbol: %s\n",
-	          get_symbol_name(symbol, name, sizeof(name)));
 
 	return NULL;
 }
@@ -337,6 +342,46 @@ static void send_key(struct keyboard* self, xkb_keycode_t code, bool is_pressed)
 	                                       : WL_KEYBOARD_KEY_STATE_RELEASED);
 }
 
+static void save_mods(struct keyboard* self, struct kb_mods* mods)
+{
+	mods->depressed = xkb_state_serialize_mods(self->state,
+			XKB_STATE_MODS_DEPRESSED);
+	mods->latched = xkb_state_serialize_mods(self->state,
+			XKB_STATE_MODS_LATCHED);
+	mods->locked = xkb_state_serialize_mods(self->state,
+			XKB_STATE_MODS_LOCKED);
+}
+
+static void restore_mods(struct keyboard* self, struct kb_mods* mods)
+{
+	xkb_state_update_mask(self->state, mods->depressed, mods->latched,
+			mods->locked, XKB_STATE_MODS_DEPRESSED,
+			XKB_STATE_MODS_LATCHED, XKB_STATE_MODS_LOCKED);
+}
+
+static void send_key_with_level(struct keyboard* self, xkb_keycode_t code,
+		bool is_pressed, int level)
+{
+	struct kb_mods save;
+	save_mods(self, &save);
+
+	int layout = xkb_state_key_get_layout(self->state, code);
+	xkb_mod_mask_t mods = 0;
+	xkb_keymap_key_get_mods_for_level(self->keymap, code, layout, level,
+			&mods, 1);
+	xkb_state_update_mask(self->state, mods, 0, 0, XKB_STATE_MODS_DEPRESSED,
+			XKB_STATE_MODS_LATCHED, XKB_STATE_MODS_LOCKED);
+	keyboard_send_mods(self);
+
+	log_debug("send key with level: old mods: %x, new mods: %x\n",
+			save.latched | save.locked | save.depressed, mods);
+
+	send_key(self, code, is_pressed);
+
+	restore_mods(self, &save);
+	keyboard_send_mods(self);
+}
+
 static bool update_key_state(struct keyboard* self, xkb_keycode_t code,
 		bool is_pressed)
 {
@@ -362,17 +407,30 @@ void keyboard_feed(struct keyboard* self, xkb_keysym_t symbol, bool is_pressed)
 		return;
 	}
 
+	bool level_is_match = true;
+
 	if (!keyboard_symbol_is_mod(symbol)) {
 		struct table_entry* level_entry = match_level(self, entry);
 		if (level_entry)
 			entry = level_entry;
+		else
+			level_is_match = false;
 	}
 
 #ifndef NDEBUG
 	keyboard__dump_entry(self, entry);
 #endif
 
-	keyboard_feed_code(self, entry->code, is_pressed);
+	if (!update_key_state(self, entry->code, is_pressed))
+		return;
+
+	keyboard_apply_mods(self, entry->code, is_pressed);
+
+	if (level_is_match)
+		send_key(self, entry->code, is_pressed);
+	else
+		send_key_with_level(self, entry->code, is_pressed,
+				entry->level);
 }
 
 void keyboard_feed_code(struct keyboard* self, xkb_keycode_t code,
