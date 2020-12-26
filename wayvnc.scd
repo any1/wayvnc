@@ -84,6 +84,33 @@ considered to be part of the key or the value.
 *username*
 	Choose a username for authentication.
 
+*xkb_layout*
+	The keyboard layout to use for key code lookup.
+
+	Default: _XKB_DEFAULT_LAYOUT_ or system default.
+
+*xkb_model*
+	The keyboard model by which to interpret keycodes and LEDs.
+
+	Default: "pc105"
+
+*xkb_options*
+	A comma separated list of options, through which the user specifies
+	non-layout related preferences such as which key is the Compose key. 
+
+	Default: _XKB_DEFAULT_OPTIONS_ or system default.
+
+*xkb_rules*
+	The rules file describes how to interpret the values of the model,
+	layout, variant and options fields.
+
+	Default: _XKB_DEFAULT_RULES_ or system default.
+
+*xkb_variant*
+	The keyboard variant to use for keycode lookup.
+
+	Default: _XKB_DEFAULT_VARIANT_ or system default.
+
 ## EXAMPLE
 
 ```
