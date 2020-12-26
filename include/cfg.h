@@ -28,6 +28,11 @@
 	X(string, address) \
 	X(uint, port) \
 	X(bool, enable_pam) \
+	X(string, xkb_rules) \
+	X(string, xkb_model) \
+	X(string, xkb_layout) \
+	X(string, xkb_variant) \
+	X(string, xkb_options) \
 
 struct cfg {
 #define string char*

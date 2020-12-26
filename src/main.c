@@ -946,9 +946,12 @@ int main(int argc, char* argv[])
 			self.keyboard_manager, self.selected_seat->wl_seat);
 
 	struct xkb_rule_names rule_names = {
-		.layout = self.kb_layout,
-		.model = "pc105",
-		.variant = self.kb_variant,
+		.rules = self.cfg.xkb_rules,
+		.layout = self.kb_layout ? self.kb_layout : self.cfg.xkb_layout,
+		.model = self.cfg.xkb_model ? self.cfg.xkb_model : "pc105",
+		.variant = self.kb_variant ? self.kb_variant :
+			self.cfg.xkb_variant,
+		.options = self.cfg.xkb_options,
 	};
 
 	keyboard_init(&self.keyboard_backend, &rule_names);
