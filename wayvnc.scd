@@ -160,6 +160,12 @@ _XDG_CONFIG_HOME_
 	exact layout isn't needed, just one that has all the symbols that you
 	use.
 
+*How do I enable the Compose key?*
+
+	Set "xkb_options=compose:menu" in the config file. Any key that is not
+	otherwise used will work. There just needs to be some key for wayvnc to
+	match against.
+
 # AUTHORS
 
 Maintained by Andri Yngvason <andri@yngvason.is>. Up-to-date sources can be
