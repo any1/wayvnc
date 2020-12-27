@@ -40,6 +40,7 @@
 #include "virtual-keyboard-unstable-v1.h"
 #include "xdg-output-unstable-v1.h"
 #include "linux-dmabuf-unstable-v1.h"
+#include "wlr-seat-management-unstable-v1.h"
 #include "screencopy.h"
 #include "data-control.h"
 #include "strlcpy.h"
@@ -68,6 +69,17 @@
 
 #define MAYBE_UNUSED __attribute__((unused))
 
+struct wv_client {
+	struct wl_list link;
+
+	struct keyboard kb;
+	struct pointer pointer;
+
+	struct wl_seat* wl_seat;
+	char seat_name[256];
+	struct zwlr_chair_v1* chair;
+};
+
 struct wayvnc {
 	bool do_exit;
 
@@ -75,6 +87,7 @@ struct wayvnc {
 	struct wl_registry* registry;
 	struct wl_list outputs;
 	struct wl_list seats;
+	struct wl_list clients;
 	struct cfg cfg;
 
 	struct zxdg_output_manager_v1* xdg_output_manager;
@@ -107,14 +120,10 @@ struct wayvnc {
 	uint32_t n_frames_rendered;
 };
 
-struct wv_client {
-	struct keyboard kb;
-	struct pointer pointer;
-};
-
 void wayvnc_exit(struct wayvnc* self);
 void on_capture_done(struct screencopy* sc);
 static void on_render(struct nvnc_display* display, struct nvnc_fb* fb);
+static void on_seat_ready(struct seat*);
 
 #if defined(GIT_VERSION)
 static const char wayvnc_version[] = GIT_VERSION;
@@ -127,6 +136,9 @@ static const char wayvnc_version[] = "UNKNOWN";
 struct wl_shm* wl_shm = NULL;
 struct zwp_linux_dmabuf_v1* zwp_linux_dmabuf = NULL;
 struct gbm_device* gbm_device = NULL;
+struct zwlr_seat_manager_v1* zwlr_seat_manager = NULL;
+
+static uint64_t seat_id = 0;
 
 static void registry_add(void* data, struct wl_registry* registry,
 			 uint32_t id, const char* interface,
@@ -191,6 +203,9 @@ static void registry_add(void* data, struct wl_registry* registry,
 			return;
 		}
 
+		seat->on_ready = on_seat_ready;
+		seat->userdata = self;
+
 		wl_list_insert(&self->seats, &seat->link);
 		return;
 	}
@@ -212,6 +227,12 @@ static void registry_add(void* data, struct wl_registry* registry,
 	if (strcmp(interface, zwlr_data_control_manager_v1_interface.name) == 0) {
 		self->data_control.manager = wl_registry_bind(registry, id,
 				&zwlr_data_control_manager_v1_interface, 2);
+		return;
+	}
+
+	if (strcmp(interface, zwlr_seat_manager_v1_interface.name) == 0) {
+		zwlr_seat_manager = wl_registry_bind(registry, id,
+				&zwlr_seat_manager_v1_interface, 1);
 		return;
 	}
 }
@@ -295,6 +316,8 @@ void wayvnc_destroy(struct wayvnc* self)
 	output_list_destroy(&self->outputs);
 	seat_list_destroy(&self->seats);
 
+	zwlr_seat_manager_v1_destroy(zwlr_seat_manager);
+
 	zxdg_output_manager_v1_destroy(self->xdg_output_manager);
 
 	wl_shm_destroy(wl_shm);
@@ -337,6 +360,7 @@ static int init_wayland(struct wayvnc* self)
 
 	wl_list_init(&self->outputs);
 	wl_list_init(&self->seats);
+	wl_list_init(&self->clients);
 
 	self->registry = wl_display_get_registry(self->display);
 	if (!self->registry)
@@ -441,22 +465,22 @@ static void on_client_destroy(struct nvnc_client* nvnc_client)
 	struct wv_client* client = nvnc_get_userdata(nvnc_client);
 	assert(client);
 
-	pointer_destroy(&client->pointer);
+	if (client->pointer.pointer)
+		pointer_destroy(&client->pointer);
 
-	zwp_virtual_keyboard_v1_destroy(client->kb.virtual_keyboard);
-	keyboard_destroy(&client->kb);
+	if (client->kb.virtual_keyboard) {
+		zwp_virtual_keyboard_v1_destroy(client->kb.virtual_keyboard);
+		keyboard_destroy(&client->kb);
+	}
 
+	zwlr_chair_v1_destroy(client->chair);
+
+	wl_list_remove(&client->link);
 	free(client);
 }
 
-static void on_new_client(struct nvnc_client* nvnc_client)
+static void init_client_inputs(struct wayvnc* wayvnc, struct wv_client* client)
 {
-	struct nvnc* nvnc = nvnc_client_get_server(nvnc_client);
-	struct wayvnc* wayvnc = nvnc_get_userdata(nvnc);
-
-	struct wv_client* client = calloc(1, sizeof(*client));
-	assert(client);
-
 	// Keyboard
 	struct xkb_rule_names rule_names = {
 		.rules = wayvnc->cfg.xkb_rules,
@@ -471,8 +495,7 @@ static void on_new_client(struct nvnc_client* nvnc_client)
 
 	client->kb.virtual_keyboard =
 		zwp_virtual_keyboard_manager_v1_create_virtual_keyboard(
-			wayvnc->keyboard_manager,
-			wayvnc->selected_seat->wl_seat);
+			wayvnc->keyboard_manager, client->wl_seat);
 	assert(client->kb.virtual_keyboard);
 
 	int rc MAYBE_UNUSED = keyboard_init(&client->kb, &rule_names);
@@ -484,15 +507,44 @@ static void on_new_client(struct nvnc_client* nvnc_client)
 
 	client->pointer.pointer = wayvnc->pointer_manager_version == 2
 		? zwlr_virtual_pointer_manager_v1_create_virtual_pointer_with_output(
-			wayvnc->pointer_manager, wayvnc->selected_seat->wl_seat,
+			wayvnc->pointer_manager, client->wl_seat,
 			wayvnc->selected_output->wl_output)
 		: zwlr_virtual_pointer_manager_v1_create_virtual_pointer(
-			wayvnc->pointer_manager, wayvnc->selected_seat->wl_seat);
+			wayvnc->pointer_manager, client->wl_seat);
 
 	pointer_init(&client->pointer);
+}
+
+static void on_seat_ready(struct seat* seat)
+{
+	struct wayvnc* wayvnc = seat->userdata;
+
+	struct wv_client* client;
+	wl_list_for_each(client, &wayvnc->clients, link)
+		if (!client->wl_seat &&
+				strcmp(client->seat_name, seat->name) == 0) {
+			client->wl_seat = seat->wl_seat;
+			init_client_inputs(wayvnc, client);
+		}
+}
+
+static void on_new_client(struct nvnc_client* nvnc_client)
+{
+	struct nvnc* nvnc = nvnc_client_get_server(nvnc_client);
+	struct wayvnc* wayvnc = nvnc_get_userdata(nvnc);
+
+	struct wv_client* client = calloc(1, sizeof(*client));
+	assert(client);
+
+	snprintf(client->seat_name, sizeof(client->seat_name),
+			"wayvnc-%" PRIu64, seat_id++);
+	client->chair = zwlr_seat_manager_v1_create_chair(zwlr_seat_manager,
+			client->seat_name);
 
 	nvnc_set_userdata(nvnc_client, client);
 	nvnc_set_client_cleanup_fn(nvnc_client, on_client_destroy);
+
+	wl_list_insert(&wayvnc->clients, &client->link);
 }
 
 static void on_pointer_event(struct nvnc_client* client, uint16_t x, uint16_t y,
@@ -504,6 +556,9 @@ static void on_pointer_event(struct nvnc_client* client, uint16_t x, uint16_t y,
 	struct wayvnc* wayvnc = nvnc_get_userdata(nvnc);
 	struct wv_client* wv_client = nvnc_get_userdata(client);
 
+	if (!wv_client->pointer.pointer)
+		return; /* Client does not have a seat yet */
+
 	uint32_t xfx = 0, xfy = 0;
 	output_transform_coord(wayvnc->selected_output, x, y, &xfx, &xfy);
 
@@ -514,6 +569,10 @@ static void on_key_event(struct nvnc_client* client, uint32_t symbol,
                          bool is_pressed)
 {
 	struct wv_client* wv_client = nvnc_get_userdata(client);
+	assert(wv_client);
+
+	if (!wv_client->kb.virtual_keyboard)
+		return; /* Client does not have a seat yet */
 
 	keyboard_feed(&wv_client->kb, symbol, is_pressed);
 }
@@ -522,6 +581,10 @@ static void on_key_code_event(struct nvnc_client* client, uint32_t code,
 		bool is_pressed)
 {
 	struct wv_client* wv_client = nvnc_get_userdata(client);
+	assert(wv_client);
+
+	if (!wv_client->kb.virtual_keyboard)
+		return; /* Client does not have a seat yet */
 
 	keyboard_feed_code(&wv_client->kb, code + 8, is_pressed);
 }
