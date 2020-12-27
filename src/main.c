@@ -87,7 +87,6 @@ struct wayvnc {
 	const struct seat* selected_seat;
 
 	struct screencopy screencopy;
-	struct pointer pointer_backend;
 	struct data_control data_control;
 
 	struct aml_handler* wayland_handler;
@@ -110,6 +109,7 @@ struct wayvnc {
 
 struct wv_client {
 	struct keyboard kb;
+	struct pointer pointer;
 };
 
 void wayvnc_exit(struct wayvnc* self);
@@ -302,7 +302,6 @@ void wayvnc_destroy(struct wayvnc* self)
 	zwp_virtual_keyboard_manager_v1_destroy(self->keyboard_manager);
 
 	zwlr_virtual_pointer_manager_v1_destroy(self->pointer_manager);
-	pointer_destroy(&self->pointer_backend);
 
 	if (self->screencopy.manager)
 		zwlr_screencopy_manager_v1_destroy(self->screencopy.manager);
@@ -442,8 +441,11 @@ static void on_client_destroy(struct nvnc_client* nvnc_client)
 	struct wv_client* client = nvnc_get_userdata(nvnc_client);
 	assert(client);
 
+	pointer_destroy(&client->pointer);
+
 	zwp_virtual_keyboard_v1_destroy(client->kb.virtual_keyboard);
 	keyboard_destroy(&client->kb);
+
 	free(client);
 }
 
@@ -455,6 +457,7 @@ static void on_new_client(struct nvnc_client* nvnc_client)
 	struct wv_client* client = calloc(1, sizeof(*client));
 	assert(client);
 
+	// Keyboard
 	struct xkb_rule_names rule_names = {
 		.rules = wayvnc->cfg.xkb_rules,
 		.layout = wayvnc->kb_layout ? wayvnc->kb_layout :
@@ -475,6 +478,19 @@ static void on_new_client(struct nvnc_client* nvnc_client)
 	int rc MAYBE_UNUSED = keyboard_init(&client->kb, &rule_names);
 	assert(rc == 0);
 
+	// Pointer
+	client->pointer.vnc = wayvnc->nvnc;
+	client->pointer.output = wayvnc->selected_output;
+
+	client->pointer.pointer = wayvnc->pointer_manager_version == 2
+		? zwlr_virtual_pointer_manager_v1_create_virtual_pointer_with_output(
+			wayvnc->pointer_manager, wayvnc->selected_seat->wl_seat,
+			wayvnc->selected_output->wl_output)
+		: zwlr_virtual_pointer_manager_v1_create_virtual_pointer(
+			wayvnc->pointer_manager, wayvnc->selected_seat->wl_seat);
+
+	pointer_init(&client->pointer);
+
 	nvnc_set_userdata(nvnc_client, client);
 	nvnc_set_client_cleanup_fn(nvnc_client, on_client_destroy);
 }
@@ -486,11 +502,12 @@ static void on_pointer_event(struct nvnc_client* client, uint16_t x, uint16_t y,
 
 	struct nvnc* nvnc = nvnc_client_get_server(client);
 	struct wayvnc* wayvnc = nvnc_get_userdata(nvnc);
+	struct wv_client* wv_client = nvnc_get_userdata(client);
 
 	uint32_t xfx = 0, xfy = 0;
 	output_transform_coord(wayvnc->selected_output, x, y, &xfx, &xfy);
 
-	pointer_set(&wayvnc->pointer_backend, xfx, xfy, button_mask);
+	pointer_set(&wv_client->pointer, xfx, xfy, button_mask);
 }
 
 static void on_key_event(struct nvnc_client* client, uint32_t symbol,
@@ -983,18 +1000,6 @@ int main(int argc, char* argv[])
 	self.selected_seat = seat;
 	self.screencopy.wl_output = out->wl_output;
 	self.screencopy.rate_limit = max_rate;
-
-	self.pointer_backend.vnc = self.nvnc;
-	self.pointer_backend.output = self.selected_output;
-
-	self.pointer_backend.pointer = self.pointer_manager_version == 2
-		? zwlr_virtual_pointer_manager_v1_create_virtual_pointer_with_output(
-			self.pointer_manager, self.selected_seat->wl_seat,
-			out->wl_output)
-		: zwlr_virtual_pointer_manager_v1_create_virtual_pointer(
-			self.pointer_manager, self.selected_seat->wl_seat);
-
-	pointer_init(&self.pointer_backend);
 
 	out->on_dimension_change = on_output_dimension_change;
 	out->userdata = &self;
