@@ -166,6 +166,9 @@ int keyboard_init(struct keyboard* self, const struct xkb_rule_names* rule_names
 	if (!self->keymap)
 		goto keymap_failure;
 
+	if (xkb_keymap_num_layouts(self->keymap) > 1)
+		log_warning("Multiple keyboard layouts have been specified, but only one is supported.\n");
+
 	self->state = xkb_state_new(self->keymap);
 	if (!self->state)
 		goto state_failure;
