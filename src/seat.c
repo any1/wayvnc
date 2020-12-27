@@ -30,6 +30,10 @@ static void seat_capabilities(void* data, struct wl_seat* wl_seat,
 	struct seat* self = data;
 
 	self->capabilities = capabilities;
+	self->has_capabilities = true;
+
+	if (self->has_capabilities && self->has_name && self->on_ready)
+		self->on_ready(self);
 }
 
 static void seat_name(void* data, struct wl_seat* wl_seat, const char* name)
@@ -37,6 +41,10 @@ static void seat_name(void* data, struct wl_seat* wl_seat, const char* name)
 	struct seat* self = data;
 
 	strlcpy(self->name, name, sizeof(self->name));
+	self->has_name = true;
+
+	if (self->has_capabilities && self->has_name && self->on_ready)
+		self->on_ready(self);
 }
 
 static const struct wl_seat_listener seat_listener = {

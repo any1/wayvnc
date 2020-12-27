@@ -17,6 +17,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <stdbool.h>
 #include <wayland-client.h>
 
 struct seat {
@@ -26,6 +27,12 @@ struct seat {
 	uint32_t id;
 	uint32_t capabilities;
 	char name[256];
+
+	bool has_capabilities;
+	bool has_name;
+
+	void (*on_ready)(struct seat*);
+	void* userdata;
 };
 
 struct seat* seat_new(struct wl_seat* wl_seat, uint32_t id);
