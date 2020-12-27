@@ -289,10 +289,9 @@ static struct table_entry* match_level(struct keyboard* self,
 	xkb_keysym_t symbol = entry->symbol;
 
 	while (true) {
-		int layout, level;
+		int level;
 
-		layout = xkb_state_key_get_layout(self->state, entry->code);
-		level = xkb_state_key_get_level(self->state, entry->code, layout);
+		level = xkb_state_key_get_level(self->state, entry->code, 0);
 
 		if (entry->level == level)
 			return entry;
@@ -359,9 +358,8 @@ static void send_key_with_level(struct keyboard* self, xkb_keycode_t code,
 	struct kb_mods save;
 	save_mods(self, &save);
 
-	int layout = xkb_state_key_get_layout(self->state, code);
 	xkb_mod_mask_t mods = 0;
-	xkb_keymap_key_get_mods_for_level(self->keymap, code, layout, level,
+	xkb_keymap_key_get_mods_for_level(self->keymap, code, 0, level,
 			&mods, 1);
 	xkb_state_update_mask(self->state, mods, 0, 0, XKB_STATE_MODS_DEPRESSED,
 			XKB_STATE_MODS_LATCHED, XKB_STATE_MODS_LOCKED);
