@@ -21,6 +21,7 @@ client_protocols = [
 	'xdg-output-unstable-v1.xml',
 	'linux-dmabuf-unstable-v1.xml',
 	'wlr-data-control-unstable-v1.xml',
+	'wlr-seat-management-unstable-v1.xml',
 ]
 
 client_protos_src = []
