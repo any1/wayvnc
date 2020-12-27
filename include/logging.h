@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 Andri Yngvason
+ * Copyright (c) 2019 - 2020 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -25,3 +25,4 @@
 #endif
 
 #define log_error(...) fprintf(stderr, "ERROR: " __VA_ARGS__)
+#define log_warning(...) fprintf(stderr, "Warning: " __VA_ARGS__)
