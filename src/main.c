@@ -40,7 +40,7 @@
 #include "virtual-keyboard-unstable-v1.h"
 #include "xdg-output-unstable-v1.h"
 #include "linux-dmabuf-unstable-v1.h"
-#include "wlr-seat-management-unstable-v1.h"
+#include "transient-seat-unstable-v1.h"
 #include "screencopy.h"
 #include "data-control.h"
 #include "strlcpy.h"
@@ -77,7 +77,7 @@ struct wv_client {
 
 	struct wl_seat* wl_seat;
 	char seat_name[256];
-	struct zwlr_chair_v1* chair;
+	struct zext_transient_seat_v1* chair;
 };
 
 struct wayvnc {
@@ -136,7 +136,7 @@ static const char wayvnc_version[] = "UNKNOWN";
 struct wl_shm* wl_shm = NULL;
 struct zwp_linux_dmabuf_v1* zwp_linux_dmabuf = NULL;
 struct gbm_device* gbm_device = NULL;
-struct zwlr_seat_manager_v1* zwlr_seat_manager = NULL;
+struct zext_transient_seat_manager_v1* zext_transient_seat_manager = NULL;
 
 static uint64_t seat_id = 0;
 
@@ -230,9 +230,9 @@ static void registry_add(void* data, struct wl_registry* registry,
 		return;
 	}
 
-	if (strcmp(interface, zwlr_seat_manager_v1_interface.name) == 0) {
-		zwlr_seat_manager = wl_registry_bind(registry, id,
-				&zwlr_seat_manager_v1_interface, 1);
+	if (strcmp(interface, zext_transient_seat_manager_v1_interface.name) == 0) {
+		zext_transient_seat_manager = wl_registry_bind(registry, id,
+				&zext_transient_seat_manager_v1_interface, 1);
 		return;
 	}
 }
@@ -316,7 +316,7 @@ void wayvnc_destroy(struct wayvnc* self)
 	output_list_destroy(&self->outputs);
 	seat_list_destroy(&self->seats);
 
-	zwlr_seat_manager_v1_destroy(zwlr_seat_manager);
+	zext_transient_seat_manager_v1_destroy(zext_transient_seat_manager);
 
 	zxdg_output_manager_v1_destroy(self->xdg_output_manager);
 
@@ -473,7 +473,7 @@ static void on_client_destroy(struct nvnc_client* nvnc_client)
 		keyboard_destroy(&client->kb);
 	}
 
-	zwlr_chair_v1_destroy(client->chair);
+	zext_transient_seat_v1_destroy(client->chair);
 
 	wl_list_remove(&client->link);
 	free(client);
@@ -515,7 +515,7 @@ static void init_client_inputs(struct wayvnc* wayvnc, struct wv_client* client)
 	pointer_init(&client->pointer);
 }
 
-static void on_seat_ready(struct seat* seat)
+void on_seat_ready(struct seat* seat)
 {
 	struct wayvnc* wayvnc = seat->userdata;
 
@@ -528,6 +528,35 @@ static void on_seat_ready(struct seat* seat)
 		}
 }
 
+void transient_seat_failed(void* data, struct zext_transient_seat_v1* seat,
+		uint32_t reason)
+{
+	// TODO: Handle properly
+	abort();
+}
+
+void transient_seat_ready(void* data, struct zext_transient_seat_v1* chair,
+		const char* name)
+{
+	struct nvnc_client* nvnc_client = data;
+	struct wv_client* client = nvnc_get_userdata(nvnc_client);
+	struct nvnc* nvnc = nvnc_client_get_server(nvnc_client);
+	struct wayvnc* wayvnc = nvnc_get_userdata(nvnc);
+
+	strlcpy(client->seat_name, name, sizeof(client->seat_name));
+
+	struct seat* seat = seat_find_by_name(&wayvnc->seats, name);
+	if (seat) {
+		client->wl_seat = seat->wl_seat;
+		init_client_inputs(wayvnc, client);
+	}
+}
+
+struct zext_transient_seat_v1_listener transient_seat_listener = {
+	.failed = transient_seat_failed,
+	.ready = transient_seat_ready,
+};
+
 static void on_new_client(struct nvnc_client* nvnc_client)
 {
 	struct nvnc* nvnc = nvnc_client_get_server(nvnc_client);
@@ -536,10 +565,16 @@ static void on_new_client(struct nvnc_client* nvnc_client)
 	struct wv_client* client = calloc(1, sizeof(*client));
 	assert(client);
 
-	snprintf(client->seat_name, sizeof(client->seat_name),
-			"wayvnc-%" PRIu64, seat_id++);
-	client->chair = zwlr_seat_manager_v1_create_chair(zwlr_seat_manager,
-			client->seat_name);
+	int pid = getpid();
+
+	char name[256];
+	snprintf(name, sizeof(name), "wayvnc-%d-%" PRIu64, pid, seat_id++);
+
+	client->chair = zext_transient_seat_manager_v1_create(
+			zext_transient_seat_manager, name);
+
+	zext_transient_seat_v1_add_listener(client->chair,
+			&transient_seat_listener, nvnc_client);
 
 	nvnc_set_userdata(nvnc_client, client);
 	nvnc_set_client_cleanup_fn(nvnc_client, on_client_destroy);
