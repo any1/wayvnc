@@ -385,7 +385,7 @@ void on_wayland_event(void* obj)
 	assert(rc == 0);
 
 	if (wl_display_read_events(self->display) < 0) {
-		if (errno == EPIPE) {
+		if (errno == EPIPE || errno == ECONNRESET) {
 			log_error("Compositor has gone away. Exiting...\n");
 			wayvnc_exit(self);
 		} else {
