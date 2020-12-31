@@ -44,7 +44,7 @@ libpam = cc.find_library('pam', required: get_option('pam'))
 pixman = dependency('pixman-1')
 gbm = dependency('gbm', required: get_option('screencopy-dmabuf'))
 drm = dependency('libdrm')
-xkbcommon = dependency('xkbcommon')
+xkbcommon = dependency('xkbcommon', version: '>=1.0.0')
 wayland_client = dependency('wayland-client')
 
 neatvnc_version = '>=0.4.0'
