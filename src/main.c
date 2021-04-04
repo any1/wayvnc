@@ -492,9 +492,9 @@ bool on_auth(const char* username, const char* password, void* ud)
 	return true;
 }
 
-int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port)
+int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port, bool is_unix)
 {
-	self->nvnc = nvnc_open(addr, port);
+	self->nvnc = is_unix ? nvnc_open_unix(addr) : nvnc_open(addr, port);
 	if (!self->nvnc) {
 		log_error("Failed to bind to address\n");
 		return -1;
@@ -710,6 +710,8 @@ int wayvnc_usage(FILE* stream, int rc)
 "    -r,--render-cursor                        Enable overlay cursor rendering.\n"
 "    -f,--max-fps=<fps>                        Set the rate limit (default 30).\n"
 "    -p,--show-performance                     Show performance counters.\n"
+"    -u,--unix-socket                          Create a UNIX domain socket\n"
+"                                              instead of TCP.\n"
 "    -V,--version                              Show version info.\n"
 "    -h,--help                                 Get help (this text).\n"
 "\n";
@@ -809,6 +811,7 @@ int main(int argc, char* argv[])
 
 	const char* address = NULL;
 	int port = 0;
+	bool use_unix_socket = false;
 
 	const char* output_name = NULL;
 	const char* seat_name = NULL;
@@ -817,7 +820,7 @@ int main(int argc, char* argv[])
 	bool show_performance = false;
 	int max_rate = 30;
 
-	static const char* shortopts = "C:o:k:s:rf:hpV";
+	static const char* shortopts = "C:o:k:s:rf:hpuV";
 	int drm_fd MAYBE_UNUSED = -1;
 
 	static const struct option longopts[] = {
@@ -829,6 +832,7 @@ int main(int argc, char* argv[])
 		{ "max-fps", required_argument, NULL, 'f' },
 		{ "help", no_argument, NULL, 'h' },
 		{ "show-performance", no_argument, NULL, 'p' },
+		{ "unix-socket", no_argument, NULL, 'u' },
 		{ "version", no_argument, NULL, 'V' },
 		{ NULL, 0, NULL, 0 }
 	};
@@ -859,6 +863,9 @@ int main(int argc, char* argv[])
 			break;
 		case 'p':
 			show_performance = true;
+			break;
+		case 'u':
+			use_unix_socket = true;
 			break;
 		case 'V':
 			return show_version();
@@ -986,7 +993,7 @@ int main(int argc, char* argv[])
 	if (init_main_loop(&self) < 0)
 		goto main_loop_failure;
 
-	if (init_nvnc(&self, address, port) < 0)
+	if (init_nvnc(&self, address, port, use_unix_socket) < 0)
 		goto nvnc_failure;
 
 	if (self.screencopy.manager)
