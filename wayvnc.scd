@@ -31,6 +31,10 @@ wayvnc - A VNC server for wlroots based Wayland compositors.
 *-p, --show-performance*
 	Show performance counters.
 
+*-u, --unix-socket*
+	Create a UNIX domain socket instead of TCP, treating the address as a
+	path.
+
 *-V, --version*
 	Show version info.
 
