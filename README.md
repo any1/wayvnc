@@ -14,7 +14,7 @@ project.
 ## Installing
 ```
 # archlinux
-yay -S wayvnc
+pacman -S wayvnc
 
 # FreeBSD
 pkg install wayvnc
