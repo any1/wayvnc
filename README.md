@@ -62,7 +62,7 @@ dnf install -y meson gcc ninja-build pkg-config egl-wayland egl-wayland-devel \
 #### For Debian
 ```
 sudo apt install gcc meson ninja-build pkg-config libpixman-1-dev \
-	libdrm-dev libxbcommon-dev libwayland-dev
+	libdrm-dev libxkbcommon-dev libwayland-dev zlib1g-dev
 ```
 
 
