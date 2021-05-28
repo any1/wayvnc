@@ -7,7 +7,7 @@ display via the RFB protocol. The Wayland session may be a headless one, so it
 is also possible to run wayvnc without a physical display attached.
 
 Please check the [FAQ](FAQ.md) for answers to common questions. For further
-support, join the #wayvnc IRC channel on freenode, or ask your questions on the
+support, join the #wayvnc IRC channel on libera.chat, or ask your questions on the
 GitHub [discussion forum](https://github.com/any1/wayvnc/discussions) for the
 project.
 
