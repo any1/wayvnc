@@ -68,6 +68,13 @@
 
 #define MAYBE_UNUSED __attribute__((unused))
 
+struct fb_side_data {
+	struct pixman_region16 damage;
+	LIST_ENTRY(fb_side_data) link;
+};
+
+LIST_HEAD(fb_side_data_list, fb_side_data);
+
 struct wayvnc {
 	bool do_exit;
 
@@ -96,22 +103,20 @@ struct wayvnc {
 
 	struct nvnc* nvnc;
 	struct nvnc_display* nvnc_display;
-	struct nvnc_fb* buffer;
+	struct nvnc_fb_pool* fb_pool;
+	struct fb_side_data_list fb_side_data_list;
 
 	struct damage_refinery damage_refinery;
-	struct pixman_region16 current_damage;
 
 	const char* kb_layout;
 	const char* kb_variant;
 
 	uint32_t damage_area_sum;
 	uint32_t n_frames_captured;
-	uint32_t n_frames_rendered;
 };
 
 void wayvnc_exit(struct wayvnc* self);
 void on_capture_done(struct screencopy* sc);
-static void on_render(struct nvnc_display* display, struct nvnc_fb* fb);
 
 #if defined(GIT_VERSION)
 static const char wayvnc_version[] = GIT_VERSION;
@@ -506,11 +511,9 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port, bool is_unix
 
 	nvnc_add_display(self->nvnc, self->nvnc_display);
 
-	nvnc_set_userdata(self->nvnc, self);
+	nvnc_set_userdata(self->nvnc, self, NULL);
 
 	nvnc_set_name(self->nvnc, "WayVNC");
-
-	nvnc_display_set_render_fn(self->nvnc_display, on_render);
 
 	if (self->cfg.enable_auth &&
 	    nvnc_enable_auth(self->nvnc, self->cfg.private_key_file,
@@ -556,31 +559,35 @@ int wayvnc_start_capture_immediate(struct wayvnc* self)
 	return rc;
 }
 
-static void on_render(struct nvnc_display* display, struct nvnc_fb* fb)
+static void fb_side_data_destroy(void* userdata)
 {
-	struct nvnc* nvnc = nvnc_display_get_server(display);
-	struct wayvnc* self = nvnc_get_userdata(nvnc);
+	struct fb_side_data* fb_side_data = userdata;
+	LIST_REMOVE(fb_side_data, link);
+	pixman_region_fini(&fb_side_data->damage);
+	free(fb_side_data);
+}
 
-	if (!self->screencopy.back)
-		return;
+static void wv_damage_all_buffers(struct wayvnc* self,
+		struct pixman_region16* region)
+{
+	struct fb_side_data *item;
+	LIST_FOREACH(item, &self->fb_side_data_list, link)
+		pixman_region_union(&item->damage, &item->damage, region);
+}
 
-	self->n_frames_rendered++;
-
+void wayvnc_render_to_fb(struct wayvnc* self, struct nvnc_fb* fb)
+{
 	DTRACE_PROBE(wayvnc, render_start);
+
+	struct fb_side_data* fb_side_data = nvnc_get_userdata(fb);
+	assert(fb_side_data);
 
 	enum wl_output_transform transform = self->selected_output->transform;
 	wv_pixman_render(fb, self->screencopy.back, transform,
-			&self->current_damage);
-	pixman_region_clear(&self->current_damage);
+			&fb_side_data->damage);
+	pixman_region_clear(&fb_side_data->damage);
 
 	DTRACE_PROBE(wayvnc, render_end);
-}
-
-static void wayvnc_damage_region(struct wayvnc* self,
-                                 struct pixman_region16* damage)
-{
-	pixman_region_union(&self->current_damage, &self->current_damage, damage);
-	nvnc_display_damage_region(self->nvnc_display, damage);
 }
 
 // TODO: Handle transform change too
@@ -588,10 +595,6 @@ void on_output_dimension_change(struct output* output)
 {
 	struct wayvnc* self = output->userdata;
 	assert(self->selected_output == output);
-
-	// The buffer must have been set as a result of a screencopy frame
-	if (!self->buffer)
-		return;
 
 	log_debug("Output dimensions changed. Restarting frame capturer...\n");
 
@@ -629,24 +632,32 @@ void wayvnc_process_frame(struct wayvnc* self)
 		return;
 	}
 
-	if (self->buffer && (width != nvnc_fb_get_width(self->buffer) ||
-			height != nvnc_fb_get_height(self->buffer))) {
-		log_debug("Frame dimensions changed. Resizing...\n");
-
-		nvnc_fb_unref(self->buffer);
-		self->buffer = NULL;
+	bool dimensions_changed =
+		nvnc_fb_pool_resize(self->fb_pool, width, height, format);
+	if (dimensions_changed) {
 		damage_refinery_destroy(&self->damage_refinery);
-	}
-
-	// TODO: Maybe the buffer needs to be changed inside on_render?
-	if (!self->buffer) {
-		self->buffer = nvnc_fb_new(width, height, format);
-		nvnc_display_set_buffer(self->nvnc_display, self->buffer);
-		log_debug("Set nvnc buffer: %p\n", self->buffer);
-
 		damage_refinery_init(&self->damage_refinery,
 			self->screencopy.back->width,
 			self->screencopy.back->height);
+	}
+
+	struct nvnc_fb *fb = nvnc_fb_pool_acquire(self->fb_pool);
+	if (!fb) {
+		log_error("Failed to acquire a vnc buffer\n");
+		return;
+	}
+
+	struct fb_side_data* fb_side_data = nvnc_get_userdata(fb);
+	if (!fb_side_data) {
+		fb_side_data = calloc(1, sizeof(*fb_side_data));
+		assert(fb_side_data);
+
+		/* This is a new buffer, so the whole surface is damaged. */
+		pixman_region_init_rect(&fb_side_data->damage, 0, 0, width,
+				height);
+
+		nvnc_set_userdata(fb, fb_side_data, fb_side_data_destroy);
+		LIST_INSERT_HEAD(&self->fb_side_data_list, fb_side_data, link);
 	}
 
 	self->n_frames_captured++;
@@ -665,8 +676,13 @@ void wayvnc_process_frame(struct wayvnc* self)
 			self->selected_output->transform,
 			self->selected_output->width,
 			self->selected_output->height);
-//	damage_dump(stdout, &txdamage, width, height, 32);
-	wayvnc_damage_region(self, &txdamage);
+
+	wv_damage_all_buffers(self, &txdamage);
+	wayvnc_render_to_fb(self, fb);
+	nvnc_display_set_buffer(self->nvnc_display, fb);
+	nvnc_fb_unref(fb);
+	nvnc_display_damage_region(self->nvnc_display, &txdamage);
+
 	pixman_region_fini(&refined);
 	pixman_region_fini(&txdamage);
 
@@ -763,12 +779,10 @@ static void on_perf_tick(void* obj)
 	double area_avg = (double)self->damage_area_sum / (double)self->n_frames_captured;
 	double relative_area_avg = 100.0 * area_avg / total_area;
 
-	printf("Frames captured: %"PRIu32", rendered: %"PRIu32", average reported frame damage: %.1f %%\n",
-			self->n_frames_captured, self->n_frames_rendered,
-			relative_area_avg);
+	printf("Frames captured: %"PRIu32", average reported frame damage: %.1f %%\n",
+			self->n_frames_captured, relative_area_avg);
 
 	self->n_frames_captured = 0;
-	self->n_frames_rendered = 0;
 	self->damage_area_sum = 0;
 }
 
@@ -996,6 +1010,12 @@ int main(int argc, char* argv[])
 	if (init_nvnc(&self, address, port, use_unix_socket) < 0)
 		goto nvnc_failure;
 
+	self.fb_pool = nvnc_fb_pool_new(0, 0, 0);
+	if (!self.fb_pool)
+		goto buffer_pool_failure;
+
+	LIST_INIT(&self.fb_side_data_list);
+
 	if (self.screencopy.manager)
 		screencopy_init(&self.screencopy);
 
@@ -1007,8 +1027,6 @@ int main(int argc, char* argv[])
 	if (self.data_control.manager)
 		data_control_init(&self.data_control, self.display, self.nvnc,
 				self.selected_seat->wl_seat);
-
-	pixman_region_init(&self.current_damage);
 
 	self.screencopy.overlay_cursor = overlay_cursor;
 
@@ -1028,13 +1046,9 @@ int main(int argc, char* argv[])
 
 	screencopy_stop(&self.screencopy);
 
-	if (self.buffer) {
-		damage_refinery_destroy(&self.damage_refinery);
-		nvnc_fb_unref(self.buffer);
-	}
+	damage_refinery_destroy(&self.damage_refinery);
 
-	pixman_region_fini(&self.current_damage);
-
+	nvnc_fb_pool_unref(self.fb_pool);
 	nvnc_display_unref(self.nvnc_display);
 	nvnc_close(self.nvnc);
 	if (zwp_linux_dmabuf)
@@ -1055,6 +1069,8 @@ int main(int argc, char* argv[])
 	return 0;
 
 capture_failure:
+	nvnc_fb_pool_unref(self.fb_pool);
+buffer_pool_failure:
 	nvnc_display_unref(self.nvnc_display);
 	nvnc_close(self.nvnc);
 nvnc_failure:
