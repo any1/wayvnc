@@ -39,6 +39,10 @@ extern struct wl_shm* wl_shm;
 extern struct zwp_linux_dmabuf_v1* zwp_linux_dmabuf;
 extern struct gbm_device* gbm_device;
 
+LIST_HEAD(wv_buffer_list, wv_buffer);
+
+static struct wv_buffer_list buffer_registry;
+
 enum wv_buffer_type wv_buffer_get_available_types(void)
 {
 	enum wv_buffer_type type = 0;
@@ -90,7 +94,10 @@ struct wv_buffer* wv_buffer_create_shm(int width,
 	if (!self->wl_buffer)
 		goto shm_failure;
 
-	pixman_region_init(&self->damage);
+	pixman_region_init(&self->frame_damage);
+	pixman_region_init_rect(&self->buffer_damage, 0, 0, width, height);
+
+	LIST_INSERT_HEAD(&buffer_registry, self, registry_link);
 
 	close(fd);
 	return self;
@@ -148,6 +155,8 @@ static struct wv_buffer* wv_buffer_create_dmabuf(int width, int height,
 	if (!self->wl_buffer)
 		goto buffer_failure;
 
+	LIST_INSERT_HEAD(&buffer_registry, self, registry_link);
+
 	return self;
 
 buffer_failure:
@@ -196,8 +205,10 @@ static void wv_buffer_destroy_dmabuf(struct wv_buffer* self)
 
 void wv_buffer_destroy(struct wv_buffer* self)
 {
-	pixman_region_fini(&self->damage);
+	pixman_region_fini(&self->buffer_damage);
+	pixman_region_fini(&self->frame_damage);
 	wv_buffer_unmap(self);
+	LIST_REMOVE(self, registry_link);
 
 	switch (self->type) {
 	case WV_BUFFER_SHM:
@@ -275,8 +286,8 @@ void wv_buffer_unmap(struct wv_buffer* self)
 void wv_buffer_damage_rect(struct wv_buffer* self, int x, int y, int width,
 		int height)
 {
-	pixman_region_union_rect(&self->damage, &self->damage, x, y, width,
-			height);
+	pixman_region_union_rect(&self->frame_damage, &self->frame_damage, x, y,
+			width, height);
 }
 
 void wv_buffer_damage_whole(struct wv_buffer* self)
@@ -286,7 +297,7 @@ void wv_buffer_damage_whole(struct wv_buffer* self)
 
 void wv_buffer_damage_clear(struct wv_buffer* self)
 {
-	pixman_region_clear(&self->damage);
+	pixman_region_clear(&self->frame_damage);
 }
 
 struct wv_buffer_pool* wv_buffer_pool_create(enum wv_buffer_type type,
@@ -390,4 +401,12 @@ void wv_buffer_pool_release(struct wv_buffer_pool* pool,
 	} else {
 		wv_buffer_destroy(buffer);
 	}
+}
+
+void wv_buffer_registry_damage_all(struct pixman_region16* region)
+{
+	struct wv_buffer *buffer;
+	LIST_FOREACH(buffer, &buffer_registry, registry_link)
+		pixman_region_union(&buffer->buffer_damage,
+				&buffer->buffer_damage, region);
 }

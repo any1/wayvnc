@@ -663,7 +663,7 @@ void wayvnc_process_frame(struct wayvnc* self)
 
 	self->n_frames_captured++;
 	self->damage_area_sum +=
-		calculate_region_area(&self->screencopy.back->damage);
+		calculate_region_area(&self->screencopy.back->frame_damage);
 
 	DTRACE_PROBE(wayvnc, refine_damage_start);
 
@@ -671,7 +671,7 @@ void wayvnc_process_frame(struct wayvnc* self)
 	pixman_region_init(&txdamage);
 	pixman_region_init(&refined);
 	damage_refine(&self->damage_refinery, &refined,
-			&self->screencopy.back->damage,
+			&self->screencopy.back->frame_damage,
 			self->screencopy.back);
 	wv_region_transform(&txdamage, &refined,
 			self->selected_output->transform,
