@@ -1105,7 +1105,7 @@ void wayvnc_process_frame(struct wayvnc* self)
 
 	self->n_frames_captured++;
 	self->damage_area_sum +=
-		calculate_region_area(&buffer->damage);
+		calculate_region_area(&buffer->frame_damage);
 
 	struct pixman_region16 damage;
 	pixman_region_init(&damage);
@@ -1117,12 +1117,12 @@ void wayvnc_process_frame(struct wayvnc* self)
 		buffer_transform = wv_output_transform_compose(output_transform,
 				WL_OUTPUT_TRANSFORM_FLIPPED_180);
 
-		wv_region_transform(&damage, &buffer->damage,
+		wv_region_transform(&damage, &buffer->frame_damage,
 				WL_OUTPUT_TRANSFORM_FLIPPED_180,
 				buffer->width, buffer->height);
 	} else {
 		buffer_transform = output_transform;
-		pixman_region_copy(&damage, &buffer->damage);
+		pixman_region_copy(&damage, &buffer->frame_damage);
 	}
 
 	nvnc_fb_set_transform(buffer->nvnc_fb,

@@ -36,9 +36,16 @@ enum wv_buffer_type {
 #endif
 };
 
+enum wv_buffer_domain {
+	WV_BUFFER_DOMAIN_UNSPEC = 0,
+	WV_BUFFER_DOMAIN_OUTPUT,
+	WV_BUFFER_DOMAIN_CURSOR,
+};
+
 struct wv_buffer {
 	enum wv_buffer_type type;
 	TAILQ_ENTRY(wv_buffer) link;
+	LIST_ENTRY(wv_buffer) registry_link;
 
 	struct nvnc_fb* nvnc_fb;
 	struct wl_buffer* wl_buffer;
@@ -49,10 +56,19 @@ struct wv_buffer {
 	uint32_t format;
 	bool y_inverted;
 
-	struct pixman_region16 damage;
+	enum wv_buffer_domain domain;
+
+	struct pixman_region16 frame_damage;
+	struct pixman_region16 buffer_damage;
 
 	/* The following is only applicable to DMABUF */
 	struct gbm_bo* bo;
+
+	/* The following is only applicable to cursors */
+	uint16_t cursor_width;
+	uint16_t cursor_height;
+	uint16_t x_hotspot;
+	uint16_t y_hotspot;
 };
 
 TAILQ_HEAD(wv_buffer_queue, wv_buffer);
@@ -83,3 +99,6 @@ void wv_buffer_pool_resize(struct wv_buffer_pool* pool, enum wv_buffer_type,
 struct wv_buffer* wv_buffer_pool_acquire(struct wv_buffer_pool* pool);
 void wv_buffer_pool_release(struct wv_buffer_pool* pool,
 		struct wv_buffer* buffer);
+
+void wv_buffer_registry_damage_all(struct pixman_region16* region,
+		enum wv_buffer_domain domain);
