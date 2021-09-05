@@ -633,7 +633,8 @@ void wayvnc_process_frame(struct wayvnc* self)
 	}
 
 	bool dimensions_changed =
-		nvnc_fb_pool_resize(self->fb_pool, width, height, format);
+		nvnc_fb_pool_resize(self->fb_pool, width, height, format,
+				width);
 	if (dimensions_changed) {
 		damage_refinery_destroy(&self->damage_refinery);
 		damage_refinery_init(&self->damage_refinery,
@@ -1010,7 +1011,7 @@ int main(int argc, char* argv[])
 	if (init_nvnc(&self, address, port, use_unix_socket) < 0)
 		goto nvnc_failure;
 
-	self.fb_pool = nvnc_fb_pool_new(0, 0, 0);
+	self.fb_pool = nvnc_fb_pool_new(0, 0, 0, 0);
 	if (!self.fb_pool)
 		goto buffer_pool_failure;
 
