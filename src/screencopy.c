@@ -74,6 +74,42 @@ static void screencopy_linux_dmabuf(void* data,
 #endif
 }
 
+static void screencopy_set_clip_region(struct screencopy* self)
+{
+	if (self->version < 4)
+		return;
+
+	int n_rects = 0;
+	struct pixman_box16* rects =
+		pixman_region_rectangles(&self->front->buffer_damage, &n_rects);
+
+	/* Arbitrary limit to guard against flooding the server */
+	if (n_rects > 16) {
+		struct pixman_box16* extents =
+			pixman_region_extents(&self->front->buffer_damage);
+		int x = extents->x1;
+		int y = extents->y1;
+		int width = extents->x2 - x;
+		int height = extents->y2 - y;
+
+		zwlr_screencopy_frame_v1_set_clip_region(self->frame, x, y,
+				width, height);
+		return;
+	}
+
+	zwlr_screencopy_frame_v1_set_clip_region(self->frame, 0, 0, 0, 0);
+
+	for (int i = 0; i < n_rects; ++i) {
+		int x = rects[i].x1;
+		int y = rects[i].y1;
+		int width = rects[i].x2 - x;
+		int height = rects[i].y2 - y;
+
+		zwlr_screencopy_frame_v1_add_clip_region(self->frame, x, y,
+				width, height);
+	}
+}
+
 static void screencopy_buffer_done(void* data,
 			      struct zwlr_screencopy_frame_v1* frame)
 {
@@ -110,6 +146,8 @@ static void screencopy_buffer_done(void* data,
 
 	assert(!self->front);
 	self->front = buffer;
+
+	screencopy_set_clip_region(self);
 
 	if (self->is_immediate_copy)
 		zwlr_screencopy_frame_v1_copy(self->frame, buffer->wl_buffer);
@@ -167,6 +205,13 @@ static void screencopy_ready(void* data,
 
 	double delay = (self->last_time - self->start_time) * 1.0e-6;
 	self->delay = smooth(&self->delay_smoother, delay);
+
+	// All buffers (except the current one) now need to have the current
+	// frame damage region updated next time they're used.
+	wv_buffer_registry_damage_all(&self->front->frame_damage);
+
+	// This buffer should be up to date, so no longer damaged
+	pixman_region_clear(&self->front->buffer_damage);
 
 	if (self->is_immediate_copy)
 		wv_buffer_damage_whole(self->front);
