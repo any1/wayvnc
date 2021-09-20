@@ -88,8 +88,6 @@ sources = [
 	'src/buffer.c',
 	'src/pixels.c',
 	'src/transform-util.c',
-	'src/damage-refinery.c',
-	'src/murmurhash.c',
 ]
 
 dependencies = [

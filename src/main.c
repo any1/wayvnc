@@ -96,8 +96,6 @@ struct wayvnc {
 	struct nvnc* nvnc;
 	struct nvnc_display* nvnc_display;
 
-	struct damage_refinery damage_refinery;
-
 	const char* kb_layout;
 	const char* kb_variant;
 
@@ -587,33 +585,11 @@ void wayvnc_process_frame(struct wayvnc* self)
 	self->damage_area_sum +=
 		calculate_region_area(&buffer->damage);
 
-	uint32_t width = buffer->width;
-	uint32_t height = buffer->height;
-
-	damage_refinery_resize(&self->damage_refinery, width, height);
-
-	DTRACE_PROBE(wayvnc, refine_damage_start);
-	struct pixman_region16 refined;
-	pixman_region_init(&refined);
-	damage_refine(&self->damage_refinery, &refined, &buffer->damage,
-			buffer);
-	DTRACE_PROBE(wayvnc, refine_damage_end);
-
-	struct pixman_region16 txdamage;
-	pixman_region_init(&txdamage);
-	wv_region_transform(&txdamage, &refined,
-			self->selected_output->transform,
-			self->selected_output->width,
-			self->selected_output->height);
-	pixman_region_fini(&refined);
-
 	nvnc_fb_set_transform(buffer->nvnc_fb,
 			(enum nvnc_transform)self->selected_output->transform);
 
 	nvnc_display_feed_buffer(self->nvnc_display, buffer->nvnc_fb,
-			&txdamage);
-
-	pixman_region_fini(&txdamage);
+			&buffer->damage);
 
 	wayvnc_start_capture(self);
 }
@@ -966,8 +942,6 @@ int main(int argc, char* argv[])
 	}
 
 	screencopy_stop(&self.screencopy);
-
-	damage_refinery_destroy(&self.damage_refinery);
 
 	nvnc_display_unref(self.nvnc_display);
 	nvnc_close(self.nvnc);
