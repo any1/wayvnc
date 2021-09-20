@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Andri Yngvason
+ * Copyright (c) 2020 - 2021 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -23,6 +23,7 @@
 #include <libdrm/drm_fourcc.h>
 #include <wayland-client.h>
 #include <pixman.h>
+#include <neatvnc.h>
 
 #include "linux-dmabuf-unstable-v1.h"
 #include "shm.h"
@@ -90,14 +91,24 @@ struct wv_buffer* wv_buffer_create_shm(int width,
 	if (!self->wl_buffer)
 		goto shm_failure;
 
+	// TODO: Get the pixel size from the format instead of assuming it's 4.
+	self->nvnc_fb = nvnc_fb_from_buffer(self->pixels, width, height, fourcc,
+			stride / 4);
+	if (!self->nvnc_fb) {
+		goto nvnc_fb_failure;
+	}
+
+	nvnc_set_userdata(self->nvnc_fb, self, NULL);
+
 	pixman_region_init(&self->damage);
 
 	close(fd);
 	return self;
 
+nvnc_fb_failure:
+	wl_buffer_destroy(self->wl_buffer);
 shm_failure:
 pool_failure:
-	munmap(self->pixels, self->size);
 mmap_failure:
 	close(fd);
 failure:
@@ -148,8 +159,17 @@ static struct wv_buffer* wv_buffer_create_dmabuf(int width, int height,
 	if (!self->wl_buffer)
 		goto buffer_failure;
 
+	self->nvnc_fb = nvnc_fb_from_gbm_bo(self->bo);
+	if (!self->nvnc_fb) {
+		goto nvnc_fb_failure;
+	}
+
+	nvnc_set_userdata(self->nvnc_fb, self, NULL);
+
 	return self;
 
+nvnc_fb_failure:
+	wl_buffer_destroy(self->wl_buffer);
 buffer_failure:
 fd_failure:
 	zwp_linux_buffer_params_v1_destroy(params);
@@ -180,6 +200,7 @@ struct wv_buffer* wv_buffer_create(enum wv_buffer_type type, int width,
 
 static void wv_buffer_destroy_shm(struct wv_buffer* self)
 {
+	nvnc_fb_unref(self->nvnc_fb);
 	wl_buffer_destroy(self->wl_buffer);
 	munmap(self->pixels, self->size);
 	free(self);
@@ -188,6 +209,7 @@ static void wv_buffer_destroy_shm(struct wv_buffer* self)
 #ifdef ENABLE_SCREENCOPY_DMABUF
 static void wv_buffer_destroy_dmabuf(struct wv_buffer* self)
 {
+	nvnc_fb_unref(self->nvnc_fb);
 	wl_buffer_destroy(self->wl_buffer);
 	gbm_bo_destroy(self->bo);
 	free(self);
@@ -197,7 +219,6 @@ static void wv_buffer_destroy_dmabuf(struct wv_buffer* self)
 void wv_buffer_destroy(struct wv_buffer* self)
 {
 	pixman_region_fini(&self->damage);
-	wv_buffer_unmap(self);
 
 	switch (self->type) {
 	case WV_BUFFER_SHM:
@@ -209,64 +230,6 @@ void wv_buffer_destroy(struct wv_buffer* self)
 		return;
 #endif
 	case WV_BUFFER_UNSPEC:;
-	}
-
-	abort();
-}
-
-#ifdef ENABLE_SCREENCOPY_DMABUF
-static int wv_buffer_map_dmabuf(struct wv_buffer* self)
-{
-	if (self->bo_map_handle)
-		return 0;
-
-	uint32_t stride = 0;
-	self->pixels = gbm_bo_map(self->bo, 0, 0, self->width, self->height,
-			GBM_BO_TRANSFER_READ, &stride, &self->bo_map_handle);
-	self->stride = stride;
-	if (self->pixels)
-		return 0;
-
-	self->bo_map_handle = NULL;
-	return -1;
-}
-#endif
-
-int wv_buffer_map(struct wv_buffer* self)
-{
-	switch (self->type) {
-	case WV_BUFFER_SHM:
-		return 0;
-#ifdef ENABLE_SCREENCOPY_DMABUF
-	case WV_BUFFER_DMABUF:
-		return wv_buffer_map_dmabuf(self);
-#endif
-	case WV_BUFFER_UNSPEC:;
-	}
-
-	abort();
-}
-
-#ifdef ENABLE_SCREENCOPY_DMABUF
-static void wv_buffer_unmap_dmabuf(struct wv_buffer* self)
-{
-	if (self->bo_map_handle)
-		gbm_bo_unmap(self->bo, self->bo_map_handle);
-	self->bo_map_handle = NULL;
-}
-#endif
-
-void wv_buffer_unmap(struct wv_buffer* self)
-{
-	switch (self->type) {
-	case WV_BUFFER_SHM:
-		return;
-#ifdef ENABLE_SCREENCOPY_DMABUF
-	case WV_BUFFER_DMABUF:
-		return wv_buffer_unmap_dmabuf(self);
-#endif
-	case WV_BUFFER_UNSPEC:;
-
 	}
 
 	abort();
@@ -365,9 +328,16 @@ static bool wv_buffer_pool_match_buffer(struct wv_buffer_pool* pool,
 	return false;
 }
 
+void wv_buffer_pool__on_release(struct nvnc_fb* fb, void* context)
+{
+	struct wv_buffer* buffer = nvnc_get_userdata(fb);
+	struct wv_buffer_pool* pool = context;
+
+	wv_buffer_pool_release(pool, buffer);
+}
+
 struct wv_buffer* wv_buffer_pool_acquire(struct wv_buffer_pool* pool)
 {
-
 	struct wv_buffer* buffer = TAILQ_FIRST(&pool->queue);
 	if (buffer) {
 		assert(wv_buffer_pool_match_buffer(pool, buffer));
@@ -375,15 +345,19 @@ struct wv_buffer* wv_buffer_pool_acquire(struct wv_buffer_pool* pool)
 		return buffer;
 	}
 
-	return wv_buffer_create(pool->type, pool->width, pool->height,
+	buffer = wv_buffer_create(pool->type, pool->width, pool->height,
 			pool->stride, pool->format);
+	if (buffer)
+		nvnc_fb_set_release_fn(buffer->nvnc_fb,
+				wv_buffer_pool__on_release, pool);
+
+	return buffer;
 }
 
 void wv_buffer_pool_release(struct wv_buffer_pool* pool,
 		struct wv_buffer* buffer)
 {
 	wv_buffer_damage_clear(buffer);
-	wv_buffer_unmap(buffer);
 
 	if (wv_buffer_pool_match_buffer(pool, buffer)) {
 		TAILQ_INSERT_TAIL(&pool->queue, buffer, link);

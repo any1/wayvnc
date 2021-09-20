@@ -176,8 +176,6 @@ static void screencopy_ready(void* data,
 	self->back = self->front;
 	self->front = NULL;
 
-	wv_buffer_map(self->back);
-
 	self->status = SCREENCOPY_DONE;
 	self->on_done(self);
 }

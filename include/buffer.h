@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Andri Yngvason
+ * Copyright (c) 2020 - 2021 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -26,6 +26,7 @@
 
 struct wl_buffer;
 struct gbm_bo;
+struct nvnc_fb;
 
 enum wv_buffer_type {
 	WV_BUFFER_UNSPEC = 0,
@@ -39,6 +40,7 @@ struct wv_buffer {
 	enum wv_buffer_type type;
 	TAILQ_ENTRY(wv_buffer) link;
 
+	struct nvnc_fb* nvnc_fb;
 	struct wl_buffer* wl_buffer;
 
 	void* pixels;
@@ -51,7 +53,6 @@ struct wv_buffer {
 
 	/* The following is only applicable to DMABUF */
 	struct gbm_bo* bo;
-	void* bo_map_handle;
 };
 
 TAILQ_HEAD(wv_buffer_queue, wv_buffer);
@@ -68,9 +69,6 @@ enum wv_buffer_type wv_buffer_get_available_types(void);
 struct wv_buffer* wv_buffer_create(enum wv_buffer_type, int width, int height,
 		int stride, uint32_t fourcc);
 void wv_buffer_destroy(struct wv_buffer* self);
-
-int wv_buffer_map(struct wv_buffer* self);
-void wv_buffer_unmap(struct wv_buffer* self);
 
 void wv_buffer_damage_rect(struct wv_buffer* self, int x, int y, int width,
 		int height);

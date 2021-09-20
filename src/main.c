@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 - 2020 Andri Yngvason
+ * Copyright (c) 2019 - 2021 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -49,7 +49,6 @@
 #include "keyboard.h"
 #include "seat.h"
 #include "cfg.h"
-#include "pixman-renderer.h"
 #include "transform-util.h"
 #include "damage-refinery.h"
 #include "usdt.h"
@@ -67,13 +66,6 @@
 #define DEFAULT_PORT 5900
 
 #define MAYBE_UNUSED __attribute__((unused))
-
-struct fb_side_data {
-	struct pixman_region16 damage;
-	LIST_ENTRY(fb_side_data) link;
-};
-
-LIST_HEAD(fb_side_data_list, fb_side_data);
 
 struct wayvnc {
 	bool do_exit;
@@ -103,8 +95,6 @@ struct wayvnc {
 
 	struct nvnc* nvnc;
 	struct nvnc_display* nvnc_display;
-	struct nvnc_fb_pool* fb_pool;
-	struct fb_side_data_list fb_side_data_list;
 
 	struct damage_refinery damage_refinery;
 
@@ -559,37 +549,6 @@ int wayvnc_start_capture_immediate(struct wayvnc* self)
 	return rc;
 }
 
-static void fb_side_data_destroy(void* userdata)
-{
-	struct fb_side_data* fb_side_data = userdata;
-	LIST_REMOVE(fb_side_data, link);
-	pixman_region_fini(&fb_side_data->damage);
-	free(fb_side_data);
-}
-
-static void wv_damage_all_buffers(struct wayvnc* self,
-		struct pixman_region16* region)
-{
-	struct fb_side_data *item;
-	LIST_FOREACH(item, &self->fb_side_data_list, link)
-		pixman_region_union(&item->damage, &item->damage, region);
-}
-
-void wayvnc_render_to_fb(struct wayvnc* self, struct nvnc_fb* fb)
-{
-	DTRACE_PROBE(wayvnc, render_start);
-
-	struct fb_side_data* fb_side_data = nvnc_get_userdata(fb);
-	assert(fb_side_data);
-
-	enum wl_output_transform transform = self->selected_output->transform;
-	wv_pixman_render(fb, self->screencopy.back, transform,
-			&fb_side_data->damage);
-	pixman_region_clear(&fb_side_data->damage);
-
-	DTRACE_PROBE(wayvnc, render_end);
-}
-
 // TODO: Handle transform change too
 void on_output_dimension_change(struct output* output)
 {
@@ -621,73 +580,40 @@ static uint32_t calculate_region_area(struct pixman_region16* region)
 
 void wayvnc_process_frame(struct wayvnc* self)
 {
-	uint32_t width = output_get_transformed_width(self->selected_output);
-	uint32_t height = output_get_transformed_height(self->selected_output);
-	uint32_t format = self->screencopy.back->format;
-
-	if ((int)self->selected_output->width != self->screencopy.back->width
-	   || (int)self->selected_output->height != self->screencopy.back->height) {
-		log_debug("Frame dimensions don't match output. Recapturing frame...\n");
-		wayvnc_start_capture_immediate(self);
-		return;
-	}
-
-	bool dimensions_changed =
-		nvnc_fb_pool_resize(self->fb_pool, width, height, format,
-				width);
-	if (dimensions_changed) {
-		damage_refinery_destroy(&self->damage_refinery);
-		damage_refinery_init(&self->damage_refinery,
-			self->screencopy.back->width,
-			self->screencopy.back->height);
-	}
-
-	struct nvnc_fb *fb = nvnc_fb_pool_acquire(self->fb_pool);
-	if (!fb) {
-		log_error("Failed to acquire a vnc buffer\n");
-		return;
-	}
-
-	struct fb_side_data* fb_side_data = nvnc_get_userdata(fb);
-	if (!fb_side_data) {
-		fb_side_data = calloc(1, sizeof(*fb_side_data));
-		assert(fb_side_data);
-
-		/* This is a new buffer, so the whole surface is damaged. */
-		pixman_region_init_rect(&fb_side_data->damage, 0, 0, width,
-				height);
-
-		nvnc_set_userdata(fb, fb_side_data, fb_side_data_destroy);
-		LIST_INSERT_HEAD(&self->fb_side_data_list, fb_side_data, link);
-	}
+	struct wv_buffer* buffer = self->screencopy.back;
+	self->screencopy.back = NULL;
 
 	self->n_frames_captured++;
 	self->damage_area_sum +=
-		calculate_region_area(&self->screencopy.back->damage);
+		calculate_region_area(&buffer->damage);
+
+	uint32_t width = buffer->width;
+	uint32_t height = buffer->height;
+
+	damage_refinery_resize(&self->damage_refinery, width, height);
 
 	DTRACE_PROBE(wayvnc, refine_damage_start);
-
-	struct pixman_region16 txdamage, refined;
-	pixman_region_init(&txdamage);
+	struct pixman_region16 refined;
 	pixman_region_init(&refined);
-	damage_refine(&self->damage_refinery, &refined,
-			&self->screencopy.back->damage,
-			self->screencopy.back);
+	damage_refine(&self->damage_refinery, &refined, &buffer->damage,
+			buffer);
+	DTRACE_PROBE(wayvnc, refine_damage_end);
+
+	struct pixman_region16 txdamage;
+	pixman_region_init(&txdamage);
 	wv_region_transform(&txdamage, &refined,
 			self->selected_output->transform,
 			self->selected_output->width,
 			self->selected_output->height);
-
-	wv_damage_all_buffers(self, &txdamage);
-	wayvnc_render_to_fb(self, fb);
-	nvnc_display_set_buffer(self->nvnc_display, fb);
-	nvnc_fb_unref(fb);
-	nvnc_display_damage_region(self->nvnc_display, &txdamage);
-
 	pixman_region_fini(&refined);
-	pixman_region_fini(&txdamage);
 
-	DTRACE_PROBE(wayvnc, refine_damage_end);
+	nvnc_fb_set_transform(buffer->nvnc_fb,
+			(enum nvnc_transform)self->selected_output->transform);
+
+	nvnc_display_feed_buffer(self->nvnc_display, buffer->nvnc_fb,
+			&txdamage);
+
+	pixman_region_fini(&txdamage);
 
 	wayvnc_start_capture(self);
 }
@@ -1011,12 +937,6 @@ int main(int argc, char* argv[])
 	if (init_nvnc(&self, address, port, use_unix_socket) < 0)
 		goto nvnc_failure;
 
-	self.fb_pool = nvnc_fb_pool_new(0, 0, 0, 0);
-	if (!self.fb_pool)
-		goto buffer_pool_failure;
-
-	LIST_INIT(&self.fb_side_data_list);
-
 	if (self.screencopy.manager)
 		screencopy_init(&self.screencopy);
 
@@ -1049,7 +969,6 @@ int main(int argc, char* argv[])
 
 	damage_refinery_destroy(&self.damage_refinery);
 
-	nvnc_fb_pool_unref(self.fb_pool);
 	nvnc_display_unref(self.nvnc_display);
 	nvnc_close(self.nvnc);
 	if (zwp_linux_dmabuf)
@@ -1070,8 +989,6 @@ int main(int argc, char* argv[])
 	return 0;
 
 capture_failure:
-	nvnc_fb_pool_unref(self.fb_pool);
-buffer_pool_failure:
 	nvnc_display_unref(self.nvnc_display);
 	nvnc_close(self.nvnc);
 nvnc_failure:

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Andri Yngvason
+ * Copyright (c) 2020 - 2021 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -42,6 +42,16 @@ int damage_refinery_init(struct damage_refinery* self, uint32_t width,
 		return -1;
 
 	return 0;
+}
+
+int damage_refinery_resize(struct damage_refinery* self, uint32_t width,
+		uint32_t height)
+{
+	if (width == self->width && height == self->height)
+		return 0;
+
+	damage_refinery_destroy(self);
+	return damage_refinery_init(self, width, height);
 }
 
 void damage_refinery_destroy(struct damage_refinery* self)
