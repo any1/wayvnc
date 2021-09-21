@@ -50,7 +50,6 @@
 #include "seat.h"
 #include "cfg.h"
 #include "transform-util.h"
-#include "damage-refinery.h"
 #include "usdt.h"
 
 #ifdef ENABLE_PAM
