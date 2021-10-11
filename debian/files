@@ -1,0 +1,3 @@
+wayvnc-dbgsym_20211011-1_amd64.deb debug optional automatic=yes
+wayvnc_20211011-1_amd64.buildinfo x11 optional
+wayvnc_20211011-1_amd64.deb x11 optional

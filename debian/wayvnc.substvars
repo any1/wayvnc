@@ -1,0 +1,3 @@
+shlibs:Depends=libaml0 (>= 0.2.0), libc6 (>= 2.29), libdrm2 (>= 2.4.75), libgbm1 (>= 17.1.0~rc2), libneatvnc0 (>= 20211011), libpam0g (>= 0.99.7.1), libpixman-1-0 (>= 0.25.2), libwayland-client0 (>= 1.9.91), libxkbcommon0 (>= 1.0.0)
+misc:Depends=
+misc:Pre-Depends=
