@@ -1,8 +1,8 @@
 # wayvnc
 
 ## Introduction
-This is a VNC server for wlroots based Wayland compositors. It attaches to a
-running Wayland session, creates virtual input devices and exposes a single
+This is a VNC server for wlroots-based Wayland compositors. It attaches to a
+running Wayland session, creates virtual input devices, and exposes a single
 display via the RFB protocol. The Wayland session may be a headless one, so it
 is also possible to run wayvnc without a physical display attached.
 
@@ -13,7 +13,7 @@ project.
 
 ## Installing
 ```
-# archlinux
+# Arch Linux
 pacman -S wayvnc
 
 # FreeBSD
@@ -45,12 +45,12 @@ xbps-install wayvnc
  * ninja
  * pkg-config
 
-#### For archlinux
+#### For Arch Linux
 ```
 pacman -S base-devel libglvnd libxkbcommon pixman gnutls
 ```
 
-#### For fedora 31
+#### For Fedora 31
 ```
 dnf install -y meson gcc ninja-build pkg-config egl-wayland egl-wayland-devel \
 	mesa-libEGL-devel mesa-libEGL libwayland-egl libglvnd-devel \
@@ -96,10 +96,10 @@ accept connections via any interface, set the address to `0.0.0.0` like this:
 :warning: Do not do this on a public network or the internet without
 user authentication enabled. The best way to protect your VNC connection is to
 use SSH tunneling while listening on localhost, but users can also be
-authenticated when connecting to Wayvnc.
+authenticated when connecting to wayvnc.
 
 ### Encryption & Authentication
-You'll need a private X509 key and a certificate. A self signed key with a
+You'll need a private X509 key and a certificate. A self-signed key with a
 certificate can be generated like so:
 ```
 openssl req -x509 -newkey rsa:4096 -sha256 -days 3650 -nodes \
