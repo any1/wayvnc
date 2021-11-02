@@ -6,3 +6,6 @@ subprojects
 perf.*
 *.pem
 .vimrc
+debian/tmp
+debian/wayvnc
+debian/.debhelper
