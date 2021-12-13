@@ -98,6 +98,14 @@ user authentication enabled. The best way to protect your VNC connection is to
 use SSH tunneling while listening on localhost, but users can also be
 authenticated when connecting to wayvnc.
 
+### Connect to running Wayland session
+Let's say you want to control the host at `192.168.178.28` which is already up and running Wayland:
+
+  * `ssh you@192.168.178.28`
+  * Start wayvnc on the remote host from inside the SSH session: `WAYLAND_DISPLAY=wayland-1 wayvnc 192.168.178.28`
+  * Now, connect from your local device (outside of SSH): `vncviewer 192.168.178.28:5900`
+
+
 ### Encryption & Authentication
 You'll need a private X509 key and a certificate. A self-signed key with a
 certificate can be generated like so:
