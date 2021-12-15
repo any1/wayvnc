@@ -161,8 +161,7 @@ static void registry_add(void* data, struct wl_registry* registry,
 		self->screencopy.manager =
 			wl_registry_bind(registry, id,
 					 &zwlr_screencopy_manager_v1_interface,
-					 version);
-		self->screencopy.version = version;
+					 MIN(3, version));
 		return;
 	}
 

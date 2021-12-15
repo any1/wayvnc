@@ -47,7 +47,6 @@ struct screencopy {
 
 	struct zwlr_screencopy_manager_v1* manager;
 	struct zwlr_screencopy_frame_v1* frame;
-	int version;
 
 	void* userdata;
 	void (*on_done)(struct screencopy*);
