@@ -130,7 +130,8 @@ static void screencopy_buffer(void* data,
 	self->wl_shm_height = height;
 	self->wl_shm_stride = stride;
 
-	if (self->version < 3) {
+	int version = zwlr_screencopy_manager_v1_get_version(self->manager);
+	if (version < 3) {
 		self->have_linux_dmabuf = false;
 		screencopy_buffer_done(data, frame);
 		return;
