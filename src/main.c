@@ -79,8 +79,6 @@ struct wayvnc {
 	struct zwp_virtual_keyboard_manager_v1* keyboard_manager;
 	struct zwlr_virtual_pointer_manager_v1* pointer_manager;
 
-	int pointer_manager_version;
-
 	const struct output* selected_output;
 	const struct seat* selected_seat;
 
@@ -161,8 +159,7 @@ static void registry_add(void* data, struct wl_registry* registry,
 		self->pointer_manager =
 			wl_registry_bind(registry, id,
 					 &zwlr_virtual_pointer_manager_v1_interface,
-					 version);
-		self->pointer_manager_version = version;
+					 MIN(2, version));
 		return;
 	};
 
@@ -900,7 +897,10 @@ int main(int argc, char* argv[])
 	self.pointer_backend.vnc = self.nvnc;
 	self.pointer_backend.output = self.selected_output;
 
-	self.pointer_backend.pointer = self.pointer_manager_version == 2
+	int pointer_manager_version =
+		zwlr_virtual_pointer_manager_v1_get_version(self.pointer_manager);
+
+	self.pointer_backend.pointer = pointer_manager_version >= 2
 		? zwlr_virtual_pointer_manager_v1_create_virtual_pointer_with_output(
 			self.pointer_manager, self.selected_seat->wl_seat,
 			out->wl_output)
