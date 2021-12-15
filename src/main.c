@@ -125,8 +125,7 @@ static void registry_add(void* data, struct wl_registry* registry,
 
 	if (strcmp(interface, wl_output_interface.name) == 0) {
 		struct wl_output* wl_output =
-			wl_registry_bind(registry, id, &wl_output_interface,
-					 version);
+			wl_registry_bind(registry, id, &wl_output_interface, 3);
 		if (!wl_output)
 			return;
 
