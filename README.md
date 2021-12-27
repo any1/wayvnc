@@ -2,7 +2,7 @@
 
 ## Introduction
 This is a VNC server for wlroots-based Wayland compositors (:no_entry: Gnome
-and KDE are not supported). It attaches to a running Wayland session,
+and KDE are **not** supported). It attaches to a running Wayland session,
 creates virtual input devices, and exposes a single display via the RFB
 protocol. The Wayland session may be a headless one, so it is also possible
 to run wayvnc without a physical display attached.
