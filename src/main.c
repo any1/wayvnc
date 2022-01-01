@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 - 2021 Andri Yngvason
+ * Copyright (c) 2019 - 2022 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -892,7 +892,10 @@ int main(int argc, char* argv[])
 		.options = self.cfg.xkb_options,
 	};
 
-	keyboard_init(&self.keyboard_backend, &rule_names);
+	if (keyboard_init(&self.keyboard_backend, &rule_names) < 0) {
+		log_error("Failed to initialise keyboard\n");
+		goto failure;
+	}
 
 	self.pointer_backend.vnc = self.nvnc;
 	self.pointer_backend.output = self.selected_output;
