@@ -3,7 +3,9 @@
 **Q: How can I run wayvnc in headless mode/over an SSH session?**
 
 A: Set the environment variables `WLR_BACKENDS=headless` and
-`WLR_LIBINPUT_NO_DEVICES=1` before starting sway, then run wayvnc as normal.
+`WLR_LIBINPUT_NO_DEVICES=1` before starting sway, then set
+`WAYLAND_DISPLAY=wayland-1` and run wayvnc. For older versions of sway,
+`WAYLAND_DISPLAY` is `wayland-0`. Try that if `wayland-1` doesn't work.
 
 **Q: How can I pass my mod-key from Sway to the remote desktop session?**
 
