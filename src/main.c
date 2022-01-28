@@ -283,12 +283,16 @@ void wayvnc_destroy(struct wayvnc* self)
 
 	wl_shm_destroy(wl_shm);
 
-	zwp_virtual_keyboard_v1_destroy(self->keyboard_backend.virtual_keyboard);
-	zwp_virtual_keyboard_manager_v1_destroy(self->keyboard_manager);
-	keyboard_destroy(&self->keyboard_backend);
+	if (self->keyboard_manager) {
+		zwp_virtual_keyboard_v1_destroy(self->keyboard_backend.virtual_keyboard);
+		zwp_virtual_keyboard_manager_v1_destroy(self->keyboard_manager);
+		keyboard_destroy(&self->keyboard_backend);
+	}
 
-	zwlr_virtual_pointer_manager_v1_destroy(self->pointer_manager);
-	pointer_destroy(&self->pointer_backend);
+	if (self->pointer_manager) {
+		zwlr_virtual_pointer_manager_v1_destroy(self->pointer_manager);
+		pointer_destroy(&self->pointer_backend);
+	}
 
 	if (self->screencopy.manager)
 		zwlr_screencopy_manager_v1_destroy(self->screencopy.manager);
@@ -311,7 +315,7 @@ static void init_xdg_outputs(struct wayvnc* self)
 	}
 }
 
-static int init_wayland(struct wayvnc* self)
+static int init_wayland(struct wayvnc* self, bool disable_input)
 {
 	static const struct wl_registry_listener registry_listener = {
 		.global = registry_add,
@@ -336,13 +340,15 @@ static int init_wayland(struct wayvnc* self)
 
 	init_xdg_outputs(self);
 
-	if (!self->pointer_manager) {
+	if (!self->pointer_manager && !disable_input) {
 		log_error("Virtual Pointer protocol not supported by compositor.\n");
+		log_error("wayvnc may still work if started with --disable-input.\n");
 		goto failure;
 	}
 
-	if (!self->keyboard_manager) {
+	if (!self->keyboard_manager && !disable_input) {
 		log_error("Virtual Keyboard protocol not supported by compositor.\n");
+		log_error("wayvnc may still work if started with --disable-input.\n");
 		goto failure;
 	}
 
@@ -504,7 +510,7 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port, bool is_unix
 		goto failure;
 	}
 
-	if (self->pointer_manager)
+	if (self->pointer_backend.pointer)
 		nvnc_set_pointer_fn(self->nvnc, on_pointer_event);
 
 	if (self->keyboard_backend.virtual_keyboard) {
@@ -645,6 +651,7 @@ int wayvnc_usage(FILE* stream, int rc)
 "    -p,--show-performance                     Show performance counters.\n"
 "    -u,--unix-socket                          Create a UNIX domain socket\n"
 "                                              instead of TCP.\n"
+"    -d,--disable-input                        Disable all remote input\n"
 "    -V,--version                              Show version info.\n"
 "    -h,--help                                 Get help (this text).\n"
 "\n";
@@ -750,8 +757,9 @@ int main(int argc, char* argv[])
 	bool overlay_cursor = false;
 	bool show_performance = false;
 	int max_rate = 30;
+	bool disable_input = false;
 
-	static const char* shortopts = "C:o:k:s:rf:hpuV";
+	static const char* shortopts = "C:o:k:s:rf:hpudV";
 	int drm_fd MAYBE_UNUSED = -1;
 
 	static const struct option longopts[] = {
@@ -764,6 +772,7 @@ int main(int argc, char* argv[])
 		{ "help", no_argument, NULL, 'h' },
 		{ "show-performance", no_argument, NULL, 'p' },
 		{ "unix-socket", no_argument, NULL, 'u' },
+		{ "disable-input", no_argument, NULL, 'd' },
 		{ "version", no_argument, NULL, 'V' },
 		{ NULL, 0, NULL, 0 }
 	};
@@ -797,6 +806,9 @@ int main(int argc, char* argv[])
 			break;
 		case 'u':
 			use_unix_socket = true;
+			break;
+		case 'd':
+			disable_input = true;
 			break;
 		case 'V':
 			return show_version();
@@ -839,7 +851,7 @@ int main(int argc, char* argv[])
 	if (!address) address = DEFAULT_ADDRESS;
 	if (!port) port = DEFAULT_PORT;
 
-	if (init_wayland(&self) < 0) {
+	if (init_wayland(&self, disable_input) < 0) {
 		log_error("Failed to initialise wayland\n");
 		return 1;
 	}
@@ -879,39 +891,42 @@ int main(int argc, char* argv[])
 	self.screencopy.wl_output = out->wl_output;
 	self.screencopy.rate_limit = max_rate;
 
-	self.keyboard_backend.virtual_keyboard =
-		zwp_virtual_keyboard_manager_v1_create_virtual_keyboard(
-			self.keyboard_manager, self.selected_seat->wl_seat);
+	if (!disable_input && self.keyboard_manager) {
+		self.keyboard_backend.virtual_keyboard =
+			zwp_virtual_keyboard_manager_v1_create_virtual_keyboard(
+				self.keyboard_manager, self.selected_seat->wl_seat);
 
-	struct xkb_rule_names rule_names = {
-		.rules = self.cfg.xkb_rules,
-		.layout = self.kb_layout ? self.kb_layout : self.cfg.xkb_layout,
-		.model = self.cfg.xkb_model ? self.cfg.xkb_model : "pc105",
-		.variant = self.kb_variant ? self.kb_variant :
-			self.cfg.xkb_variant,
-		.options = self.cfg.xkb_options,
-	};
+		struct xkb_rule_names rule_names = {
+			.rules = self.cfg.xkb_rules,
+			.layout = self.kb_layout ? self.kb_layout : self.cfg.xkb_layout,
+			.model = self.cfg.xkb_model ? self.cfg.xkb_model : "pc105",
+			.variant = self.kb_variant ? self.kb_variant :
+				self.cfg.xkb_variant,
+			.options = self.cfg.xkb_options,
+		};
 
-	if (keyboard_init(&self.keyboard_backend, &rule_names) < 0) {
-		log_error("Failed to initialise keyboard\n");
-		goto failure;
+		if (keyboard_init(&self.keyboard_backend, &rule_names) < 0) {
+			log_error("Failed to initialise keyboard\n");
+			goto failure;
+		}
 	}
 
 	self.pointer_backend.vnc = self.nvnc;
 	self.pointer_backend.output = self.selected_output;
 
-	int pointer_manager_version =
-		zwlr_virtual_pointer_manager_v1_get_version(self.pointer_manager);
+	if (!disable_input && self.pointer_manager) {
+		int pointer_manager_version =
+			zwlr_virtual_pointer_manager_v1_get_version(self.pointer_manager);
 
-	self.pointer_backend.pointer = pointer_manager_version >= 2
-		? zwlr_virtual_pointer_manager_v1_create_virtual_pointer_with_output(
-			self.pointer_manager, self.selected_seat->wl_seat,
-			out->wl_output)
-		: zwlr_virtual_pointer_manager_v1_create_virtual_pointer(
-			self.pointer_manager, self.selected_seat->wl_seat);
+		self.pointer_backend.pointer = pointer_manager_version >= 2
+			? zwlr_virtual_pointer_manager_v1_create_virtual_pointer_with_output(
+				self.pointer_manager, self.selected_seat->wl_seat,
+				out->wl_output)
+			: zwlr_virtual_pointer_manager_v1_create_virtual_pointer(
+				self.pointer_manager, self.selected_seat->wl_seat);
 
-	pointer_init(&self.pointer_backend);
-
+		pointer_init(&self.pointer_backend);
+	}
 	out->on_dimension_change = on_output_dimension_change;
 	out->userdata = &self;
 
