@@ -283,16 +283,20 @@ void wayvnc_destroy(struct wayvnc* self)
 
 	wl_shm_destroy(wl_shm);
 
-	if (self->keyboard_manager) {
-		zwp_virtual_keyboard_v1_destroy(self->keyboard_backend.virtual_keyboard);
-		zwp_virtual_keyboard_manager_v1_destroy(self->keyboard_manager);
+	if (self->keyboard_backend.virtual_keyboard) {
+		zwp_virtual_keyboard_v1_destroy(
+				self->keyboard_backend.virtual_keyboard);
 		keyboard_destroy(&self->keyboard_backend);
 	}
 
-	if (self->pointer_manager) {
-		zwlr_virtual_pointer_manager_v1_destroy(self->pointer_manager);
+	if (self->keyboard_manager)
+		zwp_virtual_keyboard_manager_v1_destroy(self->keyboard_manager);
+
+	if (self->pointer_backend.pointer)
 		pointer_destroy(&self->pointer_backend);
-	}
+
+	if (self->pointer_manager)
+		zwlr_virtual_pointer_manager_v1_destroy(self->pointer_manager);
 
 	if (self->screencopy.manager)
 		zwlr_screencopy_manager_v1_destroy(self->screencopy.manager);
