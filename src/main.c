@@ -98,6 +98,8 @@ struct wayvnc {
 
 	uint32_t damage_area_sum;
 	uint32_t n_frames_captured;
+
+	bool disable_input;
 };
 
 void wayvnc_exit(struct wayvnc* self);
@@ -194,8 +196,10 @@ static void registry_add(void* data, struct wl_registry* registry,
 	}
 
 	if (strcmp(interface, zwlr_data_control_manager_v1_interface.name) == 0) {
-		self->data_control.manager = wl_registry_bind(registry, id,
-				&zwlr_data_control_manager_v1_interface, 2);
+		if (!self->disable_input)
+			self->data_control.manager = wl_registry_bind(registry, id,
+					&zwlr_data_control_manager_v1_interface, 2);
+
 		return;
 	}
 }
@@ -319,7 +323,7 @@ static void init_xdg_outputs(struct wayvnc* self)
 	}
 }
 
-static int init_wayland(struct wayvnc* self, bool disable_input)
+static int init_wayland(struct wayvnc* self)
 {
 	static const struct wl_registry_listener registry_listener = {
 		.global = registry_add,
@@ -344,13 +348,13 @@ static int init_wayland(struct wayvnc* self, bool disable_input)
 
 	init_xdg_outputs(self);
 
-	if (!self->pointer_manager && !disable_input) {
+	if (!self->pointer_manager && !self->disable_input) {
 		log_error("Virtual Pointer protocol not supported by compositor.\n");
 		log_error("wayvnc may still work if started with --disable-input.\n");
 		goto failure;
 	}
 
-	if (!self->keyboard_manager && !disable_input) {
+	if (!self->keyboard_manager && !self->disable_input) {
 		log_error("Virtual Keyboard protocol not supported by compositor.\n");
 		log_error("wayvnc may still work if started with --disable-input.\n");
 		goto failure;
@@ -469,7 +473,9 @@ static void on_client_cut_text(struct nvnc* server, const char* text, uint32_t l
 {
 	struct wayvnc* wayvnc = nvnc_get_userdata(server);
 
-	data_control_to_clipboard(&wayvnc->data_control, text, len);
+	if (!wayvnc->disable_input) {
+		data_control_to_clipboard(&wayvnc->data_control, text, len);
+	}
 }
 
 bool on_auth(const char* username, const char* password, void* ud)
@@ -855,7 +861,9 @@ int main(int argc, char* argv[])
 	if (!address) address = DEFAULT_ADDRESS;
 	if (!port) port = DEFAULT_PORT;
 
-	if (init_wayland(&self, disable_input) < 0) {
+	self.disable_input = disable_input;
+
+	if (init_wayland(&self) < 0) {
 		log_error("Failed to initialise wayland\n");
 		return 1;
 	}
@@ -895,7 +903,7 @@ int main(int argc, char* argv[])
 	self.screencopy.wl_output = out->wl_output;
 	self.screencopy.rate_limit = max_rate;
 
-	if (!disable_input && self.keyboard_manager) {
+	if (!self.disable_input && self.keyboard_manager) {
 		self.keyboard_backend.virtual_keyboard =
 			zwp_virtual_keyboard_manager_v1_create_virtual_keyboard(
 				self.keyboard_manager, self.selected_seat->wl_seat);
@@ -918,7 +926,7 @@ int main(int argc, char* argv[])
 	self.pointer_backend.vnc = self.nvnc;
 	self.pointer_backend.output = self.selected_output;
 
-	if (!disable_input && self.pointer_manager) {
+	if (!self.disable_input && self.pointer_manager) {
 		int pointer_manager_version =
 			zwlr_virtual_pointer_manager_v1_get_version(self.pointer_manager);
 
