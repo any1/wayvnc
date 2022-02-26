@@ -23,6 +23,9 @@ pkg install wayvnc
 # Fedora
 dnf install wayvnc
 
+# Debian (unstable / testing)
+apt install wayvnc
+
 # openSUSE Tumbleweed
 zypper install wayvnc
 
@@ -60,6 +63,10 @@ dnf install -y meson gcc ninja-build pkg-config egl-wayland egl-wayland-devel \
 	wayland-devel gnutls-devel
 ```
 
+#### For Debian (unstable / testing)
+```
+apt build-dep wayvnc
+```
 The easiest way to satisfy the neatvnc and aml dependencies is to link to them
 in the subprojects directory:
 ```
