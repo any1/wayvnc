@@ -23,6 +23,7 @@
 #include <wayland-client.h>
 #include <libdrm/drm_fourcc.h>
 #include <aml.h>
+#include <neatvnc.h>
 
 #include "wlr-screencopy-unstable-v1.h"
 #include "buffer.h"
@@ -154,10 +155,6 @@ static void screencopy_ready(void* data,
 			     struct zwlr_screencopy_frame_v1* frame,
 			     uint32_t sec_hi, uint32_t sec_lo, uint32_t nsec)
 {
-	(void)sec_hi;
-	(void)sec_lo;
-	(void)nsec;
-
 	struct screencopy* self = data;
 
 	DTRACE_PROBE1(wayvnc, screencopy_ready, self);
@@ -176,6 +173,10 @@ static void screencopy_ready(void* data,
 		wv_buffer_pool_release(self->pool, self->back);
 	self->back = self->front;
 	self->front = NULL;
+
+	uint64_t sec = (uint64_t)sec_hi << 32 | (uint64_t)sec_lo;
+	uint64_t pts = sec * UINT64_C(1000000) + (uint64_t)nsec / UINT64_C(1000);
+	nvnc_fb_set_pts(self->back->nvnc_fb, pts);
 
 	self->status = SCREENCOPY_DONE;
 	self->on_done(self);
