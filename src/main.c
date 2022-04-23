@@ -495,6 +495,20 @@ bool on_auth(const char* username, const char* password, void* ud)
 	return true;
 }
 
+static struct nvnc_fb* create_placeholder_buffer(uint16_t width, uint16_t height)
+{
+	uint16_t stride = width;
+	struct nvnc_fb* fb = nvnc_fb_new(width, height, DRM_FORMAT_XRGB8888,
+			stride);
+	if (!fb)
+		return NULL;
+
+	size_t size = nvnc_fb_get_pixel_size(fb) * height * stride;
+	memset(nvnc_fb_get_addr(fb), 0x60, size);
+
+	return fb;
+}
+
 int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port, bool is_unix)
 {
 	self->nvnc = is_unix ? nvnc_open_unix(addr) : nvnc_open(addr, port);
@@ -529,6 +543,23 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port, bool is_unix
 	}
 
 	nvnc_set_cut_text_receive_fn(self->nvnc, on_client_cut_text);
+
+	struct nvnc_fb* placeholder_fb =
+		create_placeholder_buffer(self->selected_output->width,
+				self->selected_output->height);
+	if (!placeholder_fb) {
+		log_error("Failed to allocate a placeholder buffer\n");
+		goto failure;
+	}
+
+	struct pixman_region16 damage;
+	pixman_region_init_rect(&damage, 0, 0,
+			nvnc_fb_get_width(placeholder_fb),
+			nvnc_fb_get_height(placeholder_fb));
+
+	nvnc_display_feed_buffer(self->nvnc_display, placeholder_fb, &damage);
+	pixman_region_fini(&damage);
+	nvnc_fb_unref(placeholder_fb);
 
 	return 0;
 
