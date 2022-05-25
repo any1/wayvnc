@@ -144,11 +144,6 @@ static void registry_add(void* data, struct wl_registry* registry,
 		return;
 	}
 
-	if (strcmp(interface, wl_shm_interface.name) == 0) {
-		wl_shm = wl_registry_bind(registry, id, &wl_shm_interface, 1);
-		return;
-	}
-
 	if (strcmp(interface, zwlr_screencopy_manager_v1_interface.name) == 0) {
 		self->screencopy.manager =
 			wl_registry_bind(registry, id,
@@ -157,35 +152,8 @@ static void registry_add(void* data, struct wl_registry* registry,
 		return;
 	}
 
-	if (strcmp(interface, zwlr_virtual_pointer_manager_v1_interface.name) == 0) {
-		self->pointer_manager =
-			wl_registry_bind(registry, id,
-					 &zwlr_virtual_pointer_manager_v1_interface,
-					 MIN(2, version));
-		return;
-	};
-
-	if (strcmp(interface, wl_seat_interface.name) == 0) {
-		struct wl_seat* wl_seat =
-			wl_registry_bind(registry, id, &wl_seat_interface, 7);
-		if (!wl_seat)
-			return;
-
-		struct seat* seat = seat_new(wl_seat, id);
-		if (!seat) {
-			wl_seat_destroy(wl_seat);
-			return;
-		}
-
-		wl_list_insert(&self->seats, &seat->link);
-		return;
-	}
-
-	if (strcmp(interface, zwp_virtual_keyboard_manager_v1_interface.name) == 0) {
-		self->keyboard_manager =
-			wl_registry_bind(registry, id,
-			                 &zwp_virtual_keyboard_manager_v1_interface,
-			                 1);
+	if (strcmp(interface, wl_shm_interface.name) == 0) {
+		wl_shm = wl_registry_bind(registry, id, &wl_shm_interface, 1);
 		return;
 	}
 
@@ -195,12 +163,45 @@ static void registry_add(void* data, struct wl_registry* registry,
 		return;
 	}
 
-	if (strcmp(interface, zwlr_data_control_manager_v1_interface.name) == 0) {
-		if (!self->disable_input)
-			self->data_control.manager = wl_registry_bind(registry, id,
-					&zwlr_data_control_manager_v1_interface, 2);
+	if (!self->disable_input) {
+		if (strcmp(interface, wl_seat_interface.name) == 0) {
+			struct wl_seat* wl_seat =
+				wl_registry_bind(registry, id, &wl_seat_interface, 7);
+			if (!wl_seat)
+				return;
 
-		return;
+			struct seat* seat = seat_new(wl_seat, id);
+			if (!seat) {
+				wl_seat_destroy(wl_seat);
+				return;
+			}
+
+			wl_list_insert(&self->seats, &seat->link);
+			return;
+		}
+
+		if (strcmp(interface, zwlr_virtual_pointer_manager_v1_interface.name) == 0) {
+			self->pointer_manager =
+				wl_registry_bind(registry, id,
+						 &zwlr_virtual_pointer_manager_v1_interface,
+						 MIN(2, version));
+			return;
+		};
+
+		if (strcmp(interface, zwp_virtual_keyboard_manager_v1_interface.name) == 0) {
+			self->keyboard_manager =
+				wl_registry_bind(registry, id,
+						 &zwp_virtual_keyboard_manager_v1_interface,
+						 1);
+			return;
+		}
+		if (strcmp(interface, zwlr_data_control_manager_v1_interface.name) == 0) {
+			if (!self->disable_input)
+				self->data_control.manager = wl_registry_bind(registry, id,
+						&zwlr_data_control_manager_v1_interface, 2);
+
+			return;
+		}
 	}
 }
 
@@ -302,10 +303,11 @@ void wayvnc_destroy(struct wayvnc* self)
 	if (self->pointer_manager)
 		zwlr_virtual_pointer_manager_v1_destroy(self->pointer_manager);
 
-	if (self->screencopy.manager)
-		zwlr_screencopy_manager_v1_destroy(self->screencopy.manager);
 	if (self->data_control.manager)
 		zwlr_data_control_manager_v1_destroy(self->data_control.manager);
+
+	if (self->screencopy.manager)
+		zwlr_screencopy_manager_v1_destroy(self->screencopy.manager);
 
 	wl_registry_destroy(self->registry);
 	wl_display_disconnect(self->display);
@@ -914,14 +916,14 @@ int main(int argc, char* argv[])
 		}
 	}
 
-	struct seat* seat;
+	struct seat* seat = NULL;
 	if (seat_name) {
 		seat = seat_find_by_name(&self.seats, seat_name);
 		if (!seat) {
 			log_error("No such seat\n");
 			goto failure;
 		}
-	} else {
+	} else if (!self.disable_input) {
 		seat = seat_first(&self.seats);
 		if (!seat) {
 			log_error("No seat found\n");
@@ -934,7 +936,7 @@ int main(int argc, char* argv[])
 	self.screencopy.wl_output = out->wl_output;
 	self.screencopy.rate_limit = max_rate;
 
-	if (!self.disable_input && self.keyboard_manager) {
+	if (self.keyboard_manager) {
 		self.keyboard_backend.virtual_keyboard =
 			zwp_virtual_keyboard_manager_v1_create_virtual_keyboard(
 				self.keyboard_manager, self.selected_seat->wl_seat);
@@ -957,7 +959,7 @@ int main(int argc, char* argv[])
 	self.pointer_backend.vnc = self.nvnc;
 	self.pointer_backend.output = self.selected_output;
 
-	if (!self.disable_input && self.pointer_manager) {
+	if (self.pointer_manager) {
 		int pointer_manager_version =
 			zwlr_virtual_pointer_manager_v1_get_version(self.pointer_manager);
 
