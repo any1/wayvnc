@@ -880,6 +880,11 @@ int main(int argc, char* argv[])
 	if (n_args >= 2)
 		port = atoi(argv[optind + 1]);
 
+	if (seat_name && disable_input) {
+		log_error("seat and disable-input are conflicting options\n");
+		return 1;
+	}
+
 	errno = 0;
 	int cfg_rc = cfg_load(&self.cfg, cfg_file);
 	if (cfg_rc != 0 && (cfg_file || errno != ENOENT)) {
