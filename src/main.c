@@ -117,6 +117,54 @@ struct wl_shm* wl_shm = NULL;
 struct zwp_linux_dmabuf_v1* zwp_linux_dmabuf = NULL;
 struct gbm_device* gbm_device = NULL;
 
+static bool registry_add_input(void* data, struct wl_registry* registry,
+			 uint32_t id, const char* interface,
+			 uint32_t version)
+{
+	struct wayvnc* self = data;
+
+	if (self->disable_input)
+		return false;
+
+	if (strcmp(interface, wl_seat_interface.name) == 0) {
+		struct wl_seat* wl_seat =
+			wl_registry_bind(registry, id, &wl_seat_interface, 7);
+		if (!wl_seat)
+			return true;
+
+		struct seat* seat = seat_new(wl_seat, id);
+		if (!seat) {
+			wl_seat_destroy(wl_seat);
+			return true;
+		}
+
+		wl_list_insert(&self->seats, &seat->link);
+		return true;
+	}
+
+	if (strcmp(interface, zwlr_virtual_pointer_manager_v1_interface.name) == 0) {
+		self->pointer_manager = wl_registry_bind(registry, id,
+				&zwlr_virtual_pointer_manager_v1_interface,
+				MIN(2, version));
+		return true;
+	}
+
+	if (strcmp(interface, zwp_virtual_keyboard_manager_v1_interface.name) == 0) {
+		self->keyboard_manager = wl_registry_bind(registry, id,
+				&zwp_virtual_keyboard_manager_v1_interface,
+				1);
+		return true;
+	}
+
+	if (strcmp(interface, zwlr_data_control_manager_v1_interface.name) == 0) {
+		self->data_control.manager = wl_registry_bind(registry, id,
+				&zwlr_data_control_manager_v1_interface, 2);
+		return true;
+	}
+
+	return false;
+}
+
 static void registry_add(void* data, struct wl_registry* registry,
 			 uint32_t id, const char* interface,
 			 uint32_t version)
@@ -163,46 +211,8 @@ static void registry_add(void* data, struct wl_registry* registry,
 		return;
 	}
 
-	if (!self->disable_input) {
-		if (strcmp(interface, wl_seat_interface.name) == 0) {
-			struct wl_seat* wl_seat =
-				wl_registry_bind(registry, id, &wl_seat_interface, 7);
-			if (!wl_seat)
-				return;
-
-			struct seat* seat = seat_new(wl_seat, id);
-			if (!seat) {
-				wl_seat_destroy(wl_seat);
-				return;
-			}
-
-			wl_list_insert(&self->seats, &seat->link);
-			return;
-		}
-
-		if (strcmp(interface, zwlr_virtual_pointer_manager_v1_interface.name) == 0) {
-			self->pointer_manager =
-				wl_registry_bind(registry, id,
-						 &zwlr_virtual_pointer_manager_v1_interface,
-						 MIN(2, version));
-			return;
-		};
-
-		if (strcmp(interface, zwp_virtual_keyboard_manager_v1_interface.name) == 0) {
-			self->keyboard_manager =
-				wl_registry_bind(registry, id,
-						 &zwp_virtual_keyboard_manager_v1_interface,
-						 1);
-			return;
-		}
-		if (strcmp(interface, zwlr_data_control_manager_v1_interface.name) == 0) {
-			if (!self->disable_input)
-				self->data_control.manager = wl_registry_bind(registry, id,
-						&zwlr_data_control_manager_v1_interface, 2);
-
-			return;
-		}
-	}
+	if (registry_add_input(data, registry, id, interface, version))
+		return;
 }
 
 static void registry_remove(void* data, struct wl_registry* registry,
