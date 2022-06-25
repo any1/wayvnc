@@ -706,6 +706,11 @@ int wayvnc_usage(FILE* stream, int rc)
 "                                              instead of TCP.\n"
 "    -d,--disable-input                        Disable all remote input\n"
 "    -V,--version                              Show version info.\n"
+"    -v,--verbose                              Be more verbose. Same as setting\n"
+"                                              --log-level=info.\n"
+"    -L,--log-level=<level>                    Set log level. The levels are:\n"
+"                                              error, warning, info, debug,\n"
+"                                              trace and quiet.\n"
 "    -h,--help                                 Get help (this text).\n"
 "\n";
 
@@ -786,6 +791,17 @@ void parse_keyboard_option(struct wayvnc* self, char* arg)
 	self->kb_layout = arg;
 }
 
+static int log_level_from_string(const char* str)
+{
+	if (0 == strcmp(str, "quiet")) return NVNC_LOG_PANIC;
+	if (0 == strcmp(str, "error")) return NVNC_LOG_ERROR;
+	if (0 == strcmp(str, "warning")) return NVNC_LOG_WARNING;
+	if (0 == strcmp(str, "info")) return NVNC_LOG_INFO;
+	if (0 == strcmp(str, "debug")) return NVNC_LOG_DEBUG;
+	if (0 == strcmp(str, "trace")) return NVNC_LOG_TRACE;
+	return -1;
+}
+
 int show_version(void)
 {
 	printf("wayvnc: %s\n", wayvnc_version);
@@ -812,8 +828,10 @@ int main(int argc, char* argv[])
 	int max_rate = 30;
 	bool disable_input = false;
 
-	static const char* shortopts = "C:o:k:s:rf:hpudV";
+	static const char* shortopts = "C:o:k:s:rf:hpudVvL:";
 	int drm_fd MAYBE_UNUSED = -1;
+
+	int log_level = NVNC_LOG_WARNING;
 
 	static const struct option longopts[] = {
 		{ "config", required_argument, NULL, 'C' },
@@ -827,6 +845,8 @@ int main(int argc, char* argv[])
 		{ "unix-socket", no_argument, NULL, 'u' },
 		{ "disable-input", no_argument, NULL, 'd' },
 		{ "version", no_argument, NULL, 'V' },
+		{ "verbose", no_argument, NULL, 'v' },
+		{ "log-level", required_argument, NULL, 'L' },
 		{ NULL, 0, NULL, 0 }
 	};
 
@@ -863,6 +883,17 @@ int main(int argc, char* argv[])
 		case 'd':
 			disable_input = true;
 			break;
+		case 'v':
+			log_level = NVNC_LOG_INFO;
+			break;
+		case 'L':
+			log_level = log_level_from_string(optarg);
+			if (log_level < 0) {
+				fprintf(stderr, "Invalid log level: %s\n",
+						optarg);
+				return wayvnc_usage(stderr, 1);
+			}
+			break;
 		case 'V':
 			return show_version();
 		case 'h':
@@ -871,6 +902,8 @@ int main(int argc, char* argv[])
 			return wayvnc_usage(stderr, 1);
 		}
 	}
+
+	nvnc_set_log_level(log_level);
 
 	int n_args = argc - optind;
 
