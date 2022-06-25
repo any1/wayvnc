@@ -21,10 +21,10 @@
 #include <stdbool.h>
 #include <wayland-client-protocol.h>
 #include <wayland-client.h>
+#include <neatvnc.h>
 
 #include "output.h"
 #include "strlcpy.h"
-#include "logging.h"
 
 #include "xdg-output-unstable-v1.h"
 
@@ -198,7 +198,7 @@ struct output* output_new(struct wl_output* wl_output, uint32_t id)
 {
 	struct output* output = calloc(1, sizeof(*output));
 	if (!output) {
-		log_error("OOM\n");
+		nvnc_log(NVNC_LOG_ERROR, "OOM");
 		return NULL;
 	}
 

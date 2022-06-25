@@ -27,11 +27,11 @@
 #include <xkbcommon/xkbcommon-keysyms.h>
 #include <xkbcommon/xkbcommon.h>
 #include <wayland-client.h>
+#include <neatvnc.h>
 
 #include "virtual-keyboard-unstable-v1.h"
 #include "keyboard.h"
 #include "shm.h"
-#include "logging.h"
 #include "intset.h"
 
 #define MAYBE_UNUSED __attribute__((unused))
@@ -143,7 +143,7 @@ static void keyboard__dump_entry(const struct keyboard* self,
 	bool is_pressed MAYBE_UNUSED =
 		intset_is_set(&self->key_state, entry->code);
 
-	log_debug("symbol=%s level=%d code=%s %s\n", sym_name, entry->level,
+	nvnc_log(NVNC_LOG_DEBUG, "symbol=%s level=%d code=%s %s", sym_name, entry->level,
 	          code_name, is_pressed ? "pressed" : "released");
 }
 
@@ -167,7 +167,7 @@ int keyboard_init(struct keyboard* self, const struct xkb_rule_names* rule_names
 		goto keymap_failure;
 
 	if (xkb_keymap_num_layouts(self->keymap) > 1)
-		log_warning("Multiple keyboard layouts have been specified, but only one is supported.\n");
+		nvnc_log(NVNC_LOG_WARNING, "Multiple keyboard layouts have been specified, but only one is supported.");
 
 	self->state = xkb_state_new(self->keymap);
 	if (!self->state)
@@ -368,7 +368,7 @@ static void send_key_with_level(struct keyboard* self, xkb_keycode_t code,
 			XKB_STATE_MODS_LATCHED, XKB_STATE_MODS_LOCKED);
 	keyboard_send_mods(self);
 
-	log_debug("send key with level: old mods: %x, new mods: %x\n",
+	nvnc_log(NVNC_LOG_DEBUG, "send key with level: old mods: %x, new mods: %x",
 			save.latched | save.locked | save.depressed, mods);
 
 	send_key(self, code, is_pressed);
@@ -397,7 +397,7 @@ void keyboard_feed(struct keyboard* self, xkb_keysym_t symbol, bool is_pressed)
 	struct table_entry* entry = keyboard_find_symbol(self, symbol);
 	if (!entry) {
 		char name[256];
-		log_error("Failed to look up keyboard symbol: %s\n",
+		nvnc_log(NVNC_LOG_ERROR, "Failed to look up keyboard symbol: %s",
 		          get_symbol_name(symbol, name, sizeof(name)));
 		return;
 	}

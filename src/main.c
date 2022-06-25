@@ -43,7 +43,6 @@
 #include "screencopy.h"
 #include "data-control.h"
 #include "strlcpy.h"
-#include "logging.h"
 #include "output.h"
 #include "pointer.h"
 #include "keyboard.h"
@@ -226,7 +225,7 @@ static void registry_remove(void* data, struct wl_registry* registry,
 		output_destroy(out);
 
 		if (out == self->selected_output) {
-			log_error("Selected output went away. Exiting...\n");
+			nvnc_log(NVNC_LOG_ERROR, "Selected output went away. Exiting...");
 			wayvnc_exit(self);
 		}
 
@@ -239,7 +238,7 @@ static void registry_remove(void* data, struct wl_registry* registry,
 		seat_destroy(seat);
 
 		if (seat == self->selected_seat) {
-			log_error("Selected seat went away. Exiting...\n");
+			nvnc_log(NVNC_LOG_ERROR, "Selected seat went away. Exiting...");
 			wayvnc_exit(self);
 		}
 
@@ -361,14 +360,14 @@ static int init_wayland(struct wayvnc* self)
 	init_xdg_outputs(self);
 
 	if (!self->pointer_manager && !self->disable_input) {
-		log_error("Virtual Pointer protocol not supported by compositor.\n");
-		log_error("wayvnc may still work if started with --disable-input.\n");
+		nvnc_log(NVNC_LOG_ERROR, "Virtual Pointer protocol not supported by compositor.");
+		nvnc_log(NVNC_LOG_ERROR, "wayvnc may still work if started with --disable-input.");
 		goto failure;
 	}
 
 	if (!self->keyboard_manager && !self->disable_input) {
-		log_error("Virtual Keyboard protocol not supported by compositor.\n");
-		log_error("wayvnc may still work if started with --disable-input.\n");
+		nvnc_log(NVNC_LOG_ERROR, "Virtual Keyboard protocol not supported by compositor.");
+		nvnc_log(NVNC_LOG_ERROR, "wayvnc may still work if started with --disable-input.");
 		goto failure;
 	}
 
@@ -376,7 +375,7 @@ static int init_wayland(struct wayvnc* self)
 	wl_display_roundtrip(self->display);
 
 	if (!self->screencopy.manager) {
-		log_error("Compositor doesn't support screencopy! Exiting.\n");
+		nvnc_log(NVNC_LOG_ERROR, "Compositor doesn't support screencopy! Exiting.");
 		goto failure;
 	}
 
@@ -399,15 +398,15 @@ void on_wayland_event(void* obj)
 
 	if (wl_display_read_events(self->display) < 0) {
 		if (errno == EPIPE || errno == ECONNRESET) {
-			log_error("Compositor has gone away. Exiting...\n");
+			nvnc_log(NVNC_LOG_ERROR, "Compositor has gone away. Exiting...");
 			wayvnc_exit(self);
 		} else {
-			log_error("Failed to read wayland events: %m\n");
+			nvnc_log(NVNC_LOG_ERROR, "Failed to read wayland events: %m");
 		}
 	}
 
 	if (wl_display_dispatch_pending(self->display) < 0)
-		log_error("Failed to dispatch pending\n");
+		nvnc_log(NVNC_LOG_ERROR, "Failed to dispatch pending");
 }
 
 void wayvnc_exit(struct wayvnc* self)
@@ -525,7 +524,7 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port, bool is_unix
 {
 	self->nvnc = is_unix ? nvnc_open_unix(addr) : nvnc_open(addr, port);
 	if (!self->nvnc) {
-		log_error("Failed to bind to address\n");
+		nvnc_log(NVNC_LOG_ERROR, "Failed to bind to address");
 		return -1;
 	}
 
@@ -542,7 +541,7 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port, bool is_unix
 	if (self->cfg.enable_auth &&
 	    nvnc_enable_auth(self->nvnc, self->cfg.private_key_file,
 	                     self->cfg.certificate_file, on_auth, self) < 0) {
-		log_error("Failed to enable authentication\n");
+		nvnc_log(NVNC_LOG_ERROR, "Failed to enable authentication");
 		goto failure;
 	}
 
@@ -560,7 +559,7 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port, bool is_unix
 		create_placeholder_buffer(self->selected_output->width,
 				self->selected_output->height);
 	if (!placeholder_fb) {
-		log_error("Failed to allocate a placeholder buffer\n");
+		nvnc_log(NVNC_LOG_ERROR, "Failed to allocate a placeholder buffer");
 		goto failure;
 	}
 
@@ -584,7 +583,7 @@ int wayvnc_start_capture(struct wayvnc* self)
 {
 	int rc = screencopy_start(&self->screencopy);
 	if (rc < 0) {
-		log_error("Failed to start capture. Exiting...\n");
+		nvnc_log(NVNC_LOG_ERROR, "Failed to start capture. Exiting...");
 		wayvnc_exit(self);
 	}
 	return rc;
@@ -594,7 +593,7 @@ int wayvnc_start_capture_immediate(struct wayvnc* self)
 {
 	int rc = screencopy_start_immediate(&self->screencopy);
 	if (rc < 0) {
-		log_error("Failed to start capture. Exiting...\n");
+		nvnc_log(NVNC_LOG_ERROR, "Failed to start capture. Exiting...");
 		wayvnc_exit(self);
 	}
 	return rc;
@@ -606,7 +605,7 @@ void on_output_dimension_change(struct output* output)
 	struct wayvnc* self = output->userdata;
 	assert(self->selected_output == output);
 
-	log_debug("Output dimensions changed. Restarting frame capturer...\n");
+	nvnc_log(NVNC_LOG_DEBUG, "Output dimensions changed. Restarting frame capturer...");
 
 	screencopy_stop(&self->screencopy);
 	wayvnc_start_capture_immediate(self);
@@ -677,7 +676,7 @@ void on_capture_done(struct screencopy* sc)
 	case SCREENCOPY_IN_PROGRESS:
 		break;
 	case SCREENCOPY_FATAL:
-		log_error("Fatal error while capturing. Exiting...\n");
+		nvnc_log(NVNC_LOG_ERROR, "Fatal error while capturing. Exiting...");
 		wayvnc_exit(self);
 		break;
 	case SCREENCOPY_FAILED:
@@ -725,26 +724,26 @@ int check_cfg_sanity(struct cfg* cfg)
 		int rc = 0;
 
 		if (!nvnc_has_auth()) {
-			log_error("Authentication can't be enabled because it was not selected during build\n");
+			nvnc_log(NVNC_LOG_ERROR, "Authentication can't be enabled because it was not selected during build");
 			return -1;
 		}
 
 		if (!cfg->certificate_file) {
-			log_error("Authentication enabled, but missing certificate_file\n");
+			nvnc_log(NVNC_LOG_ERROR, "Authentication enabled, but missing certificate_file");
 			rc = -1;
 		}
 
 		if (!cfg->private_key_file) {
-			log_error("Authentication enabled, but missing private_key_file\n");
+			nvnc_log(NVNC_LOG_ERROR, "Authentication enabled, but missing private_key_file");
 			rc = -1;
 		}
 		if (!cfg->username && !cfg->enable_pam) {
-			log_error("Authentication enabled, but missing username\n");
+			nvnc_log(NVNC_LOG_ERROR, "Authentication enabled, but missing username");
 			rc = -1;
 		}
 
 		if (!cfg->password && !cfg->enable_pam) {
-			log_error("Authentication enabled, but missing password\n");
+			nvnc_log(NVNC_LOG_ERROR, "Authentication enabled, but missing password");
 			rc = -1;
 		}
 		return rc;
@@ -761,7 +760,7 @@ static void on_perf_tick(void* obj)
 	double area_avg = (double)self->damage_area_sum / (double)self->n_frames_captured;
 	double relative_area_avg = 100.0 * area_avg / total_area;
 
-	printf("Frames captured: %"PRIu32", average reported frame damage: %.1f %%\n",
+	nvnc_log(NVNC_LOG_INFO, "Frames captured: %"PRIu32", average reported frame damage: %.1f %%",
 			self->n_frames_captured, relative_area_avg);
 
 	self->n_frames_captured = 0;
@@ -914,7 +913,7 @@ int main(int argc, char* argv[])
 		port = atoi(argv[optind + 1]);
 
 	if (seat_name && disable_input) {
-		log_error("seat and disable-input are conflicting options\n");
+		nvnc_log(NVNC_LOG_ERROR, "seat and disable-input are conflicting options");
 		return 1;
 	}
 
@@ -922,10 +921,10 @@ int main(int argc, char* argv[])
 	int cfg_rc = cfg_load(&self.cfg, cfg_file);
 	if (cfg_rc != 0 && (cfg_file || errno != ENOENT)) {
 		if (cfg_rc > 0) {
-			log_error("Failed to load config. Error on line %d\n",
+			nvnc_log(NVNC_LOG_ERROR, "Failed to load config. Error on line %d",
 			          cfg_rc);
 		} else {
-			log_error("Failed to load config. %m\n");
+			nvnc_log(NVNC_LOG_ERROR, "Failed to load config. %m");
 		}
 
 		return 1;
@@ -945,7 +944,7 @@ int main(int argc, char* argv[])
 	self.disable_input = disable_input;
 
 	if (init_wayland(&self) < 0) {
-		log_error("Failed to initialise wayland\n");
+		nvnc_log(NVNC_LOG_ERROR, "Failed to initialise wayland");
 		return 1;
 	}
 
@@ -953,13 +952,13 @@ int main(int argc, char* argv[])
 	if (output_name) {
 		out = output_find_by_name(&self.outputs, output_name);
 		if (!out) {
-			log_error("No such output\n");
+			nvnc_log(NVNC_LOG_ERROR, "No such output");
 			goto failure;
 		}
 	} else {
 		out = output_first(&self.outputs);
 		if (!out) {
-			log_error("No output found\n");
+			nvnc_log(NVNC_LOG_ERROR, "No output found");
 			goto failure;
 		}
 	}
@@ -968,13 +967,13 @@ int main(int argc, char* argv[])
 	if (seat_name) {
 		seat = seat_find_by_name(&self.seats, seat_name);
 		if (!seat) {
-			log_error("No such seat\n");
+			nvnc_log(NVNC_LOG_ERROR, "No such seat");
 			goto failure;
 		}
 	} else if (!self.disable_input) {
 		seat = seat_first(&self.seats);
 		if (!seat) {
-			log_error("No seat found\n");
+			nvnc_log(NVNC_LOG_ERROR, "No seat found");
 			goto failure;
 		}
 	}
@@ -999,7 +998,7 @@ int main(int argc, char* argv[])
 		};
 
 		if (keyboard_init(&self.keyboard_backend, &rule_names) < 0) {
-			log_error("Failed to initialise keyboard\n");
+			nvnc_log(NVNC_LOG_ERROR, "Failed to initialise keyboard");
 			goto failure;
 		}
 	}
@@ -1025,7 +1024,7 @@ int main(int argc, char* argv[])
 
 #ifdef ENABLE_SCREENCOPY_DMABUF
 	if (init_render_node(&drm_fd) < 0) {
-		log_error("Failed to initialise DRM render node. No GPU acceleration will be available.\n");
+		nvnc_log(NVNC_LOG_ERROR, "Failed to initialise DRM render node. No GPU acceleration will be available.");
 	}
 #endif
 
@@ -1045,7 +1044,7 @@ int main(int argc, char* argv[])
 		screencopy_init(&self.screencopy);
 
 	if (!self.screencopy.manager) {
-		log_error("screencopy is not supported by compositor\n");
+		nvnc_log(NVNC_LOG_ERROR, "screencopy is not supported by compositor");
 		goto capture_failure;
 	}
 

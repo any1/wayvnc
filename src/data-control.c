@@ -22,8 +22,8 @@
 #include <unistd.h>
 #include <assert.h>
 #include <aml.h>
+#include <neatvnc.h>
 
-#include "logging.h"
 #include "data-control.h"
 
 struct receive_context {
@@ -79,13 +79,13 @@ static void receive_data(void* data,
 	int pipe_fd[2];
 
 	if (pipe(pipe_fd) == -1) {
-		log_error("pipe() failed: %m\n");
+		nvnc_log(NVNC_LOG_ERROR, "pipe() failed: %m");
 		return;
 	}
 
 	struct receive_context* ctx = calloc(1, sizeof(*ctx));
 	if (!ctx) {
-		log_error("OOM\n");
+		nvnc_log(NVNC_LOG_ERROR, "OOM");
 		close(pipe_fd[0]);
 		close(pipe_fd[1]);
 		return;
@@ -102,7 +102,7 @@ static void receive_data(void* data,
 	if (!ctx->mem_fp) {
 		close(ctx->fd);
 		free(ctx);
-		log_error("open_memstream() failed: %m\n");
+		nvnc_log(NVNC_LOG_ERROR, "open_memstream() failed: %m");
 		return;
 	}
 
@@ -199,7 +199,7 @@ data_control_source_send(void* data,
 	ret = write(fd, d, len);
 
 	if (ret < (int)len)
-		log_error("write from clipboard incomplete\n");
+		nvnc_log(NVNC_LOG_ERROR, "write from clipboard incomplete");
 
 	close(fd);
 }
@@ -227,7 +227,7 @@ static struct zwlr_data_control_source_v1* set_selection(struct data_control* se
 	struct zwlr_data_control_source_v1* selection;
 	selection = zwlr_data_control_manager_v1_create_data_source(self->manager);
 	if (selection == NULL) {
-		log_error("zwlr_data_control_manager_v1_create_data_source() failed\n");
+		nvnc_log(NVNC_LOG_ERROR, "zwlr_data_control_manager_v1_create_data_source() failed");
 		free(self->cb_data);
 		self->cb_data = NULL;
 		return NULL;
@@ -274,14 +274,14 @@ void data_control_destroy(struct data_control* self)
 void data_control_to_clipboard(struct data_control* self, const char* text, size_t len)
 {
 	if (!len) {
-		log_error("%s called with 0 length\n", __func__);
+		nvnc_log(NVNC_LOG_ERROR, "%s called with 0 length", __func__);
 		return;
 	}
 	free(self->cb_data);
 
 	self->cb_data = malloc(len);
 	if (!self->cb_data) {
-		log_error("OOM: %m\n");
+		nvnc_log(NVNC_LOG_ERROR, "OOM: %m");
 		return;
 	}
 
