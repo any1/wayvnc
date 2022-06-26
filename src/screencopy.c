@@ -157,7 +157,10 @@ static void screencopy_ready(void* data,
 {
 	struct screencopy* self = data;
 
-	DTRACE_PROBE1(wayvnc, screencopy_ready, self);
+	uint64_t sec = (uint64_t)sec_hi << 32 | (uint64_t)sec_lo;
+	uint64_t pts = sec * UINT64_C(1000000) + (uint64_t)nsec / UINT64_C(1000);
+
+	DTRACE_PROBE2(wayvnc, screencopy_ready, self, pts);
 
 	screencopy__stop(self);
 
@@ -174,8 +177,6 @@ static void screencopy_ready(void* data,
 	self->back = self->front;
 	self->front = NULL;
 
-	uint64_t sec = (uint64_t)sec_hi << 32 | (uint64_t)sec_lo;
-	uint64_t pts = sec * UINT64_C(1000000) + (uint64_t)nsec / UINT64_C(1000);
 	nvnc_fb_set_pts(self->back->nvnc_fb, pts);
 
 	self->status = SCREENCOPY_DONE;
