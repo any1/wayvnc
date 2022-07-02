@@ -484,7 +484,7 @@ static void on_client_cut_text(struct nvnc* server, const char* text, uint32_t l
 {
 	struct wayvnc* wayvnc = nvnc_get_userdata(server);
 
-	if (!wayvnc->disable_input) {
+	if (!wayvnc->disable_input && wayvnc->data_control.manager) {
 		data_control_to_clipboard(&wayvnc->data_control, text, len);
 	}
 }
