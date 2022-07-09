@@ -1,7 +1,7 @@
 project(
 	'wayvnc',
 	'c',
-	version: '0.4.0',
+	version: '0.5.0',
 	license: 'ISC',
 	default_options: [
 		'c_std=gnu11',
@@ -47,7 +47,7 @@ drm = dependency('libdrm')
 xkbcommon = dependency('xkbcommon', version: '>=1.0.0')
 wayland_client = dependency('wayland-client')
 
-neatvnc_version = '>=0.4.0'
+neatvnc_version = '>=0.5.0'
 
 neatvnc_project = subproject(
 	'neatvnc',
