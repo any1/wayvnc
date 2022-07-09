@@ -65,6 +65,7 @@ struct screencopy {
 	enum wl_shm_format wl_shm_format;
 
 	bool have_linux_dmabuf;
+	bool enable_linux_dmabuf;
 	uint32_t dmabuf_width, dmabuf_height;
 	uint32_t fourcc;
 

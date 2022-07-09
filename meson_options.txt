@@ -1,5 +1,5 @@
-option('screencopy-dmabuf', type: 'feature', value: 'disabled',
-	description: 'Enable GPU-side screencopy (experimental)')
+option('screencopy-dmabuf', type: 'feature', value: 'auto',
+	description: 'Enable GPU-side screencopy')
 option('pam', type: 'feature', value: 'auto',
 	description: 'Enable PAM authentication')
 option('man-pages', type: 'feature', value: 'auto',

@@ -83,7 +83,7 @@ static void screencopy_buffer_done(void* data,
 	enum wv_buffer_type type = WV_BUFFER_UNSPEC;
 
 #ifdef ENABLE_SCREENCOPY_DMABUF
-	if (self->have_linux_dmabuf) {
+	if (self->have_linux_dmabuf && self->enable_linux_dmabuf) {
 		width = self->dmabuf_width;
 		height = self->dmabuf_height;
 		stride = 0;

@@ -694,6 +694,7 @@ int wayvnc_usage(FILE* stream, int rc)
 "Usage: wayvnc [options] [address [port]]\n"
 "\n"
 "    -C,--config=<path>                        Select a config file.\n"
+"    -g,--gpu                                  Enable feature that need GPU.\n"
 "    -o,--output=<name>                        Select output to capture.\n"
 "    -k,--keyboard=<layout>[-<variant>]        Select keyboard layout with an\n"
 "                                              optional variant.\n"
@@ -814,6 +815,7 @@ int main(int argc, char* argv[])
 	struct wayvnc self = { 0 };
 
 	const char* cfg_file = NULL;
+	bool enable_gpu_features = false;
 
 	const char* address = NULL;
 	int port = 0;
@@ -827,13 +829,14 @@ int main(int argc, char* argv[])
 	int max_rate = 30;
 	bool disable_input = false;
 
-	static const char* shortopts = "C:o:k:s:rf:hpudVvL:";
+	static const char* shortopts = "C:go:k:s:rf:hpudVvL:";
 	int drm_fd MAYBE_UNUSED = -1;
 
 	int log_level = NVNC_LOG_WARNING;
 
 	static const struct option longopts[] = {
 		{ "config", required_argument, NULL, 'C' },
+		{ "gpu", no_argument, NULL, 'g' },
 		{ "output", required_argument, NULL, 'o' },
 		{ "keyboard", required_argument, NULL, 'k' },
 		{ "seat", required_argument, NULL, 's' },
@@ -857,6 +860,9 @@ int main(int argc, char* argv[])
 		switch (c) {
 		case 'C':
 			cfg_file = optarg;
+			break;
+		case 'g':
+			enable_gpu_features = true;
 			break;
 		case 'o':
 			output_name = optarg;
@@ -982,6 +988,7 @@ int main(int argc, char* argv[])
 	self.selected_seat = seat;
 	self.screencopy.wl_output = out->wl_output;
 	self.screencopy.rate_limit = max_rate;
+	self.screencopy.enable_linux_dmabuf = enable_gpu_features;
 
 	if (self.keyboard_manager) {
 		self.keyboard_backend.virtual_keyboard =
