@@ -64,6 +64,7 @@
 #endif
 
 #define DEFAULT_ADDRESS "127.0.0.1"
+#define DEFAULT_ADDRESS_VSOCK 0xFFFFFFFF /* VMADDR_CID_ANY */
 #define DEFAULT_PORT 5900
 
 #define MAYBE_UNUSED __attribute__((unused))
@@ -650,9 +651,14 @@ static struct nvnc_fb* create_placeholder_buffer(uint16_t width, uint16_t height
 	return fb;
 }
 
-int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port, bool is_unix)
+int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port, bool is_unix, bool is_vsock)
 {
-	self->nvnc = is_unix ? nvnc_open_unix(addr) : nvnc_open(addr, port);
+	if (is_unix)
+        self->nvnc = nvnc_open_unix(addr);
+    else if (is_vsock)
+        self->nvnc = nvnc_open_vsock(addr, port);
+    else
+        self->nvnc = nvnc_open(addr, port);
 	if (!self->nvnc) {
 		nvnc_log(NVNC_LOG_ERROR, "Failed to bind to address. Add -Ldebug to the argument list for more info.");
 		return -1;
@@ -1188,6 +1194,7 @@ int main(int argc, char* argv[])
 	const char* address = NULL;
 	int port = 0;
 	bool use_unix_socket = false;
+    bool use_vsock_socket = false;
 
 	const char* output_name = NULL;
 	const char* seat_name = NULL;
@@ -1223,7 +1230,9 @@ int main(int argc, char* argv[])
 		  "Show performance counters." },
 		{ 'u', "unix-socket", NULL,
 		  "Create unix domain socket." },
-		{ 'd', "disable-input", NULL,
+        { 'w', "vsock-socket", NULL,
+          "Create VSOCK socket." },
+        { 'd', "disable-input", NULL,
 		  "Disable all remote input." },
 		{ 'V', "version", NULL,
 		  "Show version info." },
@@ -1274,6 +1283,9 @@ int main(int argc, char* argv[])
 			break;
 		case 'u':
 			use_unix_socket = true;
+			break;
+		case 'w':
+			use_vsock_socket = true;
 			break;
 		case 'd':
 			disable_input = true;
@@ -1333,8 +1345,13 @@ int main(int argc, char* argv[])
 		if (!address) address = self.cfg.address;
 		if (!port) port = self.cfg.port;
 	}
+    
+    if (use_unix_socket && use_vsock_socket) {
+		nvnc_log(NVNC_LOG_ERROR, "Both UNIX and VSOCK socket listeners selected, only one type is permitted.");
+        return 1;
+    }
 
-	if (!address) address = DEFAULT_ADDRESS;
+	if (!address) address = use_vsock_socket? DEFAULT_ADDRESS_VSOCK : DEFAULT_ADDRESS;
 	if (!port) port = DEFAULT_PORT;
 
 	self.disable_input = disable_input;
@@ -1397,7 +1414,7 @@ int main(int argc, char* argv[])
 	if (init_main_loop(&self) < 0)
 		goto main_loop_failure;
 
-	if (init_nvnc(&self, address, port, use_unix_socket) < 0)
+	if (init_nvnc(&self, address, port, use_unix_socket, use_vsock_socket) < 0)
 		goto nvnc_failure;
 
 	if (self.screencopy.manager)
