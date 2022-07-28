@@ -694,7 +694,7 @@ int wayvnc_usage(FILE* stream, int rc)
 "Usage: wayvnc [options] [address [port]]\n"
 "\n"
 "    -C,--config=<path>                        Select a config file.\n"
-"    -g,--gpu                                  Enable feature that need GPU.\n"
+"    -g,--gpu                                  Enable features that need GPU.\n"
 "    -o,--output=<name>                        Select output to capture.\n"
 "    -k,--keyboard=<layout>[-<variant>]        Select keyboard layout with an\n"
 "                                              optional variant.\n"
