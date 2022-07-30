@@ -13,6 +13,9 @@ wayvnc - A VNC server for wlroots based Wayland compositors.
 *-C, --config=<path>*
 	Select a config file.
 
+*-g,--gpu*
+	Enable features that require GPU.
+
 *-o, --output=<name>*
 	Select output to capture.
 
@@ -41,6 +44,13 @@ wayvnc - A VNC server for wlroots based Wayland compositors.
 
 *-V, --version*
 	Show version info.
+
+*-v,--verbose*
+	Be more verbose. Same as setting `--log-level=info`.
+
+*-L,--log-level*
+	Set log level. The levels are: error, warning, info, debug, trace and
+	quiet.
 
 *-h, --help*
 	Get help.
