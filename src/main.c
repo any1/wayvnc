@@ -520,9 +520,9 @@ static struct nvnc_fb* create_placeholder_buffer(uint16_t width, uint16_t height
 	return fb;
 }
 
-int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port, bool is_unix)
+int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port, bool is_unix, bool from_systemd_socket)
 {
-	self->nvnc = is_unix ? nvnc_open_unix(addr) : nvnc_open(addr, port);
+	self->nvnc = from_systemd_socket ? nvnc_open_systemd_socket() : ( is_unix ? nvnc_open_unix(addr) : nvnc_open(addr, port) );
 	if (!self->nvnc) {
 		nvnc_log(NVNC_LOG_ERROR, "Failed to bind to address");
 		return -1;
@@ -704,6 +704,7 @@ int wayvnc_usage(FILE* stream, int rc)
 "    -p,--show-performance                     Show performance counters.\n"
 "    -u,--unix-socket                          Create a UNIX domain socket\n"
 "                                              instead of TCP.\n"
+"    -D,--from-systemd-socket                  \n"
 "    -d,--disable-input                        Disable all remote input\n"
 "    -V,--version                              Show version info.\n"
 "    -v,--verbose                              Be more verbose. Same as setting\n"
@@ -820,6 +821,7 @@ int main(int argc, char* argv[])
 	const char* address = NULL;
 	int port = 0;
 	bool use_unix_socket = false;
+	bool from_systemd_socket = false;
 
 	const char* output_name = NULL;
 	const char* seat_name = NULL;
@@ -829,7 +831,7 @@ int main(int argc, char* argv[])
 	int max_rate = 30;
 	bool disable_input = false;
 
-	static const char* shortopts = "C:go:k:s:rf:hpudVvL:";
+	static const char* shortopts = "C:go:k:s:rf:hpuDdVvL:";
 	int drm_fd MAYBE_UNUSED = -1;
 
 	int log_level = NVNC_LOG_WARNING;
@@ -845,6 +847,7 @@ int main(int argc, char* argv[])
 		{ "help", no_argument, NULL, 'h' },
 		{ "show-performance", no_argument, NULL, 'p' },
 		{ "unix-socket", no_argument, NULL, 'u' },
+		{ "from-systemd-socket", no_argument, NULL, 'D' },
 		{ "disable-input", no_argument, NULL, 'd' },
 		{ "version", no_argument, NULL, 'V' },
 		{ "verbose", no_argument, NULL, 'v' },
@@ -884,6 +887,9 @@ int main(int argc, char* argv[])
 			break;
 		case 'u':
 			use_unix_socket = true;
+			break;
+		case 'D':
+			from_systemd_socket = true;
 			break;
 		case 'd':
 			disable_input = true;
@@ -1044,7 +1050,7 @@ int main(int argc, char* argv[])
 	if (init_main_loop(&self) < 0)
 		goto main_loop_failure;
 
-	if (init_nvnc(&self, address, port, use_unix_socket) < 0)
+	if (init_nvnc(&self, address, port, use_unix_socket, from_systemd_socket) < 0)
 		goto nvnc_failure;
 
 	if (self.screencopy.manager)
