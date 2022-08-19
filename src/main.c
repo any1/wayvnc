@@ -99,10 +99,14 @@ struct wayvnc {
 	uint32_t n_frames_captured;
 
 	bool disable_input;
+
+	int nr_clients;
+	struct aml_ticker* performance_ticker;
 };
 
 void wayvnc_exit(struct wayvnc* self);
 void on_capture_done(struct screencopy* sc);
+static void on_client_new(struct nvnc_client* client);
 
 #if defined(GIT_VERSION)
 static const char wayvnc_version[] = GIT_VERSION;
@@ -317,6 +321,9 @@ void wayvnc_destroy(struct wayvnc* self)
 
 	if (self->screencopy.manager)
 		zwlr_screencopy_manager_v1_destroy(self->screencopy.manager);
+
+	if (self->performance_ticker)
+		aml_unref(self->performance_ticker);
 
 	wl_registry_destroy(self->registry);
 	wl_display_disconnect(self->display);
@@ -553,6 +560,8 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port, bool is_unix
 		nvnc_set_key_code_fn(self->nvnc, on_key_code_event);
 	}
 
+	nvnc_set_new_client_fn(self->nvnc, on_client_new);
+
 	nvnc_set_cut_text_receive_fn(self->nvnc, on_client_cut_text);
 
 	struct nvnc_fb* placeholder_fb =
@@ -770,13 +779,49 @@ static void on_perf_tick(void* obj)
 
 static void start_performance_ticker(struct wayvnc* self)
 {
-	struct aml_ticker* ticker = aml_ticker_new(1000, on_perf_tick, self,
-		NULL);
-	if (!ticker)
+	if (!self->performance_ticker)
 		return;
 
-	aml_start(aml_get_default(), ticker);
-	aml_unref(ticker);
+	aml_start(aml_get_default(), self->performance_ticker);
+}
+
+static void stop_performance_ticker(struct wayvnc* self)
+{
+	if (!self->performance_ticker)
+		return;
+
+	aml_stop(aml_get_default(), self->performance_ticker);
+}
+
+static void on_client_cleanup(struct nvnc_client* client)
+{
+	struct nvnc* nvnc = nvnc_client_get_server(client);
+	struct wayvnc* self = nvnc_get_userdata(nvnc);
+
+	self->nr_clients--;
+	nvnc_log(NVNC_LOG_DEBUG, "Client disconnected, new client count: %d",
+			self->nr_clients);
+	if (self->nr_clients == 0) {
+		nvnc_log(NVNC_LOG_INFO, "Stopping screen capture");
+		screencopy_stop(&self->screencopy);
+		stop_performance_ticker(self);
+	}
+}
+
+static void on_client_new(struct nvnc_client* client)
+{
+	struct nvnc* nvnc = nvnc_client_get_server(client);
+	struct wayvnc* self = nvnc_get_userdata(nvnc);
+
+	if (self->nr_clients == 0) {
+		nvnc_log(NVNC_LOG_INFO, "Starting screen capture");
+		start_performance_ticker(self);
+		wayvnc_start_capture_immediate(self);
+	}
+	self->nr_clients++;
+	nvnc_set_client_cleanup_fn(client, on_client_cleanup);
+	nvnc_log(NVNC_LOG_DEBUG, "Client connected, new client count: %d",
+			self->nr_clients);
 }
 
 void parse_keyboard_option(struct wayvnc* self, char* arg)
@@ -1061,13 +1106,11 @@ int main(int argc, char* argv[])
 
 	self.screencopy.overlay_cursor = overlay_cursor;
 
-	if (wayvnc_start_capture(&self) < 0)
-		goto capture_failure;
-
 	if (show_performance)
-		start_performance_ticker(&self);
+		self.performance_ticker = aml_ticker_new(1000, on_perf_tick,
+				&self, NULL);
 
-	wl_display_dispatch(self.display);
+	wl_display_dispatch_pending(self.display);
 
 	while (!self.do_exit) {
 		wl_display_flush(self.display);
