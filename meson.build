@@ -56,16 +56,16 @@ neatvnc_project = subproject(
 )
 
 aml_project = subproject('aml', required: false)
-if aml_project.found()
-	aml = aml_project.get_variable('aml_dep')
-else
+if get_option('neatvncSystem')
 	aml = dependency('aml')
+else
+	aml = aml_project.get_variable('aml_dep')
 endif
 
-if neatvnc_project.found()
-	neatvnc = neatvnc_project.get_variable('neatvnc_dep')
-else
+if get_option('amlSystem')
 	neatvnc = dependency('neatvnc', version: neatvnc_version)
+else
+	neatvnc = neatvnc_project.get_variable('neatvnc_dep')
 endif
 
 inc = include_directories('include')

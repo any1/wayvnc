@@ -6,3 +6,7 @@ option('man-pages', type: 'feature', value: 'auto',
 	description: 'Generate and install man pages')
 option('systemtap', type: 'boolean', value: false,
 	description: 'Enable tracing using sdt')
+option('neatvncSystem', type : 'boolean', value : false,
+  description: 'Use System neatvnc dependences')
+option('amlSystem', type : 'boolean', value : false,
+  description: 'Use System aml dependences')

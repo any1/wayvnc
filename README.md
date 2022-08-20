@@ -13,7 +13,7 @@ GitHub [discussion forum](https://github.com/any1/wayvnc/discussions) for the
 project.
 
 ## Installing
-```
+```bash
 # Arch Linux
 pacman -S wayvnc
 
@@ -50,12 +50,12 @@ xbps-install wayvnc
  * pkg-config
 
 #### For Arch Linux
-```
+```bash
 pacman -S base-devel libglvnd libxkbcommon pixman gnutls
 ```
 
 #### For Fedora 31
-```
+```bash
 dnf install -y meson gcc ninja-build pkg-config egl-wayland egl-wayland-devel \
 	mesa-libEGL-devel mesa-libEGL libwayland-egl libglvnd-devel \
 	libglvnd-core-devel libglvnd mesa-libGLES-devel mesa-libGLES \
@@ -64,12 +64,12 @@ dnf install -y meson gcc ninja-build pkg-config egl-wayland egl-wayland-devel \
 ```
 
 #### For Debian (unstable / testing)
-```
+```bash
 apt build-dep wayvnc
 ```
 The easiest way to satisfy the neatvnc and aml dependencies is to link to them
 in the subprojects directory:
-```
+```bash
 git clone https://github.com/any1/wayvnc.git
 git clone https://github.com/any1/neatvnc.git
 git clone https://github.com/any1/aml.git
