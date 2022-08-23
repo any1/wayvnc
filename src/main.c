@@ -614,6 +614,9 @@ void on_output_dimension_change(struct output* output)
 	struct wayvnc* self = output->userdata;
 	assert(self->selected_output == output);
 
+	if (self->nr_clients == 0)
+		return;
+
 	nvnc_log(NVNC_LOG_DEBUG, "Output dimensions changed. Restarting frame capturer...");
 
 	screencopy_stop(&self->screencopy);
