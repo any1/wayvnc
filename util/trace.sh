@@ -24,7 +24,7 @@ sudo perf buildid-cache -a build/subprojects/neatvnc/libneatvnc.so
 delete_all_events
 add_all_events
 
-trap "sudo chown $USER.$USER perf.data*" EXIT
+trap "sudo chown $USER:$USER perf.data*" EXIT
 
-sudo perf record -aR -e ${EVENTS/ /,}
+sudo perf record -aR -e ${EVENTS// /,}
 
