@@ -91,7 +91,7 @@ static int compare_symbols(const void* a, const void* b)
 	const struct table_entry* y = b;
 
 	if (x->symbol == y->symbol)
-		return x->level < y->level ? -1 : x->level > y->level;
+		return x->code < y->code ? -1 : x->code > y->code;
 
 	return x->symbol < y->symbol ? -1 : x->symbol > y->symbol;
 }
