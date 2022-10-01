@@ -534,6 +534,10 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port, bool is_unix
 		nvnc_log(NVNC_LOG_ERROR, "Failed to bind to address");
 		return -1;
 	}
+	if (is_unix)
+		nvnc_log(NVNC_LOG_INFO, "Listening for connections on %s", addr);
+	else
+		nvnc_log(NVNC_LOG_INFO, "Listening for connections on %s:%d", addr, port);
 
 	self->nvnc_display = nvnc_display_new(0, 0);
 	if (!self->nvnc_display)
