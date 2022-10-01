@@ -225,6 +225,8 @@ static void registry_remove(void* data, struct wl_registry* registry,
 
 	struct output* out = output_find_by_id(&self->outputs, id);
 	if (out) {
+		nvnc_log(NVNC_LOG_INFO, "Output %s went away", out->name);
+
 		wl_list_remove(&out->link);
 		output_destroy(out);
 
@@ -238,6 +240,7 @@ static void registry_remove(void* data, struct wl_registry* registry,
 
 	struct seat* seat = seat_find_by_id(&self->seats, id);
 	if (seat) {
+		nvnc_log(NVNC_LOG_INFO, "Seat %s went away", seat->name);
 		wl_list_remove(&seat->link);
 		seat_destroy(seat);
 
