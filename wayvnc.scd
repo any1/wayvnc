@@ -62,6 +62,14 @@ running Wayland session, creates virtual input devices and exposes a single
 display via the RFB protocol. The Wayland session may be a headless one, so it
 is also possible to run wayvnc without a physical display attached.
 
+## MULTIPLE OUTPUTS
+
+If the Wayland session consists of  multiple outputs, only one will be captured.
+By default this will be the first one, but can be specified by the _-o_ command
+line argument. The argument accepts the short name such as _eDP-1_ or _DP-4_.
+Running wayvnc in verbose mode (_-v_) will display the names of all outputs on
+startup.
+
 # CONFIGURATION
 
 wayvnc searches for a config file in the location
