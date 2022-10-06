@@ -847,6 +847,21 @@ void parse_keyboard_option(struct wayvnc* self, char* arg)
 	self->kb_layout = arg;
 }
 
+void log_selected_output(struct wayvnc* self)
+{
+	nvnc_log(NVNC_LOG_INFO, "Capturing output %s",
+			self->selected_output->name);
+	struct output* output;
+	wl_list_for_each(output, &self->outputs, link) {
+		bool this_output = (output->id == self->selected_output->id);
+		nvnc_log(NVNC_LOG_INFO, "%s %s %dx%d+%dx%d",
+				this_output ? ">>" : "--",
+				output->description,
+				output->width, output->height,
+				output->x, output->y);
+	}
+}
+
 static int log_level_from_string(const char* str)
 {
 	if (0 == strcmp(str, "quiet")) return NVNC_LOG_PANIC;
@@ -1045,6 +1060,7 @@ int main(int argc, char* argv[])
 	self.screencopy.wl_output = out->wl_output;
 	self.screencopy.rate_limit = max_rate;
 	self.screencopy.enable_linux_dmabuf = enable_gpu_features;
+	log_selected_output(&self);
 
 	if (self.keyboard_manager) {
 		self.keyboard_backend.virtual_keyboard =
