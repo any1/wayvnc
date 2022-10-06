@@ -426,6 +426,7 @@ void wayvnc_exit(struct wayvnc* self)
 
 void on_signal(void* obj)
 {
+	nvnc_log(NVNC_LOG_WARNING, "Received termination signal. Shutting down.");
 	struct wayvnc* self = aml_get_userdata(obj);
 	wayvnc_exit(self);
 }
