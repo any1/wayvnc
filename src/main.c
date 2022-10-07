@@ -884,6 +884,14 @@ void log_selected_output(struct wayvnc* self)
 	}
 }
 
+void set_selected_output(struct wayvnc* self, struct output* output) {
+	self->selected_output = output;
+	self->screencopy.wl_output = output->wl_output;
+	output->on_dimension_change = on_output_dimension_change;
+	output->userdata = self;
+	log_selected_output(self);
+}
+
 static int log_level_from_string(const char* str)
 {
 	if (0 == strcmp(str, "quiet")) return NVNC_LOG_PANIC;
@@ -1061,6 +1069,7 @@ int main(int argc, char* argv[])
 			goto failure;
 		}
 	}
+	set_selected_output(&self, out);
 
 	struct seat* seat = NULL;
 	if (seat_name) {
@@ -1077,12 +1086,9 @@ int main(int argc, char* argv[])
 		}
 	}
 
-	self.selected_output = out;
 	self.selected_seat = seat;
-	self.screencopy.wl_output = out->wl_output;
 	self.screencopy.rate_limit = max_rate;
 	self.screencopy.enable_linux_dmabuf = enable_gpu_features;
-	log_selected_output(&self);
 
 	if (self.keyboard_manager) {
 		self.keyboard_backend.virtual_keyboard =
@@ -1106,9 +1112,6 @@ int main(int argc, char* argv[])
 
 
 	setup_pointer(&self);
-
-	out->on_dimension_change = on_output_dimension_change;
-	out->userdata = &self;
 
 #ifdef ENABLE_SCREENCOPY_DMABUF
 	if (init_render_node(&drm_fd) < 0) {
