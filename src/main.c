@@ -847,6 +847,28 @@ void parse_keyboard_option(struct wayvnc* self, char* arg)
 	self->kb_layout = arg;
 }
 
+void setup_pointer(struct wayvnc* self) {
+	self->pointer_backend.vnc = self->nvnc;
+	self->pointer_backend.output = self->selected_output;
+	if (!self->pointer_manager)
+		return;
+
+	if (self->pointer_backend.pointer)
+		pointer_destroy(&self->pointer_backend);
+
+	int pointer_manager_version =
+		zwlr_virtual_pointer_manager_v1_get_version(self->pointer_manager);
+
+	self->pointer_backend.pointer = pointer_manager_version >= 2
+		? zwlr_virtual_pointer_manager_v1_create_virtual_pointer_with_output(
+			self->pointer_manager, self->selected_seat->wl_seat,
+			self->selected_output->wl_output)
+		: zwlr_virtual_pointer_manager_v1_create_virtual_pointer(
+			self->pointer_manager, self->selected_seat->wl_seat);
+
+	pointer_init(&self->pointer_backend);
+}
+
 void log_selected_output(struct wayvnc* self)
 {
 	nvnc_log(NVNC_LOG_INFO, "Capturing output %s",
@@ -1082,22 +1104,9 @@ int main(int argc, char* argv[])
 		}
 	}
 
-	self.pointer_backend.vnc = self.nvnc;
-	self.pointer_backend.output = self.selected_output;
 
-	if (self.pointer_manager) {
-		int pointer_manager_version =
-			zwlr_virtual_pointer_manager_v1_get_version(self.pointer_manager);
+	setup_pointer(&self);
 
-		self.pointer_backend.pointer = pointer_manager_version >= 2
-			? zwlr_virtual_pointer_manager_v1_create_virtual_pointer_with_output(
-				self.pointer_manager, self.selected_seat->wl_seat,
-				out->wl_output)
-			: zwlr_virtual_pointer_manager_v1_create_virtual_pointer(
-				self.pointer_manager, self.selected_seat->wl_seat);
-
-		pointer_init(&self.pointer_backend);
-	}
 	out->on_dimension_change = on_output_dimension_change;
 	out->userdata = &self;
 
