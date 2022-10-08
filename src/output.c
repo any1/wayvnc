@@ -285,3 +285,20 @@ struct output* output_first(struct wl_list* list)
 
 	return output;
 }
+
+struct output* output_cycle(const struct wl_list* list,
+		const struct output* current,
+		enum output_cycle_direction direction)
+{
+	const struct wl_list* iter = current ? &current->link : list;
+	iter = (direction == OUTPUT_CYCLE_FORWARD) ?
+		iter->next : iter->prev;
+	if (iter == list) {
+		if (wl_list_empty(list))
+			return NULL;
+		iter = (direction == OUTPUT_CYCLE_FORWARD) ?
+			iter->next : iter->prev;
+	}
+	struct output* output;
+	return wl_container_of(iter, output, link);
+}
