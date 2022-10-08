@@ -78,7 +78,7 @@ struct wayvnc {
 	struct zwp_virtual_keyboard_manager_v1* keyboard_manager;
 	struct zwlr_virtual_pointer_manager_v1* pointer_manager;
 
-	const struct output* selected_output;
+	struct output* selected_output;
 	const struct seat* selected_seat;
 
 	struct screencopy screencopy;
@@ -107,6 +107,8 @@ struct wayvnc {
 void wayvnc_exit(struct wayvnc* self);
 void on_capture_done(struct screencopy* sc);
 static void on_client_new(struct nvnc_client* client);
+void switch_to_next_output(struct wayvnc*);
+void switch_to_prev_output(struct wayvnc*);
 
 #if defined(GIT_VERSION)
 static const char wayvnc_version[] = GIT_VERSION;
@@ -885,11 +887,43 @@ void log_selected_output(struct wayvnc* self)
 }
 
 void set_selected_output(struct wayvnc* self, struct output* output) {
+	if (self->selected_output) {
+		self->selected_output->on_dimension_change = NULL;
+	}
 	self->selected_output = output;
 	self->screencopy.wl_output = output->wl_output;
 	output->on_dimension_change = on_output_dimension_change;
 	output->userdata = self;
 	log_selected_output(self);
+}
+
+void switch_to_output(struct wayvnc* self, struct output* output)
+{
+	if (self->selected_output == output) {
+		nvnc_log(NVNC_LOG_DEBUG, "No-op: Already selected output %s",
+				output->name);
+		return;
+	}
+	screencopy_stop(&self->screencopy);
+	set_selected_output(self, output);
+	setup_pointer(self);
+	wayvnc_start_capture_immediate(self);
+}
+
+void switch_to_next_output(struct wayvnc* self)
+{
+	nvnc_log(NVNC_LOG_INFO, "Rotating to next output");
+	struct output* next = output_cycle(&self->outputs,
+			self->selected_output, OUTPUT_CYCLE_FORWARD);
+	switch_to_output(self, next);
+}
+
+void switch_to_prev_output(struct wayvnc* self)
+{
+	nvnc_log(NVNC_LOG_INFO, "Rotating to previous output");
+	struct output* prev = output_cycle(&self->outputs,
+			self->selected_output, OUTPUT_CYCLE_REVERSE);
+	switch_to_output(self, prev);
 }
 
 static int log_level_from_string(const char* str)
