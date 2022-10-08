@@ -227,13 +227,18 @@ static void registry_remove(void* data, struct wl_registry* registry,
 
 	struct output* out = output_find_by_id(&self->outputs, id);
 	if (out) {
-		nvnc_log(NVNC_LOG_INFO, "Output %s went away", out->name);
+		if (out == self->selected_output) {
+			nvnc_log(NVNC_LOG_WARNING, "Selected output %s went away",
+					out->name);
+			switch_to_prev_output(self);
+		} else
+			nvnc_log(NVNC_LOG_INFO, "Output %s went away", out->name);
 
 		wl_list_remove(&out->link);
 		output_destroy(out);
 
 		if (out == self->selected_output) {
-			nvnc_log(NVNC_LOG_ERROR, "Selected output went away. Exiting...");
+			nvnc_log(NVNC_LOG_ERROR, "No fallback outputs left. Exiting...");
 			wayvnc_exit(self);
 		}
 
