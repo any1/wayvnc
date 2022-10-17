@@ -91,6 +91,7 @@ sources = [
 	'src/pixels.c',
 	'src/transform-util.c',
 	'src/json-ipc.c',
+	'src/ctl-server.c',
 ]
 
 dependencies = [

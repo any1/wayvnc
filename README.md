@@ -42,6 +42,7 @@ xbps-install wayvnc
  * neatvnc
  * pam (optional)
  * pixman
+ * jansson
 
 ### Build Dependencies
  * GCC
@@ -51,7 +52,7 @@ xbps-install wayvnc
 
 #### For Arch Linux
 ```
-pacman -S base-devel libglvnd libxkbcommon pixman gnutls
+pacman -S base-devel libglvnd libxkbcommon pixman gnutls jansson
 ```
 
 #### For Fedora 31
@@ -60,7 +61,7 @@ dnf install -y meson gcc ninja-build pkg-config egl-wayland egl-wayland-devel \
 	mesa-libEGL-devel mesa-libEGL libwayland-egl libglvnd-devel \
 	libglvnd-core-devel libglvnd mesa-libGLES-devel mesa-libGLES \
 	libxkbcommon-devel libxkbcommon libwayland-client libwayland \
-	wayland-devel gnutls-devel
+	wayland-devel gnutls-devel jansson-devel       
 ```
 
 #### For Debian (unstable / testing)
