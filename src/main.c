@@ -50,6 +50,7 @@
 #include "cfg.h"
 #include "transform-util.h"
 #include "usdt.h"
+#include "ctl-server.h"
 
 #ifdef ENABLE_PAM
 #include "pam_auth.h"
@@ -102,11 +103,14 @@ struct wayvnc {
 
 	int nr_clients;
 	struct aml_ticker* performance_ticker;
+
+	struct ctl* ctl;
 };
 
 void wayvnc_exit(struct wayvnc* self);
 void on_capture_done(struct screencopy* sc);
 static void on_client_new(struct nvnc_client* client);
+void switch_to_output(struct wayvnc*, struct output*);
 void switch_to_next_output(struct wayvnc*);
 void switch_to_prev_output(struct wayvnc*);
 
@@ -438,6 +442,32 @@ void on_signal(void* obj)
 	wayvnc_exit(self);
 }
 
+struct cmd_response* on_output_cycle(struct ctl* ctl, enum output_cycle_direction direction)
+{
+	struct wayvnc* self = ctl_server_userdata(ctl);
+	nvnc_log(NVNC_LOG_INFO, "ctl command: Rotating to %s output",
+			direction == OUTPUT_CYCLE_FORWARD ? "next" : "previous");
+	struct output* next = output_cycle(&self->outputs,
+			self->selected_output, direction);
+	switch_to_output(self, next);
+	return cmd_ok();
+}
+
+struct cmd_response* on_output_switch(struct ctl* ctl,
+			const char* output_name)
+{
+	nvnc_log(NVNC_LOG_INFO, "ctl command: Switch to output \"%s\"", output_name);
+	struct wayvnc* self = ctl_server_userdata(ctl);
+	if (!output_name || output_name[0] == '\0')
+		return cmd_failed("Output name is required");
+	struct output* output = output_find_by_name(&self->outputs, output_name);
+	if (!output) {
+		return cmd_failed("No such output \"%s\"", output_name);
+	}
+	switch_to_output(self, output);
+	return cmd_ok();
+}
+
 int init_main_loop(struct wayvnc* self)
 {
 	struct aml* loop = aml_get_default();
@@ -726,6 +756,8 @@ int wayvnc_usage(FILE* stream, int rc)
 "    -k,--keyboard=<layout>[-<variant>]        Select keyboard layout with an\n"
 "                                              optional variant.\n"
 "    -s,--seat=<name>                          Select seat by name.\n"
+"    -S,--socket=<path>                        Wayvnc control socket path.\n"
+"                                              Default: $XDG_RUNTIME_DIR/wayvncctl\n"
 "    -r,--render-cursor                        Enable overlay cursor rendering.\n"
 "    -f,--max-fps=<fps>                        Set the rate limit (default 30).\n"
 "    -p,--show-performance                     Show performance counters.\n"
@@ -905,7 +937,7 @@ void set_selected_output(struct wayvnc* self, struct output* output) {
 void switch_to_output(struct wayvnc* self, struct output* output)
 {
 	if (self->selected_output == output) {
-		nvnc_log(NVNC_LOG_DEBUG, "No-op: Already selected output %s",
+		nvnc_log(NVNC_LOG_INFO, "Already selected output %s",
 				output->name);
 		return;
 	}
@@ -920,6 +952,7 @@ void switch_to_next_output(struct wayvnc* self)
 	nvnc_log(NVNC_LOG_INFO, "Rotating to next output");
 	struct output* next = output_cycle(&self->outputs,
 			self->selected_output, OUTPUT_CYCLE_FORWARD);
+
 	switch_to_output(self, next);
 }
 
@@ -963,13 +996,14 @@ int main(int argc, char* argv[])
 
 	const char* output_name = NULL;
 	const char* seat_name = NULL;
+	const char* socket_path = NULL;
 
 	bool overlay_cursor = false;
 	bool show_performance = false;
 	int max_rate = 30;
 	bool disable_input = false;
 
-	static const char* shortopts = "C:go:k:s:rf:hpudVvL:";
+	static const char* shortopts = "C:go:k:s:S:rf:hpudVvL:";
 	int drm_fd MAYBE_UNUSED = -1;
 
 	int log_level = NVNC_LOG_WARNING;
@@ -980,6 +1014,7 @@ int main(int argc, char* argv[])
 		{ "output", required_argument, NULL, 'o' },
 		{ "keyboard", required_argument, NULL, 'k' },
 		{ "seat", required_argument, NULL, 's' },
+		{ "socket", required_argument, NULL, 'S' },
 		{ "render-cursor", no_argument, NULL, 'r' },
 		{ "max-fps", required_argument, NULL, 'f' },
 		{ "help", no_argument, NULL, 'h' },
@@ -1012,6 +1047,9 @@ int main(int argc, char* argv[])
 			break;
 		case 's':
 			seat_name = optarg;
+			break;
+		case 'S':
+			socket_path = optarg;
 			break;
 		case 'r':
 			overlay_cursor = true;
@@ -1191,6 +1229,15 @@ int main(int argc, char* argv[])
 		self.performance_ticker = aml_ticker_new(1000000, on_perf_tick,
 				&self, NULL);
 
+	const struct ctl_server_actions ctl_actions = {
+		.userdata = &self,
+		.on_output_cycle = on_output_cycle,
+		.on_output_switch = on_output_switch,
+	};
+	self.ctl = ctl_server_new(socket_path, &ctl_actions);
+	if (!self.ctl)
+		goto ctl_server_failure;
+
 	wl_display_dispatch_pending(self.display);
 
 	while (!self.do_exit) {
@@ -1202,6 +1249,7 @@ int main(int argc, char* argv[])
 	nvnc_log(NVNC_LOG_INFO, "Exiting...");
 
 	screencopy_stop(&self.screencopy);
+	ctl_server_destroy(self.ctl);
 
 	nvnc_display_unref(self.nvnc_display);
 	nvnc_close(self.nvnc);
@@ -1222,6 +1270,7 @@ int main(int argc, char* argv[])
 
 	return 0;
 
+ctl_server_failure:
 capture_failure:
 	nvnc_display_unref(self.nvnc_display);
 	nvnc_close(self.nvnc);
