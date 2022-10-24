@@ -47,6 +47,7 @@ gbm = dependency('gbm', required: get_option('screencopy-dmabuf'))
 drm = dependency('libdrm')
 xkbcommon = dependency('xkbcommon', version: '>=1.0.0')
 wayland_client = dependency('wayland-client')
+jansson = dependency('jansson')
 
 neatvnc_version = '>=0.5.0'
 
@@ -89,6 +90,7 @@ sources = [
 	'src/buffer.c',
 	'src/pixels.c',
 	'src/transform-util.c',
+	'src/json-ipc.c',
 ]
 
 dependencies = [
@@ -102,6 +104,7 @@ dependencies = [
 	neatvnc,
 	xkbcommon,
 	client_protos,
+	jansson,
 ]
 
 config = configuration_data()
