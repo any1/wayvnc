@@ -161,6 +161,19 @@ _XDG_CONFIG_HOME_
 
 # FAQ
 
+*Wayvnc complains that a protocol is not supported*
+
+	The error might look like this:
+	```
+	wl_registry@2: error 0: invalid version for global zxdg_output_manager_v1 (4): have 2, wanted 3
+	ERROR: ../src/main.c: 388: Screencopy protocol not supported by compositor. Exiting. Refer to FAQ section in man page.
+	ERROR: ../src/main.c: 1024: Failed to initialise wayland
+	```
+
+	This means that your wayland compositor does not implement the
+	screencopy protocol and wayvnc won't work with it. Screencopy is
+	implemented by wlroots based compositors such as Sway and Wayfire.
+
 *How can I run wayvnc in headless mode/over an SSH session?*
 
 	Set the environment variables _WLR_BACKENDS_=headless and
