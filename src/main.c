@@ -385,7 +385,7 @@ static int init_wayland(struct wayvnc* self)
 	wl_display_roundtrip(self->display);
 
 	if (!self->screencopy.manager) {
-		nvnc_log(NVNC_LOG_ERROR, "Compositor doesn't support screencopy! Exiting.");
+		nvnc_log(NVNC_LOG_ERROR, "Screencopy protocol not supported by compositor. Exiting. Refer to FAQ section in man page.");
 		goto failure;
 	}
 
