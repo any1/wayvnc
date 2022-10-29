@@ -426,7 +426,7 @@ void wayvnc_exit(struct wayvnc* self)
 
 void on_signal(void* obj)
 {
-	nvnc_log(NVNC_LOG_WARNING, "Received termination signal. Shutting down.");
+	nvnc_log(NVNC_LOG_INFO, "Received termination signal.");
 	struct wayvnc* self = aml_get_userdata(obj);
 	wayvnc_exit(self);
 }
@@ -1147,6 +1147,8 @@ int main(int argc, char* argv[])
 		aml_poll(aml, -1);
 		aml_dispatch(aml);
 	}
+
+	nvnc_log(NVNC_LOG_INFO, "Exiting...");
 
 	screencopy_stop(&self.screencopy);
 
