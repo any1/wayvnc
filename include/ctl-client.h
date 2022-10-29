@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Andri Yngvason
+ * Copyright (c) 2022 Jim Ramsay
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,12 +16,16 @@
 
 #pragma once
 
-#include <sys/types.h>
+#include <stdbool.h>
 
-#define UDIV_UP(a, b) (((a) + (b) - 1) / (b))
+struct ctl_client;
 
-extern const char* wayvnc_version;
+void ctl_client_debug_log(bool enable);
 
-const char* default_ctl_socket_path();
+struct ctl_client* ctl_client_new(const char* socket_path, void* userdata);
+void ctl_client_destroy(struct ctl_client*);
+void* ctl_client_userdata(struct ctl_client*);
 
-void advance_read_buffer(char (*buffer)[], size_t* current_len, size_t advance_by);
+
+int ctl_client_run_command(struct ctl_client* self,
+		int argc, char* argv[]);

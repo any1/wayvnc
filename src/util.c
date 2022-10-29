@@ -43,3 +43,13 @@ const char* default_ctl_socket_path()
 				"/tmp/wayvncctl-%d", getuid());
 	return buffer;
 }
+
+void advance_read_buffer(char (*buffer)[], size_t* current_len, size_t advance_by)
+{
+	ssize_t remainder = *current_len - advance_by;
+	if (remainder < 0)
+		remainder = 0;
+	else if (remainder > 0)
+		memmove(*buffer, *buffer + advance_by, remainder);
+	*current_len = remainder;
+}

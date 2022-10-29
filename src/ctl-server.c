@@ -219,16 +219,7 @@ static ssize_t client_read(struct ctl_client* self, struct cmd_response** err)
 	return n;
 }
 
-static void client_advance_buffer(struct ctl_client* self, size_t len)
-{
-	size_t remainder = self->read_len - len;
-	if (remainder > 0)
-		memmove(self->read_buffer, self->read_buffer + len, remainder);
-	self->read_len = remainder;
-}
-
-static json_t* client_next_object(struct ctl_client* self,
-		struct cmd_response** ierr)
+static json_t* client_next_object(struct ctl_client* self, struct cmd_response** ierr)
 {
 	if (self->read_len == 0)
 		return NULL;
@@ -238,7 +229,7 @@ static json_t* client_next_object(struct ctl_client* self,
 			JSON_DISABLE_EOF_CHECK, &err);
 	if (root) {
 		nvnc_log(NVNC_LOG_DEBUG, "<< %.*s", err.position, self->read_buffer);
-		client_advance_buffer(self, err.position);
+		advance_read_buffer(&self->read_buffer, &self->read_len, err.position);
 	} else if (json_error_code(&err) == json_error_premature_end_of_input) {
 		nvnc_trace("Awaiting more data");
 	} else {
