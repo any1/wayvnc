@@ -499,19 +499,6 @@ accept_failure:
 	free(client);
 }
 
-const char* default_ctl_socket_path()
-{
-	static char buffer[128];
-	char* xdg_runtime = getenv("XDG_RUNTIME_DIR");
-	if (xdg_runtime)
-		snprintf(buffer, sizeof(buffer),
-				"%s/wayvncctl", xdg_runtime);
-	else
-		snprintf(buffer, sizeof(buffer),
-				"/tmp/wayvncctl-%d", getuid());
-	return buffer;
-}
-
 int ctl_server_init(struct ctl* self, const char* socket_path)
 {
 	if (!socket_path) {
