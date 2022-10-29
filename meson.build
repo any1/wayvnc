@@ -15,6 +15,7 @@ prefix = get_option('prefix')
 c_args = [
 	'-DPROJECT_VERSION="@0@"'.format(meson.project_version()),
 	'-D_GNU_SOURCE',
+	'-DAML_UNSTABLE_API=1',
 ]
 
 git = find_program('git', native: true, required: false)

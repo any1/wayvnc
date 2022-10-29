@@ -1107,6 +1107,9 @@ int main(int argc, char* argv[])
 	}
 #endif
 
+	if (aml_unstable_abi_version != AML_UNSTABLE_API)
+		nvnc_log(NVNC_LOG_PANIC, "libaml is incompatible with this build of wayvnc!");
+
 	struct aml* aml = aml_new();
 	if (!aml)
 		goto main_loop_failure;
@@ -1134,7 +1137,7 @@ int main(int argc, char* argv[])
 	self.screencopy.overlay_cursor = overlay_cursor;
 
 	if (show_performance)
-		self.performance_ticker = aml_ticker_new(1000, on_perf_tick,
+		self.performance_ticker = aml_ticker_new(1000000, on_perf_tick,
 				&self, NULL);
 
 	wl_display_dispatch_pending(self.display);
