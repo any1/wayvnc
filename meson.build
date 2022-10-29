@@ -109,6 +109,18 @@ dependencies = [
 	jansson,
 ]
 
+ctlsources = [
+	'src/wayvncctl.c',
+	'src/util.c',
+	'src/json-ipc.c',
+	'src/ctl-client.c',
+	'src/strlcpy.c',
+]
+
+ctldependencies = [
+	jansson,
+]
+
 config = configuration_data()
 
 config.set('PREFIX', '"' + prefix + '"')
@@ -143,6 +155,14 @@ executable(
 	'wayvnc',
 	sources,
 	dependencies: dependencies,
+	include_directories: inc,
+	install: true,
+)
+
+executable(
+	'wayvncctl',
+	ctlsources,
+	dependencies: ctldependencies,
 	include_directories: inc,
 	install: true,
 )
