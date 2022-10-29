@@ -51,6 +51,7 @@
 #include "transform-util.h"
 #include "usdt.h"
 #include "ctl-server.h"
+#include "util.h"
 
 #ifdef ENABLE_PAM
 #include "pam_auth.h"
@@ -113,14 +114,6 @@ static void on_client_new(struct nvnc_client* client);
 void switch_to_output(struct wayvnc*, struct output*);
 void switch_to_next_output(struct wayvnc*);
 void switch_to_prev_output(struct wayvnc*);
-
-#if defined(GIT_VERSION)
-static const char wayvnc_version[] = GIT_VERSION;
-#elif defined(PROJECT_VERSION)
-static const char wayvnc_version[] = PROJECT_VERSION;
-#else
-static const char wayvnc_version[] = "UNKNOWN";
-#endif
 
 struct wl_shm* wl_shm = NULL;
 struct zwp_linux_dmabuf_v1* zwp_linux_dmabuf = NULL;

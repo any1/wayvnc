@@ -17,3 +17,7 @@
 #pragma once
 
 #define UDIV_UP(a, b) (((a) + (b) - 1) / (b))
+
+extern const char* wayvnc_version;
+
+const char* default_ctl_socket_path();

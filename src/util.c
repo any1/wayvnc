@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2019 - 2022 Andri Yngvason
  * Copyright (c) 2022 Jim Ramsay
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -14,26 +15,31 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-#pragma once
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
 
-#include "output.h"
-#include <wayland-client.h>
+#include "util.h"
 
-struct ctl;
-struct cmd_response;
+const char* wayvnc_version =
+#if defined(GIT_VERSION)
+		GIT_VERSION;
+#elif defined(PROJECT_VERSION)
+		PROJECT_VERSION;
+#else
+		"UNKNOWN";
+#endif
 
-struct ctl_server_actions {
-	void* userdata;
-	struct cmd_response* (*on_output_cycle)(struct ctl*,
-			enum output_cycle_direction direction);
-	struct cmd_response* (*on_output_switch)(struct ctl*,
-			const char* output_name);
-};
-
-struct ctl* ctl_server_new(const char* socket_path,
-		const struct ctl_server_actions* actions);
-void ctl_server_destroy(struct ctl*);
-void* ctl_server_userdata(struct ctl*);
-
-struct cmd_response* cmd_ok(void);
-struct cmd_response* cmd_failed(const char* fmt, ...);
+const char* default_ctl_socket_path()
+{
+	static char buffer[128];
+	char* xdg_runtime = getenv("XDG_RUNTIME_DIR");
+	if (xdg_runtime)
+		snprintf(buffer, sizeof(buffer),
+				"%s/wayvncctl", xdg_runtime);
+	else
+		snprintf(buffer, sizeof(buffer),
+				"/tmp/wayvncctl-%d", getuid());
+	return buffer;
+}
