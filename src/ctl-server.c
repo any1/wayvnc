@@ -37,6 +37,7 @@
 
 enum cmd_type {
 	CMD_HELP,
+	CMD_VERSION,
 	CMD_SET_OUTPUT,
 	CMD_UNKNOWN,
 };
@@ -59,6 +60,10 @@ static struct cmd_info cmd_list[] = {
 			{"command", "The command to show (optional)"},
 			{NULL, NULL},
 		}
+	},
+	[CMD_VERSION] = { "version",
+		"Query the version of the wayvnc process",
+		{{NULL, NULL}}
 	},
 	[CMD_SET_OUTPUT] = { "set-output",
 		"Switch the actively captured output",
@@ -211,6 +216,10 @@ static struct cmd* parse_command(struct jsonipc_request* ipc,
 	case CMD_SET_OUTPUT:
 		cmd = (struct cmd*)cmd_set_output_new(ipc->params, err);
 		break;
+	case CMD_VERSION:
+		cmd = calloc(1, sizeof(*cmd));
+		cmd->type = cmd_type;
+		break;
 	case CMD_UNKNOWN:
 		jsonipc_error_set_new(err, ENOENT,
 				json_pack("{s:o, s:o}",
@@ -320,7 +329,17 @@ static struct cmd_response* generate_help_object(const char* cmd)
 	return response;
 }
 
-static struct cmd_response* ctl_server_dispatch_cmd(struct ctl* self, struct cmd* cmd)
+static struct cmd_response* generate_version_object()
+{
+	struct cmd_response* response = cmd_ok();
+	response->data = json_pack("{s:s, s:s, s:s}",
+			"wayvnc", wayvnc_version,
+			"neatvnc", nvnc_version,
+			"aml", aml_version);
+	return response;
+}
+
+static 	struct cmd_response* ctl_server_dispatch_cmd(struct ctl* self, struct cmd* cmd)
 {
 	assert(cmd->type != CMD_UNKNOWN);
 	const struct cmd_info* info = &cmd_list[cmd->type];
@@ -340,6 +359,9 @@ static struct cmd_response* ctl_server_dispatch_cmd(struct ctl* self, struct cmd
 			response = self->actions.on_output_cycle(self, c->cycle);
 		break;
 		}
+	case CMD_VERSION:
+		response = generate_version_object();
+		break;
 	case CMD_UNKNOWN:
 		break;
 	}
