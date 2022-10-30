@@ -36,16 +36,47 @@
 	nvnc_log(NVNC_LOG_WARNING, "Failed to " action ": %m");
 
 enum cmd_type {
+	CMD_HELP,
 	CMD_SET_OUTPUT,
 	CMD_UNKNOWN,
 };
 
-static char* cmd_name[] = {
-	[CMD_SET_OUTPUT] = "set-output",
+struct cmd_param_info {
+	char* name;
+	char* description;
+};
+
+struct cmd_info {
+	char* name;
+	char* description;
+	struct cmd_param_info params[5];
+};
+
+static struct cmd_info cmd_list[] = {
+	[CMD_HELP] = { "help",
+		"List all commands, or show usage of a specific command",
+		{
+			{"command", "The command to show (optional)"},
+			{NULL, NULL},
+		}
+	},
+	[CMD_SET_OUTPUT] = { "set-output",
+		"Switch the actively captured output",
+		{
+			{"switch-to", "The specific output name to capture"},
+			{"cycle", "Either \"next\" or \"prev\""},
+			{NULL, NULL},
+		}
+	},
 };
 
 struct cmd {
 	enum cmd_type type;
+};
+
+struct cmd_help {
+	struct cmd cmd;
+	char command[64];
 };
 
 struct cmd_set_output {
@@ -97,12 +128,30 @@ static void cmd_response_destroy(struct cmd_response* self)
 
 static enum cmd_type parse_command_name(const char* name)
 {
+	if (!name || name[0] == '\0')
+		return CMD_UNKNOWN;
 	for (int i = 0; i < CMD_UNKNOWN; ++i) {
-		if (strcmp(name, cmd_name[i]) == 0) {
+		if (strcmp(name, cmd_list[i].name) == 0) {
 			return i;
 		}
 	}
 	return CMD_UNKNOWN;
+}
+
+static struct cmd_help* cmd_help_new(json_t* args,
+		struct jsonipc_error* err)
+{
+	const char* command = NULL;
+	if (args && json_unpack(args, "{s?s}", "command", &command) == -1) {
+		jsonipc_error_printf(err, EINVAL,
+				"expecting \"command\" (optional)");
+		return NULL;
+	}
+	struct cmd_help* cmd = calloc(1, sizeof(*cmd));
+	cmd->cmd.type = CMD_HELP;
+	if (command)
+		strlcpy(cmd->command, command, sizeof(cmd->command));
+	return cmd;
 }
 
 static struct cmd_set_output* cmd_set_output_new(json_t* args,
@@ -141,6 +190,14 @@ static struct cmd_set_output* cmd_set_output_new(json_t* args,
 	return cmd;
 }
 
+static json_t* list_allowed_commands()
+{
+	json_t* allowed = json_array();
+	for (int i = 0; i < CMD_UNKNOWN; ++i)
+		json_array_append_new(allowed, json_string(cmd_list[i].name));
+	return allowed;
+}
+
 static struct cmd* parse_command(struct jsonipc_request* ipc,
 		struct jsonipc_error* err)
 {
@@ -148,20 +205,19 @@ static struct cmd* parse_command(struct jsonipc_request* ipc,
 	enum cmd_type cmd_type = parse_command_name(ipc->method);
 	struct cmd* cmd = NULL;
 	switch (cmd_type) {
+	case CMD_HELP:
+		cmd = (struct cmd*)cmd_help_new(ipc->params, err);
+		break;
 	case CMD_SET_OUTPUT:
 		cmd = (struct cmd*)cmd_set_output_new(ipc->params, err);
 		break;
-	default: {
-		json_t* allowed = json_array();
-		for (int i = 0; i < CMD_UNKNOWN; ++i)
-			json_array_append_new(allowed, json_string(cmd_name[i]));
+	case CMD_UNKNOWN:
 		jsonipc_error_set_new(err, ENOENT,
 				json_pack("{s:o, s:o}",
 					"error",
 					jprintf("Unknown command \"%s\"",
 						ipc->method),
-					"commands", allowed));
-		 }
+					"commands", list_allowed_commands()));
 	}
 	return cmd;
 }
@@ -238,20 +294,52 @@ static json_t* client_next_object(struct ctl_client* self, struct cmd_response**
 	return root;
 }
 
+static struct cmd_response* generate_help_object(const char* cmd)
+{
+	enum cmd_type ctype = parse_command_name(cmd);
+	json_t* data;
+	if (ctype == CMD_UNKNOWN) {
+		data = json_pack("{s:o}", "commands", list_allowed_commands());
+	} else {
+		struct cmd_info* info = &cmd_list[ctype];
+		json_t* param_list = NULL;
+		if (info->params[0].name) {
+			param_list = json_object();
+			for (struct cmd_param_info* param = info->params;
+					param->name; ++param)
+				json_object_set_new(param_list, param->name,
+						json_string(param->description));
+		}
+		data = json_pack("{s:{s:s, s:o*}}",
+				info->name,
+				"description", info->description,
+				"params", param_list);
+	}
+	struct cmd_response* response = cmd_ok();
+	response->data = data;
+	return response;
+}
+
 static struct cmd_response* ctl_server_dispatch_cmd(struct ctl* self, struct cmd* cmd)
 {
 	assert(cmd->type != CMD_UNKNOWN);
-	const char* name = cmd_name[cmd->type];
-	nvnc_log(NVNC_LOG_INFO, "Dispatching control client command '%s'", name);
+	const struct cmd_info* info = &cmd_list[cmd->type];
+	nvnc_log(NVNC_LOG_INFO, "Dispatching control client command '%s'", info->name);
 	struct cmd_response* response = NULL;
 	switch (cmd->type) {
+	case CMD_HELP:{
+		struct cmd_help* c = (struct cmd_help*)cmd;
+		response = generate_help_object(c->command);
+		break;
+		}
 	case CMD_SET_OUTPUT: {
 		struct cmd_set_output* c = (struct cmd_set_output*)cmd;
 		if (c->target[0] != '\0')
 			response = self->actions.on_output_switch(self, c->target);
 		else
 			response = self->actions.on_output_cycle(self, c->cycle);
-	     }
+		break;
+		}
 	case CMD_UNKNOWN:
 		break;
 	}
