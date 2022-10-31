@@ -25,6 +25,10 @@ wayvnc - A VNC server for wlroots based Wayland compositors.
 *-s, --seat=<name>*
 	Select seat by name.
 
+*-S, --socket=<path>*
+	Set wayvnc control socket path. Default: $XDG_RUNTIME_DIR/wayvncctl
+	or /tmp/wayvncctl-$UID
+
 *-r, --render-cursor*
 	Enable overlay cursor rendering.
 
@@ -148,6 +152,101 @@ private_key_file=/path/to/key.pem
 certificate_file=/path/to/cert.pem
 ```
 
+# WAYVNCCTL CONTROL SOCKET
+
+To facilitate runtime interaction and control, wayvnc opens a unix domain socket
+at *$XDG_RUNTIME_DIR*/wayvncctl (or a fallback of /tmp/wayvncctl-*$UID*). A
+client can connect and exchange json-formatted IPC messages to query and control
+the running wayvnc instance.
+
+## IPC COMMANDS
+
+_HELP_
+
+The *help* command, when issued without any parameters, lists the names of all
+available commands.
+
+If an optional *command* parameter refers to one of those commands by name, the
+response data will be a detailed description of that command and its parameters.
+
+_VERSION_
+
+The *version* command queries the running wayvnc instance for its version
+information. Much like the _-V_ option, the response data will contain the
+version numbers of wayvnc, as well as the versions of the neatvnc and aml
+components.
+
+_SET-OUTPUT_
+
+For multi-output wayland displays, this command switches which output is
+actively captured by wayvnc. This operates in 2 different modes, depending on
+which parameters are supplied:
+
+*cycle=next|prev*
+	Cycle to the next/prev output in the output list, wrapping back to the
+	first/last if the end of the list is reached.
+
+*switch-to=output-name*
+	Switch to a specific output by name.
+
+## IPC MESSAGE FORMAT
+
+The *wayvncctl(1)* command line utility will construct properly-formatted json
+ipc messages, but any client will work. The client initiates the connection and
+sends one or more request objects, each of which will receive a corresponding
+response object.
+
+*Note* This message format is unstable and may change substantially over the
+next few releases.
+
+_REQUEST_
+
+The general form of a json-ipc request message
+is:
+
+```
+{
+	"method": "command-name",
+	"id": 123,
+	"params": {
+		"key1": "value1",
+		"key2": "value2",
+	}
+}
+```
+
+The *method* is the name of the command to be executed. Use the *help* method to
+query a list of all valid method names.
+
+The *id* field is optional and may be any valid json number or string. If
+provided, the response to this request will contain the identical id value,
+which the client may use to coordinate multiple requests and responses.
+
+The *params* object supplies optional parameters on a per-method basis, and may
+be omitted if empty.
+
+_RESPONSE_
+
+```
+{
+	"id": 123,
+	"code": 0,
+	"data": {
+		...
+	}
+}
+```
+
+If the request had an id, the response will have an identical value for *id*.
+
+The numerical *code* provides an indication of how the request was handled. A
+value of *0* always signifies success. Any other value means failure, and varies
+depending on the method in question.
+
+The *data* object contains method-specific return data. This may be structured
+data in response to a query, a simple error string in the case of a failed
+request, or it may be omitted entirely if the error code alone is sufficient.
+
 # ENVIRONMENT
 
 The following environment variables have an effect on wayvnc:
@@ -158,6 +257,9 @@ _WAYLAND_DISPLAY_
 
 _XDG_CONFIG_HOME_
 	Specifies the location of configuration files.
+
+_XDG_RUNTIME_DIR_
+	Specifies the default location for the wayvncctl control socket.
 
 # FAQ
 
@@ -210,3 +312,7 @@ _XDG_CONFIG_HOME_
 Maintained by Andri Yngvason <andri@yngvason.is>. Up-to-date sources can be
 found at https://github.com/any1/wayvnc and bugs reports or patches can be
 submitted to GitHub's issue tracker.
+
+# SEE ALSO
+
+*wayvncctl(1)*
