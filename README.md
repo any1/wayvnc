@@ -61,7 +61,7 @@ dnf install -y meson gcc ninja-build pkg-config egl-wayland egl-wayland-devel \
 	mesa-libEGL-devel mesa-libEGL libwayland-egl libglvnd-devel \
 	libglvnd-core-devel libglvnd mesa-libGLES-devel mesa-libGLES \
 	libxkbcommon-devel libxkbcommon libwayland-client libwayland \
-	wayland-devel gnutls-devel jansson-devel       
+	wayland-devel gnutls-devel jansson-devel
 ```
 
 #### For Debian (unstable / testing)
@@ -130,3 +130,44 @@ password=p455w0rd
 private_key_file=/path/to/key.pem
 certificate_file=/path/to/cert.pem
 ```
+
+### wayvncctl control socket
+
+To facilitate runtime interaction and control, wayvnc opens a unix domain socket
+at *$XDG_RUNTIME_DIR*/wayvncctl (or a fallback of /tmp/wayvncctl-*$UID*). A
+client can connect and exchange json-formatted IPC messages to query and control
+the running wayvnc instance.
+
+Use the `wayvncctl` utility to interact with this control socket from the
+command line.
+
+The `help` command can interactively query the available IPC commands:
+
+```
+$ wayvncctl help
+{
+    "commands": [
+        "help",
+        "version",
+        "set-output",
+	...
+    ]
+}
+```
+
+```
+$ wayvncctl help command=help
+{
+    "help": {
+        "description": "List all commands, or show usage of a specific command",
+        "params": [
+            {
+                "command": "The command to show (optional)"
+            }
+        ]
+    }
+}
+```
+
+See the `wayvnc(1)` manpage for an in-depth description of the IPC protocol and
+the available commands.
