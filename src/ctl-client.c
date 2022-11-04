@@ -110,9 +110,14 @@ static struct jsonipc_request*	ctl_client_parse_args(struct ctl_client* self,
 	struct jsonipc_request* request = NULL;
 	const char* method = argv[0];
 	json_t* params = json_object();
+	bool show_usage = false;
 	for (int i = 1; i < argc; ++i) {
 		char* key = argv[i];
 		char* value = NULL;
+		if (strcmp(key, "--help") == 0 || strcmp(key, "-h") == 0) {
+			show_usage = true;
+			continue;
+		}
 		if (key[0] == '-' && key[1] == '-')
 			key += 2;
 		char* delim = strchr(key, '=');
@@ -126,6 +131,12 @@ static struct jsonipc_request*	ctl_client_parse_args(struct ctl_client* self,
 			goto failure;
 		}
 		json_object_set_new(params, key, json_string(value));
+	}
+	if (show_usage) {
+		// Special case for "foo --help"; convert into "help --command=foo"
+		json_object_clear(params);
+		json_object_set_new(params, "command", json_string(method));
+		method = "help";
 	}
 	request = jsonipc_request_new(method, params);
 
