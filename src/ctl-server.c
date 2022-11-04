@@ -339,7 +339,7 @@ static struct cmd_response* generate_version_object()
 	return response;
 }
 
-static 	struct cmd_response* ctl_server_dispatch_cmd(struct ctl* self, struct cmd* cmd)
+static struct cmd_response* ctl_server_dispatch_cmd(struct ctl* self, struct cmd* cmd)
 {
 	assert(cmd->type != CMD_UNKNOWN);
 	const struct cmd_info* info = &cmd_list[cmd->type];
