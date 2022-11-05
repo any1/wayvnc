@@ -26,6 +26,7 @@ struct ctl_client* ctl_client_new(const char* socket_path, void* userdata);
 void ctl_client_destroy(struct ctl_client*);
 void* ctl_client_userdata(struct ctl_client*);
 
+#define PRINT_JSON 0x00000001
 
 int ctl_client_run_command(struct ctl_client* self,
-		int argc, char* argv[]);
+		int argc, char* argv[], unsigned flags);

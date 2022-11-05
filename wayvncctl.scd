@@ -14,6 +14,9 @@ wayvncctl - A control client for wayvnc(1)
 	Set wayvnc control socket path. Default: $XDG_RUNTIME_DIR/wayvncctl
 	or /tmp/wayvncctl-$UID
 
+*-j, --json*
+	Produce json output to stdout.
+
 *-V, --version*
 	Show version info.
 
@@ -38,30 +41,25 @@ Query the server for all available command names:
 
 ```
 $ wayvncctl help
-{
-    "commands": [
-        "help",
-        "version",
-        "set-output",
-	...
-    ]
-}
+Allowed commands:
+  - help
+  - version
+  - set-output
+
+Run 'wayvncctl command-name --help' for command-specific details.
 ```
 
 Get help on the "help" command:
 
 ```
-$ wayvncctl help --command help
-{
-    "help": {
-        "description": "List all commands, or show usage of a specific command",
-        "params": [
-            {
-                "command": "The command to show (optional)"
-            }
-        ]
-    }
-}
+$ wayvncctl help --help
+Usage: wayvncctl [options] help [params]
+
+List all commands, or show usage of a specific command
+
+Parameters:
+  --command=...
+    The command to show (optional)
 ```
 
 Cycle to the next active output:

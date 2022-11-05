@@ -245,20 +245,104 @@ static struct jsonipc_response* ctl_client_wait_for_response(struct ctl_client* 
 	return response;
 }
 
+static void print_error(struct jsonipc_response* response, const char* method)
+{
+	printf("Error (%d)", response->code);
+	if (!response->data)
+		goto out;
+	json_t* data = response->data;
+	if (json_is_string(data))
+		printf(": %s", json_string_value(data));
+	else if (json_is_object(data) &&
+			json_is_string(json_object_get(data, "error")))
+		printf(": %s", json_string_value(json_object_get(data, "error")));
+	else
+		json_dumpf(response->data, stdout, JSON_INDENT(2));
+out:
+	printf("\n");
+}
+
+static void print_help(json_t* data)
+{
+	if (json_object_get(data, "commands")) {
+		printf("Allowed commands:\n");
+		json_t* cmd_list = json_object_get(data, "commands");
+		size_t index;
+		json_t* value;
+
+		json_array_foreach(cmd_list, index, value) {
+			printf("  - %s\n", json_string_value(value));
+		}
+		printf("\nRun 'wayvncctl command-name --help' for command-specific details.\n");
+		return;
+	}
+	const char* key;
+	json_t* value;
+
+	json_object_foreach(data, key, value) {
+		char* desc = NULL;
+		json_t* params = NULL;
+		json_unpack(value, "{s:s, s?o}", "description", &desc,
+				"params", &params);
+		printf("Usage: wayvncctl [options] %s%s\n\n%s\n", key,
+				params ? " [params]" : "",
+				desc);
+		if (params) {
+			printf("\nParameters:");
+			const char* param_name;
+			json_t* param_value;
+			json_object_foreach(params, param_name, param_value) {
+				printf("\n  --%s=...\n    %s\n", param_name,
+						json_string_value(param_value));
+			}
+		}
+	}
+}
+
+static void pretty_version(json_t* data)
+{
+	printf("wayvnc is running:\n");
+	const char* key;
+	json_t* value;
+	json_object_foreach(data, key, value)
+		printf("  %s: %s\n", key, json_string_value(value));
+}
+
+static void pretty_print(json_t* data, const char* method)
+{
+	if (strcmp(method, "help") == 0)
+		print_help(data);
+	else if (strcmp(method, "version") == 0)
+		pretty_version(data);
+	else
+		json_dumpf(data, stdout, JSON_INDENT(2));
+}
+
+static void print_compact_json(json_t* data)
+{
+	json_dumpf(data, stdout, JSON_COMPACT);
+	printf("\n");
+}
+
 static int ctl_client_print_response(struct ctl_client* self,
-		struct jsonipc_response* response)
+		struct jsonipc_request* request,
+		struct jsonipc_response* response,
+		unsigned flags)
 {
 	DEBUG("Response code: %d", response->code);
 	if (response->data) {
-		char* data = json_dumps(response->data, JSON_INDENT(4));
-		printf("%s\n", data);
-		free(data);
+		if (flags & PRINT_JSON)
+			print_compact_json(response->data);
+		else if (response->code == 0)
+			pretty_print(response->data, request->method);
+		else
+			print_error(response, request->method);
 	}
 	return response->code;
 }
 
 int ctl_client_run_command(struct ctl_client* self,
-		int argc, char* argv[])
+		int argc, char* argv[], unsigned flags)
 {
 	int result = -1;
 	struct jsonipc_request*	request = ctl_client_parse_args(self, argc, argv);
@@ -272,7 +356,7 @@ int ctl_client_run_command(struct ctl_client* self,
 	if (!response)
 		goto receive_failure;
 
-	result = ctl_client_print_response(self, response);
+	result = ctl_client_print_response(self, request, response, flags);
 
 	jsonipc_response_destroy(response);
 receive_failure:
