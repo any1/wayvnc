@@ -89,15 +89,26 @@ failure:
 	return NULL;
 }
 
-static int request_id = 1;
-struct jsonipc_request* jsonipc_request_new(const char* method, json_t* params)
+struct jsonipc_request* jsonipc_request__new(const char* method, json_t* params,
+		json_t* id)
 {
 	struct jsonipc_request* ipc = calloc(1, sizeof(*ipc));
 	ipc->method = method;
 	ipc->params = params;
 	json_incref(ipc->params);
-	ipc->id = json_integer(request_id++);
+	ipc->id = id;
 	return ipc;
+}
+
+static int request_id = 1;
+struct jsonipc_request* jsonipc_request_new(const char* method, json_t* params)
+{
+	return jsonipc_request__new(method, params, json_integer(request_id++));
+}
+
+struct jsonipc_request* jsonipc_event_new(const char* method, json_t* params)
+{
+	return jsonipc_request__new(method, params, NULL);
 }
 
 json_t* jsonipc_request_pack(struct jsonipc_request* self, json_error_t* err)
