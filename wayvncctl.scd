@@ -2,7 +2,7 @@ wayvncctl(1)
 
 # NAME
 
-wayvncctl - A control client for wayvnc(1)
+wayvncctl - A command line control lient for wayvnc(1)
 
 # SYNOPSIS
 
@@ -24,7 +24,8 @@ wayvncctl - A control client for wayvnc(1)
 	Be more verbose.
 
 *-h, --help*
-	Get help.
+	Get help about the wayvncctl command itself (lists these options). Does
+	not connect to the wayvncctl control socket.
 
 # DESCRIPTION
 
@@ -32,12 +33,18 @@ wayvncctl - A control client for wayvnc(1)
 This command line utility provides easy interaction with those commands.
 
 For a full list of currently supported commands, see
-*wayvnc(1)* section _IPC COMMANDS_, or use the
+*wayvnc(1)* section _IPC COMMANDS_, or run the
 *wayvncctl help* command.
+
+Running *wayvncctl help* contacts the server over the control socket and returns
+a list of the available commands.
+
+Running *wayvncctl command-name --help* returns a description of the server-side
+command and its available parameters.
 
 # EXAMPLES
 
-Query the server for all available command names:
+Query the server for all available IPC command names:
 
 ```
 $ wayvncctl help
@@ -49,23 +56,35 @@ Allowed commands:
 Run 'wayvncctl command-name --help' for command-specific details.
 ```
 
-Get help on the "help" command:
+Get help on the "set-output" IPC command:
 
 ```
-$ wayvncctl help --help
-Usage: wayvncctl [options] help [params]
+$ wayvncctl set-output --help
+Usage: wayvncctl [options] set-output [params]
 
-List all commands, or show usage of a specific command
+Switch the actively captured output
 
 Parameters:
-  --command=...
-    The command to show (optional)
+  --switch-to=...
+    The specific output name to capture
+
+  --cycle=...
+    Either "next" or "prev"
+
+Run 'wayvncctl --help' for allowed options
 ```
 
 Cycle to the next active output:
 
 ```
-$ wayvncctl set-output --cycle=forward
+$ wayvncctl set-output --cycle=next
+```
+
+Get json-formatted version information:
+
+```
+$ wayvncctl --json version
+{"wayvnc":"v0.5.0","neatvnc":"v0.5.1","aml":"v0.2.2"}
 ```
 
 # ENVIRONMENT

@@ -46,16 +46,17 @@ static int wayvncctl_usage(FILE* stream, int rc)
 	static const char* usage =
 "Usage: wayvncctl [options] [command [--param1=value1 ...]]\n"
 "\n"
-"Connects to and interacts with a running wauvnc instance."
+"Connects to and interacts with a running wayvnc instance."
 "\n"
-"Try the \"help\" command for a list of available commands.\n"
+"Try 'wayvncctl help' for a list of available commands.\n"
 "\n"
-"    -S,--socket=<path>                        Wayvnc control socket path.\n"
-"    -j,--json                                 Output json on stdout.\n"
-"                                              Default: $XDG_RUNTIME_DIR/wayvncctl\n"
-"    -V,--version                              Show version info.\n"
-"    -v,--verbose                              Be more verbose.\n"
-"    -h,--help                                 Get help (this text).\n"
+"Options:\n"
+"    -S,--socket=<path>                   Wayvnc control socket path.\n"
+"    -j,--json                            Output json on stdout.\n"
+"                                         Default: $XDG_RUNTIME_DIR/wayvncctl\n"
+"    -V,--version                         Show version info.\n"
+"    -v,--verbose                         Be more verbose.\n"
+"    -h,--help                            Get help (this text).\n"
 "\n";
 
 	fprintf(stream, "%s", usage);

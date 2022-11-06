@@ -296,6 +296,7 @@ static void print_help(json_t* data)
 						json_string_value(param_value));
 			}
 		}
+		printf("\nRun 'wayvncctl --help' for allowed Options\n");
 	}
 }
 
