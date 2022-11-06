@@ -51,6 +51,7 @@ void jsonipc_error_cleanup(struct jsonipc_error*);
 struct jsonipc_request* jsonipc_request_parse_new(json_t* root,
 		struct jsonipc_error* err);
 struct jsonipc_request* jsonipc_request_new(const char* method, json_t* params);
+struct jsonipc_request* jsonipc_event_new(const char* method, json_t* params);
 json_t* jsonipc_request_pack(struct jsonipc_request*, json_error_t* err);
 void jsonipc_request_destroy(struct jsonipc_request*);
 
