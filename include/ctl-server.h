@@ -37,3 +37,15 @@ void* ctl_server_userdata(struct ctl*);
 
 struct cmd_response* cmd_ok(void);
 struct cmd_response* cmd_failed(const char* fmt, ...);
+
+void ctl_server_event_connected(struct ctl*,
+		const char* client_id,
+		const char* client_hostname,
+		const char* client_username,
+		int new_connection_count);
+
+void ctl_server_event_disconnected(struct ctl*,
+		const char* client_id,
+		const char* client_hostname,
+		const char* client_username,
+		int new_connection_count);

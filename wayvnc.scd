@@ -176,6 +176,16 @@ information. Much like the _-V_ option, the response data will contain the
 version numbers of wayvnc, as well as the versions of the neatvnc and aml
 components.
 
+_EVENT-RECEIVE_
+
+The *event-receive* command registers for asynchronous server events. See the
+_EVENTS_ section below for details on the event message format, and the _IPC
+EVENTS_ section below for a description of all possible server events.
+
+Event registration registers for all available server eve ts and is scoped to
+the current connection only. If a client disconnects and reconnects, it must
+re-register for events.
+
 _SET-OUTPUT_
 
 For multi-output wayland displays, this command switches which output is
@@ -188,6 +198,45 @@ which parameters are supplied:
 
 *switch-to=output-name*
 	Switch to a specific output by name.
+
+## IPC EVENTS
+
+_CLIENT-CONNECTED_
+
+The *client-connected* event is sent when a new VNC client connects to wayvnc.
+
+Parameters:
+
+*id=...*
+	A unique identifier for this client.
+
+*connection_count=...*
+	The total number of connected VNC clients including this one.
+
+*hostname=...*
+	The hostname or IP of this client. May be null.
+
+*username=...*
+	The username used to authenticate this client. May be null.
+
+_CLIENT-DISCONNECTED_
+
+The *client-disconnected* event is sent when a VNC cliwnt disconnects from
+wayvnc.
+
+Parameters:
+
+*id=...*
+	A unique identifier for this client.
+
+*connection_count=...*
+	The total number of connected VNC clients not including this one.
+
+*hostname=...*
+	The hostname or IP of this client. May be null.
+
+*username=...*
+	The username used to authenticate this client. May be null.
 
 ## IPC MESSAGE FORMAT
 
@@ -246,6 +295,30 @@ depending on the method in question.
 The *data* object contains method-specific return data. This may be structured
 data in response to a query, a simple error string in the case of a failed
 request, or it may be omitted entirely if the error code alone is sufficient.
+
+_EVENTS_
+
+Events are aaynchronous messages sent from a server to all registered clients.
+The message format is identical to a _REQUEST_, but without an "id" field, and a
+client must not send a response.
+
+Example event message:
+
+```
+{
+	"method": "event-name",
+	"params": {
+		"key1": "value1",
+		"key2": "value2",
+	}
+}
+```
+
+In order to receive any events, a client must first register to receive them by
+sending a _event-receive_ request IPC. Once the success response has been sent
+by the server, the client must expect that asynchronous event messages may be
+sent by the server at any time, even between a request and the associated
+response.
 
 # ENVIRONMENT
 

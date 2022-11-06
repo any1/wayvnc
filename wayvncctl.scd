@@ -42,6 +42,14 @@ a list of the available commands.
 Running *wayvncctl command-name --help* returns a description of the server-side
 command and its available parameters.
 
+# ASYNCHRONOUS EVENTS
+
+While *wayvncctl* normally terminates after sending one request and receiving
+the corresponding reply, the *event-receive* command acts differently. Instead
+of exiting immediately, *wayvncctl* waits for any events fr the server, printing
+each to stdout as they arrive. This mode of operation will block until either
+it receives a signal to terminate, or until the wayvnc server terminates.
+
 # EXAMPLES
 
 Query the server for all available IPC command names:

@@ -21,6 +21,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <poll.h>
+#include <signal.h>
 #include <jansson.h>
 
 #include "json-ipc.h"
@@ -46,6 +47,8 @@ struct ctl_client {
 
 	char read_buffer[512];
 	size_t read_len;
+	
+	bool wait_for_events;
 
 	int fd;
 };
@@ -197,8 +200,6 @@ static json_t* read_one_object(struct ctl_client* self, int timeout_ms)
 	while (root == NULL) {
 		int n = poll(&pfd, 1, timeout_ms);
 		if (n == -1) {
-			if (errno == EINTR)
-				continue;
 			WARN("Error waiting for a response: %m");
 			break;
 		} else if (n == 0) {
@@ -342,6 +343,35 @@ static int ctl_client_print_response(struct ctl_client* self,
 	return response->code;
 }
 
+static struct ctl_client* sig_target = NULL;
+static void stop_loop(int signal)
+{
+	sig_target->wait_for_events = false;
+}
+
+static void setup_signals(struct ctl_client* self)
+{
+	sig_target = self;
+	struct sigaction sa = { 0 };
+	sa.sa_handler = stop_loop;
+	sigaction(SIGINT, &sa, NULL);
+	sigaction(SIGTERM, &sa, NULL);
+}
+
+static void ctl_client_event_loop(struct ctl_client* self)
+{
+	self->wait_for_events = true;
+	setup_signals(self);
+	while (self->wait_for_events) {
+		DEBUG("Waiting for an event");
+		json_t* root = read_one_object(self, -1);
+		json_dumpf(root, stdout, 0);
+		printf("\n");
+		fflush(stdout);
+		json_decref(root);
+	}
+}
+
 int ctl_client_run_command(struct ctl_client* self,
 		int argc, char* argv[], unsigned flags)
 {
@@ -358,6 +388,9 @@ int ctl_client_run_command(struct ctl_client* self,
 		goto receive_failure;
 
 	result = ctl_client_print_response(self, request, response, flags);
+
+	if (result == 0 && strcmp(request->method, "event-receive") == 0)
+		ctl_client_event_loop(self);
 
 	jsonipc_response_destroy(response);
 receive_failure:

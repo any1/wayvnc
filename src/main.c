@@ -844,6 +844,14 @@ static void on_client_cleanup(struct nvnc_client* client)
 	self->nr_clients--;
 	nvnc_log(NVNC_LOG_DEBUG, "Client disconnected, new client count: %d",
 			self->nr_clients);
+
+	char id[11];
+	snprintf(id, 11, "%p", nvnc);
+	ctl_server_event_disconnected(self->ctl, id,
+			nvnc_client_get_hostname(client),
+			nvnc_client_get_auth_username(client),
+			self->nr_clients);
+
 	if (self->nr_clients == 0) {
 		nvnc_log(NVNC_LOG_INFO, "Stopping screen capture");
 		screencopy_stop(&self->screencopy);
@@ -864,6 +872,13 @@ static void on_client_new(struct nvnc_client* client)
 	self->nr_clients++;
 	nvnc_set_client_cleanup_fn(client, on_client_cleanup);
 	nvnc_log(NVNC_LOG_DEBUG, "Client connected, new client count: %d",
+			self->nr_clients);
+
+	char id[11];
+	snprintf(id, 11, "%p", nvnc);
+	ctl_server_event_connected(self->ctl, id,
+			nvnc_client_get_hostname(client),
+			nvnc_client_get_auth_username(client),
 			self->nr_clients);
 }
 

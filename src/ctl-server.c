@@ -43,6 +43,7 @@ enum send_priority {
 enum cmd_type {
 	CMD_HELP,
 	CMD_VERSION,
+	CMD_EVENT_RECEIVE,
 	CMD_SET_OUTPUT,
 	CMD_UNKNOWN,
 };
@@ -68,6 +69,11 @@ static struct cmd_info cmd_list[] = {
 	},
 	[CMD_VERSION] = { "version",
 		"Query the version of the wayvnc process",
+		{{NULL, NULL}}
+	},
+	[CMD_EVENT_RECEIVE] = { "event-receive",
+		"Register to begin receiving asynchronous events from wayvnc",
+		// TODO: Event type filtering?
 		{{NULL, NULL}}
 	},
 	[CMD_SET_OUTPUT] = { "set-output",
@@ -112,6 +118,7 @@ struct ctl_client {
 	char* write_ptr;
 	size_t write_len;
 	bool drop_after_next_send;
+	bool accept_events;
 };
 
 struct ctl {
@@ -222,6 +229,7 @@ static struct cmd* parse_command(struct jsonipc_request* ipc,
 		cmd = (struct cmd*)cmd_set_output_new(ipc->params, err);
 		break;
 	case CMD_VERSION:
+	case CMD_EVENT_RECEIVE:
 		cmd = calloc(1, sizeof(*cmd));
 		cmd->type = cmd_type;
 		break;
@@ -344,7 +352,8 @@ static struct cmd_response* generate_version_object()
 	return response;
 }
 
-static struct cmd_response* ctl_server_dispatch_cmd(struct ctl* self, struct cmd* cmd)
+static struct cmd_response* ctl_server_dispatch_cmd(struct ctl* self,
+		struct ctl_client* client, struct cmd* cmd)
 {
 	assert(cmd->type != CMD_UNKNOWN);
 	const struct cmd_info* info = &cmd_list[cmd->type];
@@ -366,6 +375,10 @@ static struct cmd_response* ctl_server_dispatch_cmd(struct ctl* self, struct cmd
 		}
 	case CMD_VERSION:
 		response = generate_version_object();
+		break;
+	case CMD_EVENT_RECEIVE:
+		client->accept_events = true;
+		response = cmd_ok();
 		break;
 	case CMD_UNKNOWN:
 		break;
@@ -410,6 +423,7 @@ static int client_enqueue_jsonipc(struct ctl_client* self,
 		goto failure;
 	}
 	result = client_enqueue(self, packed_response, priority);
+	json_decref(packed_response);
 	if (result != 0)
 		nvnc_log(NVNC_LOG_WARNING, "Append failed");
 failure:
@@ -553,7 +567,7 @@ static void recv_ready(struct ctl_client* client)
 		// handled by the main loop instead of doing the
 		// dispatch here
 		struct cmd_response* response =
-			ctl_server_dispatch_cmd(server, cmd);
+			ctl_server_dispatch_cmd(server, client, cmd);
 		if (!response)
 			goto no_response;
 		client_enqueue_response(client, response, request->id);
@@ -735,4 +749,86 @@ struct cmd_response* cmd_failed(const char* fmt, ...)
 				"error", jvprintf(fmt, ap)));
 	va_end(ap);
 	return resp;
+}
+
+json_t* pack_connection_event_params(
+		const char* client_id,
+		const char* client_hostname,
+		const char* client_username,
+		int new_connection_count)
+{
+	return json_pack("{s:s, s:s?, s:s?, s:i}",
+			"id", client_id,
+			"hostname", client_hostname,
+			"username", client_username,
+			"connection_count", new_connection_count);
+}
+
+int ctl_server_enqueue_event(struct ctl* self, const char* event_name,
+		json_t* params)
+{
+	char* param_str = json_dumps(params, JSON_COMPACT);
+	nvnc_log(NVNC_LOG_DEBUG, "Enqueueing %s event: {%s", event_name, param_str);
+	free(param_str);
+	struct jsonipc_request* event = jsonipc_event_new(event_name, params);
+	json_decref(params);
+	json_error_t err;
+	json_t* packed_event = jsonipc_request_pack(event, &err);
+	jsonipc_request_destroy(event);
+	if (!packed_event) {
+		nvnc_log(NVNC_LOG_WARNING, "Could not pack %s event json: %s", event_name, err.text);
+		return -1;
+	}
+
+	int enqueued = 0;
+	struct ctl_client* client;
+	wl_list_for_each(client, &self->clients, link) {
+		if (!client->accept_events) {
+			nvnc_trace("Skipping event send to control client %p", client);
+			continue;
+		}
+		if (client_enqueue(client, packed_event, false) == 0) {
+			nvnc_trace("Enqueued event for control client %p", client);
+			enqueued++;
+		} else {
+			nvnc_trace("Failed to enqueue event for control client %p", client);
+		}
+	}
+	json_decref(packed_event);
+	nvnc_log(NVNC_LOG_DEBUG, "Enqueued %s event for %d clients", event_name, enqueued);
+	return enqueued;
+}
+
+void ctl_server_event_connect(struct ctl* self,
+		bool connected,
+		const char* client_id,
+		const char* client_hostname,
+		const char* client_username,
+		int new_connection_count)
+{
+	json_t* params = pack_connection_event_params(client_id, client_hostname,
+			client_username, new_connection_count);
+	ctl_server_enqueue_event(self,
+			connected ? "client-connected" : "client-disconnected",
+			params);
+}
+
+void ctl_server_event_connected(struct ctl* self,
+		const char* client_id,
+		const char* client_hostname,
+		const char* client_username,
+		int new_connection_count)
+{
+	ctl_server_event_connect(self, true, client_id, client_hostname,
+			client_username, new_connection_count);
+}
+
+void ctl_server_event_disconnected(struct ctl* self,
+		const char* client_id,
+		const char* client_hostname,
+		const char* client_username,
+		int new_connection_count)
+{
+	ctl_server_event_connect(self, false, client_id, client_hostname,
+			client_username, new_connection_count);
 }
