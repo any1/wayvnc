@@ -35,6 +35,11 @@
 #define FAILED_TO(action) \
 	nvnc_log(NVNC_LOG_WARNING, "Failed to " action ": %m");
 
+enum send_priority {
+	SEND_FIFO,
+	SEND_IMMEDIATE,
+};
+
 enum cmd_type {
 	CMD_HELP,
 	CMD_VERSION,
@@ -377,8 +382,24 @@ static void client_set_aml_event_mask(struct ctl_client* self)
 	aml_set_event_mask(self->handler, mask);
 }
 
+static int client_enqueue(struct ctl_client* self, json_t* message,
+		enum send_priority priority)
+{
+	int result;
+	switch(priority) {
+	case SEND_IMMEDIATE:
+		result = json_array_insert(self->response_queue, 0, message);
+		break;
+	case SEND_FIFO:
+		result = json_array_append(self->response_queue, message);
+		break;
+	}
+	client_set_aml_event_mask(self);
+	return result;
+}
+
 static int client_enqueue_jsonipc(struct ctl_client* self,
-		struct jsonipc_response* resp)
+		struct jsonipc_response* resp, enum send_priority priority)
 {
 	int result = 0;
 	json_error_t err;
@@ -388,12 +409,9 @@ static int client_enqueue_jsonipc(struct ctl_client* self,
 		result = -1;
 		goto failure;
 	}
-	result = json_array_append_new(self->response_queue, packed_response);
-	if (result != 0) {
+	result = client_enqueue(self, packed_response, priority);
+	if (result != 0)
 		nvnc_log(NVNC_LOG_WARNING, "Append failed");
-		goto failure;
-	}
-	client_set_aml_event_mask(self);
 failure:
 	jsonipc_response_destroy(resp);
 	return result;
@@ -403,11 +421,12 @@ static int client_enqueue_error(struct ctl_client* self,
 		struct jsonipc_error* err, json_t* id)
 {
 	struct jsonipc_response* resp = jsonipc_error_response_new(err, id);
-	return client_enqueue_jsonipc(self, resp);
+	return client_enqueue_jsonipc(self, resp, SEND_FIFO);
 }
 
-static int client_enqueue_response(struct ctl_client* self,
-		struct cmd_response* response, json_t* id)
+static int client_enqueue__response(struct ctl_client* self,
+		struct cmd_response* response, json_t* id,
+		enum send_priority priority)
 {
 	nvnc_log(NVNC_LOG_INFO, "Enqueueing response: %s (%d)",
 			response->code == 0 ? "OK" : "FAILED", response->code);
@@ -420,13 +439,19 @@ static int client_enqueue_response(struct ctl_client* self,
 	struct jsonipc_response* resp =
 		jsonipc_response_new(response->code, response->data, id);
 	cmd_response_destroy(response);
-	return client_enqueue_jsonipc(self, resp);
+	return client_enqueue_jsonipc(self, resp, priority);
+}
+
+static int client_enqueue_response(struct ctl_client* self,
+		struct cmd_response* response, json_t* id)
+{
+	return client_enqueue__response(self, response, id, SEND_FIFO);
 }
 
 static int client_enqueue_internal_error(struct ctl_client* self,
 		struct cmd_response* err)
 {
-	int result = client_enqueue_response(self, err, NULL);
+	int result = client_enqueue__response(self, err, NULL, SEND_IMMEDIATE);
 	if (result != 0)
 		client_destroy(self);
 	self->drop_after_next_send = true;
