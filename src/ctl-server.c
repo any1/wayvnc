@@ -47,6 +47,14 @@ enum cmd_type {
 	CMD_SET_OUTPUT,
 	CMD_UNKNOWN,
 };
+#define CMD_LIST_LEN CMD_UNKNOWN
+
+enum event_type {
+	EVT_CLIENT_CONNECTED,
+	EVT_CLIENT_DISCONNECTED,
+	EVT_UNKNOWN,
+};
+#define EVT_LIST_LEN EVT_UNKNOWN
 
 struct cmd_param_info {
 	char* name;
@@ -61,9 +69,10 @@ struct cmd_info {
 
 static struct cmd_info cmd_list[] = {
 	[CMD_HELP] = { "help",
-		"List all commands, or show usage of a specific command",
+		"List all commands and events, or show usage of a specific command or event",
 		{
 			{"command", "The command to show (optional)"},
+			{"event", "The event to show (optional)"},
 			{NULL, NULL},
 		}
 	},
@@ -86,13 +95,32 @@ static struct cmd_info cmd_list[] = {
 	},
 };
 
+#define CLIENT_EVENT_PARAMS(including) \
+	{"id", "A unique identifier for this client"}, \
+	{"connection_count", "The total number of connected VNC clients " including " this one."}, \
+	{"hostname", "The hostname or IP address of this client (may be null)"}, \
+	{"username", "The username used to authentice this client (may be null)."}, \
+	{NULL, NULL},
+
+static struct cmd_info evt_list[] = {
+	[EVT_CLIENT_CONNECTED] = {"client-connected",
+		"Sent when a new vnc client connects to wayvnc",
+		{ CLIENT_EVENT_PARAMS("including") }
+	},
+	[EVT_CLIENT_DISCONNECTED] = {"client-disconnected",
+		"Sent when a vnc client disconnects from wayvnc",
+		{ CLIENT_EVENT_PARAMS("not including") }
+	},
+};
+
 struct cmd {
 	enum cmd_type type;
 };
 
 struct cmd_help {
 	struct cmd cmd;
-	char command[64];
+	char id[64];
+	bool id_is_command;
 };
 
 struct cmd_set_output {
@@ -147,7 +175,7 @@ static enum cmd_type parse_command_name(const char* name)
 {
 	if (!name || name[0] == '\0')
 		return CMD_UNKNOWN;
-	for (int i = 0; i < CMD_UNKNOWN; ++i) {
+	for (int i = 0; i < CMD_LIST_LEN; ++i) {
 		if (strcmp(name, cmd_list[i].name) == 0) {
 			return i;
 		}
@@ -159,15 +187,28 @@ static struct cmd_help* cmd_help_new(json_t* args,
 		struct jsonipc_error* err)
 {
 	const char* command = NULL;
-	if (args && json_unpack(args, "{s?s}", "command", &command) == -1) {
+	const char* event = NULL;
+	if (args && json_unpack(args, "{s?s, s?s}",
+				"command", &command,
+				"event", &event) == -1) {
 		jsonipc_error_printf(err, EINVAL,
-				"expecting \"command\" (optional)");
+				"expecting \"command\" or \"event\" (optional)");
+		return NULL;
+	}
+	if (command && event) {
+		jsonipc_error_printf(err, EINVAL,
+				"expecting exacly one of \"command\" or \"event\"");
 		return NULL;
 	}
 	struct cmd_help* cmd = calloc(1, sizeof(*cmd));
 	cmd->cmd.type = CMD_HELP;
-	if (command)
-		strlcpy(cmd->command, command, sizeof(cmd->command));
+	if (command) {
+		strlcpy(cmd->id, command, sizeof(cmd->id));
+		cmd->id_is_command = true;
+	} else if (event) {
+		strlcpy(cmd->id, event, sizeof(cmd->id));
+		cmd->id_is_command = false;
+	}
 	return cmd;
 }
 
@@ -207,12 +248,23 @@ static struct cmd_set_output* cmd_set_output_new(json_t* args,
 	return cmd;
 }
 
-static json_t* list_allowed_commands()
+static json_t* list_allowed(struct cmd_info (*list)[], size_t len)
 {
 	json_t* allowed = json_array();
-	for (int i = 0; i < CMD_UNKNOWN; ++i)
-		json_array_append_new(allowed, json_string(cmd_list[i].name));
+	for (int i = 0; i < len; ++i) {
+		json_array_append_new(allowed, json_string((*list)[i].name));
+	}
 	return allowed;
+}
+
+static json_t* list_allowed_commands()
+{
+	return list_allowed(&cmd_list, CMD_LIST_LEN);
+}
+
+static json_t* list_allowed_events()
+{
+	return list_allowed(&evt_list, EVT_LIST_LEN);
 }
 
 static struct cmd* parse_command(struct jsonipc_request* ipc,
@@ -316,14 +368,28 @@ static json_t* client_next_object(struct ctl_client* self, struct cmd_response**
 	return root;
 }
 
-static struct cmd_response* generate_help_object(const char* cmd)
+static struct cmd_info* find_info(const char* id, struct cmd_info (*list)[],
+		size_t len)
 {
-	enum cmd_type ctype = parse_command_name(cmd);
+	for (int i = 0; i < len; ++i) {
+		struct cmd_info* info = &(*list)[i];
+		if (strcmp(info->name, id) == 0)
+			return info;
+	}
+	return NULL;
+}
+
+static struct cmd_response* generate_help_object(const char* id, bool id_is_command)
+{
+	struct cmd_info* info = id_is_command ?
+		find_info(id, &cmd_list, CMD_LIST_LEN) :
+		find_info(id, &evt_list, EVT_LIST_LEN);
 	json_t* data;
-	if (ctype == CMD_UNKNOWN) {
-		data = json_pack("{s:o}", "commands", list_allowed_commands());
+	if (!info) {
+		data = json_pack("{s:o, s:o}",
+				"commands", list_allowed_commands(),
+				"events", list_allowed_events());
 	} else {
-		struct cmd_info* info = &cmd_list[ctype];
 		json_t* param_list = NULL;
 		if (info->params[0].name) {
 			param_list = json_object();
@@ -362,7 +428,7 @@ static struct cmd_response* ctl_server_dispatch_cmd(struct ctl* self,
 	switch (cmd->type) {
 	case CMD_HELP:{
 		struct cmd_help* c = (struct cmd_help*)cmd;
-		response = generate_help_object(c->command);
+		response = generate_help_object(c->id, c->id_is_command);
 		break;
 		}
 	case CMD_SET_OUTPUT: {
@@ -799,7 +865,7 @@ int ctl_server_enqueue_event(struct ctl* self, const char* event_name,
 	return enqueued;
 }
 
-void ctl_server_event_connect(struct ctl* self,
+static void ctl_server_event_connect(struct ctl* self,
 		bool connected,
 		const char* client_id,
 		const char* client_hostname,
