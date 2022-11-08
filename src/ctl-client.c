@@ -263,41 +263,76 @@ out:
 	printf("\n");
 }
 
-static void print_help(json_t* data)
+static void print_command_usage(const char* name, json_t* data)
+{
+	char* desc = NULL;
+	json_t* params = NULL;
+	json_unpack(data, "{s:s, s?o}", "description", &desc,
+			"params", &params);
+	printf("Usage: wayvncctl [options] %s%s\n\n%s\n", name,
+			params ? " [params]" : "",
+			desc);
+	if (params) {
+		printf("\nParameters:");
+		const char* param_name;
+		json_t* param_value;
+		json_object_foreach(params, param_name, param_value) {
+			printf("\n  --%s=...\n    %s\n", param_name,
+					json_string_value(param_value));
+		}
+	}
+	printf("\nRun 'wayvncctl --help' for allowed Options\n");
+}
+
+static void print_event_details(const char* name, json_t* data)
+{
+	char* desc = NULL;
+	json_t* params = NULL;
+	json_unpack(data, "{s:s, s?o}", "description", &desc,
+			"params", &params);
+	printf("Event: %s\n\n%s\n", name,
+			desc);
+	if (params) {
+		printf("\nParameters:");
+		const char* param_name;
+		json_t* param_value;
+		json_object_foreach(params, param_name, param_value) {
+			printf("\n  %s:...\n    %s\n", param_name,
+					json_string_value(param_value));
+		}
+	}
+}
+
+static void print_help(json_t* data, json_t* request)
 {
 	if (json_object_get(data, "commands")) {
 		printf("Allowed commands:\n");
 		json_t* cmd_list = json_object_get(data, "commands");
+
 		size_t index;
 		json_t* value;
-
 		json_array_foreach(cmd_list, index, value) {
 			printf("  - %s\n", json_string_value(value));
 		}
 		printf("\nRun 'wayvncctl command-name --help' for command-specific details.\n");
+
+		printf("\nSupported events:\n");
+		json_t* evt_list = json_object_get(data, "events");
+		json_array_foreach(evt_list, index, value) {
+			printf("  - %s\n", json_string_value(value));
+		}
+		printf("\nRun 'wayvncctl help --event=event-name' for event-specific details.\n");
 		return;
 	}
+
+	bool is_command = json_object_get(request, "command");
 	const char* key;
 	json_t* value;
-
 	json_object_foreach(data, key, value) {
-		char* desc = NULL;
-		json_t* params = NULL;
-		json_unpack(value, "{s:s, s?o}", "description", &desc,
-				"params", &params);
-		printf("Usage: wayvncctl [options] %s%s\n\n%s\n", key,
-				params ? " [params]" : "",
-				desc);
-		if (params) {
-			printf("\nParameters:");
-			const char* param_name;
-			json_t* param_value;
-			json_object_foreach(params, param_name, param_value) {
-				printf("\n  --%s=...\n    %s\n", param_name,
-						json_string_value(param_value));
-			}
-		}
-		printf("\nRun 'wayvncctl --help' for allowed Options\n");
+		if (is_command)
+			print_command_usage(key, value);
+		else
+			print_event_details(key, value);
 	}
 }
 
@@ -310,10 +345,12 @@ static void pretty_version(json_t* data)
 		printf("  %s: %s\n", key, json_string_value(value));
 }
 
-static void pretty_print(json_t* data, const char* method)
+static void pretty_print(json_t* data,
+		struct jsonipc_request* request)
 {
+	const char* method = request->method;
 	if (strcmp(method, "help") == 0)
-		print_help(data);
+		print_help(data, request->params);
 	else if (strcmp(method, "version") == 0)
 		pretty_version(data);
 	else
@@ -336,7 +373,7 @@ static int ctl_client_print_response(struct ctl_client* self,
 		if (flags & PRINT_JSON)
 			print_compact_json(response->data);
 		else if (response->code == 0)
-			pretty_print(response->data, request->method);
+			pretty_print(response->data, request);
 		else
 			print_error(response, request->method);
 	}
