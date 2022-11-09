@@ -111,6 +111,12 @@ struct jsonipc_request* jsonipc_event_new(const char* method, json_t* params)
 	return jsonipc_request__new(method, params, NULL);
 }
 
+struct jsonipc_request* jsonipc_event_parse_new(json_t* root,
+		struct jsonipc_error* err)
+{
+	return jsonipc_request_parse_new(root, err);
+}
+
 json_t* jsonipc_request_pack(struct jsonipc_request* self, json_error_t* err)
 {
 	return json_pack_ex(err, 0, "{s:s, s:O*, s:O*}",
