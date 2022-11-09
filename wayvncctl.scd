@@ -46,9 +46,36 @@ command and its available parameters.
 
 While *wayvncctl* normally terminates after sending one request and receiving
 the corresponding reply, the *event-receive* command acts differently. Instead
-of exiting immediately, *wayvncctl* waits for any events fr the server, printing
-each to stdout as they arrive. This mode of operation will block until either
-it receives a signal to terminate, or until the wayvnc server terminates.
+of exiting immediately, *wayvncctl* waits for any events from the server,
+printing each to stdout as they arrive. This mode of operation will block until
+either it receives a signal to terminate, or until the wayvnc server terminates.
+
+In _--json_ mode, each event is printed on one line, with a newline character at
+the end, for ease in scripting:
+
+```
+$ wayvncctl --json event-receive
+{"method":"client-connected","params":{"id":"0x10ef670","hostname":null,"username":null,"connection_count":1}}
+{"method":"client-disconnected","params":{"id":"0x10ef670","hostname":null,"username":null,"connection_count":0}}
+```
+
+The default human-readible output is a multi-line yaml-like format, with two
+newline characters between each event:
+
+```
+$ wayvncctl event-receive
+
+client-connected:
+  id: 0x10ef670
+  hostname: 192.168.1.18
+  connection_count: 1
+
+client-disconnected:
+  id: 0x10ef670
+  hostname: 192.168.1.18
+  connection_count: 0
+
+```
 
 # EXAMPLES
 

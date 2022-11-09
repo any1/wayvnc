@@ -200,6 +200,8 @@ static json_t* read_one_object(struct ctl_client* self, int timeout_ms)
 	while (root == NULL) {
 		int n = poll(&pfd, 1, timeout_ms);
 		if (n == -1) {
+			if (errno == EINTR && self->wait_for_events)
+				continue;
 			WARN("Error waiting for a response: %m");
 			break;
 		} else if (n == 0) {
@@ -395,17 +397,121 @@ static void setup_signals(struct ctl_client* self)
 	sigaction(SIGTERM, &sa, NULL);
 }
 
-static void ctl_client_event_loop(struct ctl_client* self)
+static void print_indent(int level)
+{
+	for (int i = 0; i < level; ++i)
+		printf("  ");
+}
+
+static bool json_has_content(json_t* root)
+{
+	if (!root)
+		return false;
+	size_t i;
+	const char* key;
+	json_t* value;
+	switch (json_typeof(root)) {
+	case JSON_NULL:
+		return false;
+	case JSON_INTEGER:
+	case JSON_REAL:
+	case JSON_TRUE:
+	case JSON_FALSE:
+		return true;
+	case JSON_STRING:
+		return json_string_value(root)[0] != '\0';
+	case JSON_OBJECT:
+		json_object_foreach(root, key, value)
+			if (json_has_content(value))
+				return true;
+		return false;
+	case JSON_ARRAY:
+		json_array_foreach(root, i, value)
+			if (json_has_content(value))
+				return true;
+		return false;
+	}
+	return false;
+}
+
+static void print_as_yaml(json_t* data, int level, bool needs_leading_newline)
+{
+	size_t i;
+	const char* key;
+	json_t* value;
+	bool needs_indent = needs_leading_newline;
+	switch(json_typeof(data)) {
+	case JSON_NULL:
+		printf("<null>\n");
+		break;
+	case JSON_OBJECT:
+		if (json_object_size(data) > 0 && needs_leading_newline)
+				printf("\n");
+		json_object_foreach(data, key, value) {
+			if (!json_has_content(value))
+				continue;
+			if (needs_indent)
+				print_indent(level);
+			else
+				needs_indent = true;
+			printf("%s: ", key);
+			print_as_yaml(value, level + 1, true);
+		}
+		break;
+	case JSON_ARRAY:
+		if (json_array_size(data) > 0 && needs_leading_newline)
+			printf("\n");
+		json_array_foreach(data, i, value) {
+			if (!json_has_content(value))
+				continue;
+			print_indent(level);
+			printf("- ");
+			print_as_yaml(value, level + 1, json_is_array(value));
+		}
+		break;
+	case JSON_STRING:
+		printf("%s\n", json_string_value(data));
+		break;
+	case JSON_INTEGER:
+		printf("%" JSON_INTEGER_FORMAT "\n", json_integer_value(data));
+		break;
+	case JSON_REAL:
+		printf("%f\n", json_real_value(data));
+		break;
+	case JSON_TRUE:
+		printf("true\n");
+		break;
+	case JSON_FALSE:
+		printf("false\n");
+		break;
+	}
+}
+
+static void print_event(struct jsonipc_request* event, unsigned flags)
+{
+	if (flags & PRINT_JSON) {
+		print_compact_json(event->json);
+	} else {
+		printf("\n%s:", event->method);
+		print_as_yaml(event->params, 1, true);
+	}
+	fflush(stdout);
+}
+
+static void ctl_client_event_loop(struct ctl_client* self, unsigned flags)
 {
 	self->wait_for_events = true;
 	setup_signals(self);
 	while (self->wait_for_events) {
 		DEBUG("Waiting for an event");
 		json_t* root = read_one_object(self, -1);
-		json_dumpf(root, stdout, 0);
-		printf("\n");
-		fflush(stdout);
+		if (!root)
+			break;
+		struct jsonipc_error err = JSONIPC_ERR_INIT;
+		struct jsonipc_request* event = jsonipc_event_parse_new(root, &err);
 		json_decref(root);
+		print_event(event, flags);
+		jsonipc_request_destroy(event);
 	}
 }
 
@@ -427,7 +533,7 @@ int ctl_client_run_command(struct ctl_client* self,
 	result = ctl_client_print_response(self, request, response, flags);
 
 	if (result == 0 && strcmp(request->method, "event-receive") == 0)
-		ctl_client_event_loop(self);
+		ctl_client_event_loop(self, flags);
 
 	jsonipc_response_destroy(response);
 receive_failure:
