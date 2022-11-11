@@ -47,7 +47,7 @@ struct ctl_client {
 
 	char read_buffer[512];
 	size_t read_len;
-	
+
 	bool wait_for_events;
 
 	int fd;
