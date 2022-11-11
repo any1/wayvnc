@@ -122,6 +122,25 @@ $ wayvncctl --json version
 {"wayvnc":"v0.5.0","neatvnc":"v0.5.1","aml":"v0.2.2"}
 ```
 
+A script that takes an action for each client connect and disconnect event:
+
+```
+#!/bin/bash
+
+connection_count_now() {
+    echo "Total clients: $count"
+}
+
+while IFS= read -r EVT; do
+    case "$(jq -r '.method' <<<"$EVT")" in
+        client-*onnected)
+            count=$(jq -r '.params.connection_count' <<<"$EVT")
+            connection_count_now "$count"
+            ;;
+    esac
+done < <(wayvncctl --json event-receive)
+```
+
 # ENVIRONMENT
 
 The following environment variables have an effect on wayvncctl:

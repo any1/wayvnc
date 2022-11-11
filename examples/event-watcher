@@ -1,0 +1,16 @@
+#!/bin/bash
+
+WAYVNCCTL=${WAYVNCCTL:-wayvncctl}
+
+connection_count_now() {
+    echo "Total clients: $count"
+}
+
+while IFS= read -r EVT; do
+    case "$(jq -r '.method' <<<"$EVT")" in
+        client-*onnected)
+            count=$(jq -r '.params.connection_count' <<<"$EVT")
+            connection_count_now "$count"
+            ;;
+    esac
+done < <("$WAYVNCCTL" --json event-receive)
