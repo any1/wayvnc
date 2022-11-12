@@ -182,7 +182,7 @@ The *event-receive* command registers for asynchronous server events. See the
 _EVENTS_ section below for details on the event message format, and the _IPC
 EVENTS_ section below for a description of all possible server events.
 
-Event registration registers for all available server eve ts and is scoped to
+Event registration registers for all available server events and is scoped to
 the current connection only. If a client disconnects and reconnects, it must
 re-register for events.
 
