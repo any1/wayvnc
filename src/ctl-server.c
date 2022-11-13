@@ -21,6 +21,7 @@
 #include <errno.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <sys/stat.h>
 #include <netdb.h>
 #include <neatvnc.h>
 #include <aml.h>
@@ -33,7 +34,7 @@
 #include "strlcpy.h"
 
 #define FAILED_TO(action) \
-	nvnc_log(NVNC_LOG_WARNING, "Failed to " action ": %m");
+	nvnc_log(NVNC_LOG_ERROR, "Failed to " action ": %m");
 
 enum send_priority {
 	SEND_FIFO,
@@ -705,6 +706,48 @@ accept_failure:
 	free(client);
 }
 
+static int cleanup_old_socket(struct ctl* self, struct sockaddr* addr,
+		size_t addr_size)
+{
+	struct stat sb;
+	if (stat(self->socket_path, &sb) == -1)
+		// Doesn't exist: safe to proceed.
+		return 0;
+
+	if (!S_ISSOCK(sb.st_mode)) {
+		nvnc_log(NVNC_LOG_ERROR, "Socket path '%s’ exists already and is not a socket.");
+		goto manual_intervention;
+	}
+
+	int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+	if (fd == -1) {
+		FAILED_TO("open a temporary socket");
+		goto manual_intervention;
+	}
+
+	nvnc_log(NVNC_LOG_DEBUG, "Connecting to existing socket in case it's stale");
+	if (connect(fd, addr, addr_size) == 0) {
+		close(fd);
+		nvnc_log(NVNC_LOG_ERROR, "Another wayvnc process is already running.");
+		nvnc_log(NVNC_LOG_ERROR, "Use the '-S' option to choose an alternate control socket location");
+		return -1;
+	}
+	nvnc_log(NVNC_LOG_DEBUG, "Connect failed: %m");
+
+	close(fd);
+	nvnc_log(NVNC_LOG_WARNING, "Deleting stale control socket path \"%s\"", self->socket_path);
+	if (unlink(self->socket_path) == -1) {
+		FAILED_TO("remove stale unix socket");
+		goto manual_intervention;
+	}
+	return 0;
+
+manual_intervention:
+	nvnc_log(NVNC_LOG_ERROR, "Manually remove \"%s\" or use the '-S' option to choose an alternate socket location", self->socket_path);
+	return -1;
+}
+
+
 int ctl_server_init(struct ctl* self, const char* socket_path)
 {
 	if (!socket_path) {
@@ -734,6 +777,9 @@ int ctl_server_init(struct ctl* self, const char* socket_path)
 		goto socket_failure;
 	}
 
+	if (cleanup_old_socket(self, (struct sockaddr*)&addr, sizeof(addr)) != 0)
+		goto bind_failure;
+
 	if (bind(self->fd, (struct sockaddr*)&addr, sizeof(addr)) != 0) {
 		FAILED_TO("bind unix socket");
 		goto bind_failure;
@@ -760,9 +806,9 @@ poll_start_failure:
 	aml_unref(self->handler);
 handle_failure:
 listen_failure:
-	close(self->fd);
 	unlink(self->socket_path);
 bind_failure:
+	close(self->fd);
 socket_failure:
 	return -1;
 }
