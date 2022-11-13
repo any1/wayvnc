@@ -93,6 +93,7 @@ sources = [
 	'src/util.c',
 	'src/json-ipc.c',
 	'src/ctl-server.c',
+	'src/option-parser.c',
 ]
 
 dependencies = [

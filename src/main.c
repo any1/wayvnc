@@ -52,6 +52,7 @@
 #include "usdt.h"
 #include "ctl-server.h"
 #include "util.h"
+#include "option-parser.h"
 
 #ifdef ENABLE_PAM
 #include "pam_auth.h"
@@ -738,36 +739,11 @@ void on_capture_done(struct screencopy* sc)
 	}
 }
 
-int wayvnc_usage(FILE* stream, int rc)
+int wayvnc_usage(struct option_parser* parser, FILE* stream, int rc)
 {
-	static const char* usage =
-"Usage: wayvnc [options] [address [port]]\n"
-"\n"
-"    -C,--config=<path>                        Select a config file.\n"
-"    -g,--gpu                                  Enable features that need GPU.\n"
-"    -o,--output=<name>                        Select output to capture.\n"
-"    -k,--keyboard=<layout>[-<variant>]        Select keyboard layout with an\n"
-"                                              optional variant.\n"
-"    -s,--seat=<name>                          Select seat by name.\n"
-"    -S,--socket=<path>                        Wayvnc control socket path.\n"
-"                                              Default: $XDG_RUNTIME_DIR/wayvncctl\n"
-"    -r,--render-cursor                        Enable overlay cursor rendering.\n"
-"    -f,--max-fps=<fps>                        Set the rate limit (default 30).\n"
-"    -p,--show-performance                     Show performance counters.\n"
-"    -u,--unix-socket                          Create a UNIX domain socket\n"
-"                                              instead of TCP.\n"
-"    -d,--disable-input                        Disable all remote input\n"
-"    -V,--version                              Show version info.\n"
-"    -v,--verbose                              Be more verbose. Same as setting\n"
-"                                              --log-level=info.\n"
-"    -L,--log-level=<level>                    Set log level. The levels are:\n"
-"                                              error, warning, info, debug,\n"
-"                                              trace and quiet.\n"
-"    -h,--help                                 Get help (this text).\n"
-"\n";
-
-	fprintf(stream, "%s", usage);
-
+	fprintf(stream, "Usage: wayvnc [options] [address [port]]\n\n");
+	option_parser_print_usage(parser, stream);
+	fprintf(stream, "\n");
 	return rc;
 }
 
@@ -1011,32 +987,49 @@ int main(int argc, char* argv[])
 	int max_rate = 30;
 	bool disable_input = false;
 
-	static const char* shortopts = "C:go:k:s:S:rf:hpudVvL:";
 	int drm_fd MAYBE_UNUSED = -1;
 
 	int log_level = NVNC_LOG_WARNING;
 
-	static const struct option longopts[] = {
-		{ "config", required_argument, NULL, 'C' },
-		{ "gpu", no_argument, NULL, 'g' },
-		{ "output", required_argument, NULL, 'o' },
-		{ "keyboard", required_argument, NULL, 'k' },
-		{ "seat", required_argument, NULL, 's' },
-		{ "socket", required_argument, NULL, 'S' },
-		{ "render-cursor", no_argument, NULL, 'r' },
-		{ "max-fps", required_argument, NULL, 'f' },
-		{ "help", no_argument, NULL, 'h' },
-		{ "show-performance", no_argument, NULL, 'p' },
-		{ "unix-socket", no_argument, NULL, 'u' },
-		{ "disable-input", no_argument, NULL, 'd' },
-		{ "version", no_argument, NULL, 'V' },
-		{ "verbose", no_argument, NULL, 'v' },
-		{ "log-level", required_argument, NULL, 'L' },
-		{ NULL, 0, NULL, 0 }
+	static const struct wv_option opts[] = {
+		{ 'C', "config", "<path>",
+		  "Select a config file." },
+		{ 'g', "gpu", NULL,
+		  "Enable features that need GPU." },
+		{ 'o', "output", "<name>",
+		  "Select output to capture." },
+		{ 'k', "keyboard", "<layout>[-<variant>]",
+		  "Select keyboard layout with an optional variant." },
+		{ 's', "seat", "<name>",
+		  "Select seat by name." },
+		{ 'S', "socket", "<path>",
+		  "Control socket path." },
+		{ 'r', "render-cursor", NULL,
+		  "Enable overlay cursor rendering." },
+		{ 'f', "max-fps", "<fps>",
+		  "Set rate limit (default 30)." },
+		{ 'p', "performance", NULL,
+		  "Show performance counters." },
+		{ 'u', "unix-socket", NULL,
+		  "Create unix domain socket." },
+		{ 'd', "disable-input", NULL,
+		  "Disable all remote input." },
+		{ 'V', "version", NULL,
+		  "Show version info." },
+		{ 'v', "verbose", NULL,
+		  "Be more verbose. Same as setting --log-level=info" },
+		{ 'L', "log-level", "<level>",
+		  "Set log level. The levels are: error, warning, info, debug trace and quiet." },
+		{ 'h', "help", NULL,
+		  "Get help (this text)." },
+		{ '\0', NULL, NULL, NULL }
 	};
 
+	struct option_parser option_parser;
+	option_parser_init(&option_parser, opts);
+
 	while (1) {
-		int c = getopt_long(argc, argv, shortopts, longopts, NULL);
+		int c = option_parser_getopt(&option_parser, argc, argv);
 		if (c < 0)
 			break;
 
@@ -1082,15 +1075,15 @@ int main(int argc, char* argv[])
 			if (log_level < 0) {
 				fprintf(stderr, "Invalid log level: %s\n",
 						optarg);
-				return wayvnc_usage(stderr, 1);
+				return wayvnc_usage(&option_parser, stderr, 1);
 			}
 			break;
 		case 'V':
 			return show_version();
 		case 'h':
-			return wayvnc_usage(stdout, 0);
+			return wayvnc_usage(&option_parser, stdout, 0);
 		default:
-			return wayvnc_usage(stderr, 1);
+			return wayvnc_usage(&option_parser, stderr, 1);
 		}
 	}
 
