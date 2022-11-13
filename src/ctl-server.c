@@ -251,7 +251,7 @@ static struct cmd_set_output* cmd_set_output_new(json_t* args,
 static json_t* list_allowed(struct cmd_info (*list)[], size_t len)
 {
 	json_t* allowed = json_array();
-	for (int i = 0; i < len; ++i) {
+	for (size_t i = 0; i < len; ++i) {
 		json_array_append_new(allowed, json_string((*list)[i].name));
 	}
 	return allowed;
@@ -371,7 +371,7 @@ static json_t* client_next_object(struct ctl_client* self, struct cmd_response**
 static struct cmd_info* find_info(const char* id, struct cmd_info (*list)[],
 		size_t len)
 {
-	for (int i = 0; i < len; ++i) {
+	for (size_t i = 0; i < len; ++i) {
 		struct cmd_info* info = &(*list)[i];
 		if (strcmp(info->name, id) == 0)
 			return info;
