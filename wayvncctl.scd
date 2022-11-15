@@ -14,6 +14,10 @@ wayvncctl - A command line control client for wayvnc(1)
 	Set wayvnc control socket path. Default: $XDG_RUNTIME_DIR/wayvncctl
 	or /tmp/wayvncctl-$UID
 
+*-w, --wait*
+	Wait for wayvnc to start up if it's not already running. Default: Exit
+	immediately with an error if wayvnc is not running.
+
 *-j, --json*
 	Produce json output to stdout.
 

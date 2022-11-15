@@ -20,8 +20,10 @@
 #include <errno.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <sys/stat.h>
 #include <poll.h>
 #include <signal.h>
+#include <assert.h>
 #include <jansson.h>
 
 #include "json-ipc.h"
@@ -39,11 +41,12 @@ static bool do_debug = false;
 	if (do_debug) \
 		fprintf(stderr, "[%s:%d] " fmt "\n", __FILE__, __LINE__, ##__VA_ARGS__);
 
-#define FAILED_TO(action) \
-	WARN("Failed to " action ": %m");
+#define FAILED_TO(action, ...) \
+	WARN("Failed to " action ": %m", ##__VA_ARGS__);
 
 struct ctl_client {
 	void* userdata;
+	struct sockaddr_un addr;
 
 	char read_buffer[512];
 	size_t read_len;
@@ -65,35 +68,74 @@ struct ctl_client* ctl_client_new(const char* socket_path, void* userdata)
 	struct ctl_client* new = calloc(1, sizeof(*new));
 	new->userdata = userdata;
 
-	struct sockaddr_un addr = {
-		.sun_family = AF_UNIX,
-	};
-
-	if (strlen(socket_path) >= sizeof(addr.sun_path)) {
+	if (strlen(socket_path) >= sizeof(new->addr.sun_path)) {
 		errno = ENAMETOOLONG;
 		FAILED_TO("create unix socket");
 		goto socket_failure;
 	}
-	strcpy(addr.sun_path, socket_path);
+	strcpy(new->addr.sun_path, socket_path);
+	new->addr.sun_family = AF_UNIX;
 
 	new->fd = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (new->fd < 0) {
 		FAILED_TO("create unix socket");
 		goto socket_failure;
 	}
-
-	if (connect(new->fd, (struct sockaddr*)&addr, sizeof(addr)) != 0) {
-		FAILED_TO("connect to unix socket");
-		goto connect_failure;
-	}
-
 	return new;
 
-connect_failure:
-	close(new->fd);
 socket_failure:
 	free(new);
 	return NULL;
+}
+
+int ctl_client_connect(struct ctl_client* self, int timeout)
+{
+	// TODO: Support arbitrary timeouts?
+	assert(timeout == 0 || timeout == -1);
+	// TODO: Use inotify instead of polling stat()
+	bool needs_log = true;
+	struct stat sb;
+	while (stat(self->addr.sun_path, &sb) != 0) {
+		if (timeout == 0) {
+			FAILED_TO("find socket path \"%s\"",
+					self->addr.sun_path);
+			goto stat_failure;
+		}
+		if (needs_log) {
+			needs_log = false;
+			DEBUG("Waiting for socket path \"%s\" to appear",
+					self->addr.sun_path);
+		}
+		if (usleep(50000) == -1) {
+			FAILED_TO("wait for socket path");
+			goto stat_failure;
+		}
+	}
+	if (S_ISSOCK(sb.st_mode)) {
+		DEBUG("Found socket \"%s\"", self->addr.sun_path);
+	} else {
+		WARN("Path \"%s\" exists but is not a socket (0x%x)",
+				self->addr.sun_path, sb.st_mode);
+		goto stat_failure;
+	}
+	while (connect(self->fd, (struct sockaddr*)&self->addr,
+				sizeof(self->addr)) != 0) {
+		if (timeout == 0 || errno != ENOENT) {
+			FAILED_TO("connect to unix socket \"%s\"",
+					self->addr.sun_path);
+			goto stat_failure;
+			return 1;
+		}
+		if (usleep(50000) == -1) {
+			FAILED_TO("wait for connect to succeed");
+			return 1;
+		}
+	}
+
+	return 0;
+
+stat_failure:
+	return 1;
 }
 
 void ctl_client_destroy(struct ctl_client* self)
@@ -107,7 +149,7 @@ void* ctl_client_userdata(struct ctl_client* self)
 	return self->userdata;
 }
 
-static struct jsonipc_request*	ctl_client_parse_args(struct ctl_client* self,
+static struct jsonipc_request* ctl_client_parse_args(struct ctl_client* self,
 		int argc, char* argv[])
 {
 	struct jsonipc_request* request = NULL;

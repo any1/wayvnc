@@ -53,6 +53,8 @@ static int wayvncctl_usage(FILE* stream, int rc)
 "Options:\n"
 "    -S,--socket=<path>                   Wayvnc control socket path.\n"
 "                                         Default: $XDG_RUNTIME_DIR/wayvncctl\n"
+"    -w,--wait                            Wait for wayvnc to start up if it's\n"
+"                                         not already running.\n"
 "    -j,--json                            Output json on stdout.\n"
 "    -V,--version                         Show version info.\n"
 "    -v,--verbose                         Be more verbose.\n"
@@ -74,15 +76,17 @@ int main(int argc, char* argv[])
 {
 	struct wayvncctl self = { 0 };
 
-	static const char* shortopts = "+S:hVvj";
+	static const char* shortopts = "+S:hVvjw";
 
 	bool verbose = false;
 	const char* socket_path = NULL;
+	int wait_for_socket = 0;
 
 	unsigned flags = 0;
 
 	static const struct option longopts[] = {
 		{ "socket", required_argument, NULL, 'S' },
+		{ "wait", no_argument, NULL, 'w' },
 		{ "json", no_argument, NULL, 'j' },
 		{ "help", no_argument, NULL, 'h' },
 		{ "version", no_argument, NULL, 'V' },
@@ -98,6 +102,9 @@ int main(int argc, char* argv[])
 		switch (c) {
 		case 'S':
 			socket_path = optarg;
+			break;
+		case 'w':
+			wait_for_socket = -1;
 			break;
 		case 'j':
 			flags |= PRINT_JSON;
@@ -117,12 +124,18 @@ int main(int argc, char* argv[])
 	argv = &argv[optind];
 
 	ctl_client_debug_log(verbose);
+
 	self.ctl = ctl_client_new(socket_path, &self);
 	if (!self.ctl)
 		goto ctl_client_failure;
 
-	int result = ctl_client_run_command(self.ctl, argc, argv, flags);
+	int result = ctl_client_connect(self.ctl, wait_for_socket);
+	if (result != 0)
+		goto socket_failure;
 
+	result = ctl_client_run_command(self.ctl, argc, argv, flags);
+
+socket_failure:
 	ctl_client_destroy(self.ctl);
 
 	return result;
