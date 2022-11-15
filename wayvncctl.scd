@@ -2,7 +2,7 @@ wayvncctl(1)
 
 # NAME
 
-wayvncctl - A command line control lient for wayvnc(1)
+wayvncctl - A command line control client for wayvnc(1)
 
 # SYNOPSIS
 
