@@ -18,6 +18,10 @@ wayvncctl - A command line control client for wayvnc(1)
 	Wait for wayvnc to start up if it's not already running. Default: Exit
 	immediately with an error if wayvnc is not running.
 
+*-r,--reconnect*
+	If disconnected while waiting for events, wait for wayvnc to restart and
+	re-register for events. Default: Exit when wayvnc exits.
+
 *-j, --json*
 	Produce json output to stdout.
 
@@ -142,7 +146,7 @@ while IFS= read -r EVT; do
             connection_count_now "$count"
             ;;
     esac
-done < <(wayvncctl --json event-receive)
+done < <(wayvncctl --wait --reconnect --json event-receive)
 ```
 
 # ENVIRONMENT

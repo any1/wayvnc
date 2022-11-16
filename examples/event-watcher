@@ -13,4 +13,4 @@ while IFS= read -r EVT; do
             connection_count_now "$count"
             ;;
     esac
-done < <("$WAYVNCCTL" --json event-receive)
+done < <("$WAYVNCCTL" --wait --reconnect --json event-receive)
