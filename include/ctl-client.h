@@ -27,6 +27,7 @@ void ctl_client_destroy(struct ctl_client*);
 void* ctl_client_userdata(struct ctl_client*);
 
 #define PRINT_JSON 0x00000001
+#define RECONNECT  0x00000002
 
 int ctl_client_connect(struct ctl_client* self, int timeout);
 int ctl_client_run_command(struct ctl_client* self,

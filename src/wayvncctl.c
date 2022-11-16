@@ -55,6 +55,8 @@ static int wayvncctl_usage(FILE* stream, int rc)
 "                                         Default: $XDG_RUNTIME_DIR/wayvncctl\n"
 "    -w,--wait                            Wait for wayvnc to start up if it's\n"
 "                                         not already running.\n"
+"    -r,--reconnect                       If disconnected while waiting for\n"
+"                                         events, wait for wayvnc to restart.\n"
 "    -j,--json                            Output json on stdout.\n"
 "    -V,--version                         Show version info.\n"
 "    -v,--verbose                         Be more verbose.\n"
@@ -76,7 +78,7 @@ int main(int argc, char* argv[])
 {
 	struct wayvncctl self = { 0 };
 
-	static const char* shortopts = "+S:hVvjw";
+	static const char* shortopts = "+S:hVvjwr";
 
 	bool verbose = false;
 	const char* socket_path = NULL;
@@ -87,6 +89,7 @@ int main(int argc, char* argv[])
 	static const struct option longopts[] = {
 		{ "socket", required_argument, NULL, 'S' },
 		{ "wait", no_argument, NULL, 'w' },
+		{ "reconnect", no_argument, NULL, 'r' },
 		{ "json", no_argument, NULL, 'j' },
 		{ "help", no_argument, NULL, 'h' },
 		{ "version", no_argument, NULL, 'V' },
@@ -105,6 +108,9 @@ int main(int argc, char* argv[])
 			break;
 		case 'w':
 			wait_for_socket = -1;
+			break;
+		case 'r':
+			flags |= RECONNECT;
 			break;
 		case 'j':
 			flags |= PRINT_JSON;

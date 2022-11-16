@@ -67,6 +67,7 @@ struct ctl_client* ctl_client_new(const char* socket_path, void* userdata)
 		socket_path = default_ctl_socket_path();
 	struct ctl_client* new = calloc(1, sizeof(*new));
 	new->userdata = userdata;
+	new->fd = -1;
 
 	if (strlen(socket_path) >= sizeof(new->addr.sun_path)) {
 		errno = ENAMETOOLONG;
@@ -76,11 +77,6 @@ struct ctl_client* ctl_client_new(const char* socket_path, void* userdata)
 	strcpy(new->addr.sun_path, socket_path);
 	new->addr.sun_family = AF_UNIX;
 
-	new->fd = socket(AF_UNIX, SOCK_STREAM, 0);
-	if (new->fd < 0) {
-		FAILED_TO("create unix socket");
-		goto socket_failure;
-	}
 	return new;
 
 socket_failure:
@@ -88,42 +84,50 @@ socket_failure:
 	return NULL;
 }
 
-int ctl_client_connect(struct ctl_client* self, int timeout)
+static int wait_for_socket(const char* socket_path, int timeout)
 {
-	// TODO: Support arbitrary timeouts?
-	assert(timeout == 0 || timeout == -1);
-	// TODO: Use inotify instead of polling stat()
 	bool needs_log = true;
 	struct stat sb;
-	while (stat(self->addr.sun_path, &sb) != 0) {
+	while (stat(socket_path, &sb) != 0) {
 		if (timeout == 0) {
 			FAILED_TO("find socket path \"%s\"",
-					self->addr.sun_path);
-			goto stat_failure;
+					socket_path);
+			return 1;
 		}
 		if (needs_log) {
 			needs_log = false;
 			DEBUG("Waiting for socket path \"%s\" to appear",
-					self->addr.sun_path);
+					socket_path);
 		}
 		if (usleep(50000) == -1) {
 			FAILED_TO("wait for socket path");
-			goto stat_failure;
+			return -1;
 		}
 	}
 	if (S_ISSOCK(sb.st_mode)) {
-		DEBUG("Found socket \"%s\"", self->addr.sun_path);
+		DEBUG("Found socket \"%s\"", socket_path);
 	} else {
 		WARN("Path \"%s\" exists but is not a socket (0x%x)",
-				self->addr.sun_path, sb.st_mode);
-		goto stat_failure;
+				socket_path, sb.st_mode);
+		return -1;
+	}
+	return 0;
+}
+
+static int try_connect(struct ctl_client* self, int timeout)
+{
+	if (self->fd != -1)
+		close(self->fd);
+	self->fd = socket(AF_UNIX, SOCK_STREAM, 0);
+	if (self->fd < 0) {
+		FAILED_TO("create unix socket");
+		return 1;
 	}
 	while (connect(self->fd, (struct sockaddr*)&self->addr,
 				sizeof(self->addr)) != 0) {
 		if (timeout == 0 || errno != ENOENT) {
 			FAILED_TO("connect to unix socket \"%s\"",
 					self->addr.sun_path);
-			goto stat_failure;
 			return 1;
 		}
 		if (usleep(50000) == -1) {
@@ -131,11 +135,21 @@ int ctl_client_connect(struct ctl_client* self, int timeout)
 			return 1;
 		}
 	}
+	return 0;
+}
+
+int ctl_client_connect(struct ctl_client* self, int timeout)
+{
+	// TODO: Support arbitrary timeouts?
+	assert(timeout == 0 || timeout == -1);
+
+	if (wait_for_socket(self->addr.sun_path, timeout) != 0)
+		return 1;
+
+	if (try_connect(self, timeout) != 0)
+		return 1;
 
 	return 0;
-
-stat_failure:
-	return 1;
 }
 
 void ctl_client_destroy(struct ctl_client* self)
@@ -188,22 +202,6 @@ static struct jsonipc_request* ctl_client_parse_args(struct ctl_client* self,
 failure:
 	json_decref(params);
 	return request;
-}
-
-static ssize_t ctl_client_send_request(struct ctl_client* self,
-		struct jsonipc_request* request)
-{
-	json_error_t err;
-	json_t* packed = jsonipc_request_pack(request, &err);
-	if (!packed) {
-		WARN("Could not encode json: %s", err.text);
-		return -1;
-	}
-	char buffer[512];
-	int len = json_dumpb(packed, buffer, sizeof(buffer), JSON_COMPACT);
-	json_decref(packed);
-	DEBUG(">> %.*s", len, buffer);
-	return send(self->fd, buffer, len, MSG_NOSIGNAL);
 }
 
 static json_t* json_from_buffer(struct ctl_client* self)
@@ -540,46 +538,105 @@ static void print_event(struct jsonipc_request* event, unsigned flags)
 	fflush(stdout);
 }
 
-static void ctl_client_event_loop(struct ctl_client* self, unsigned flags)
+static ssize_t ctl_client_send_request(struct ctl_client* self,
+		struct jsonipc_request* request)
 {
+	json_error_t err;
+	json_t* packed = jsonipc_request_pack(request, &err);
+	if (!packed) {
+		WARN("Could not encode json: %s", err.text);
+		return -1;
+	}
+	char buffer[512];
+	int len = json_dumpb(packed, buffer, sizeof(buffer), JSON_COMPACT);
+	json_decref(packed);
+	DEBUG(">> %.*s", len, buffer);
+	return send(self->fd, buffer, len, MSG_NOSIGNAL);
+}
+
+static struct jsonipc_response* ctl_client_run_single_command(struct ctl_client* self,
+		struct jsonipc_request *request)
+{
+	if (ctl_client_send_request(self, request) < 0)
+		return NULL;
+
+	return ctl_client_wait_for_response(self);
+}
+
+static int ctl_client_register_for_events(struct ctl_client* self,
+		struct jsonipc_request* request)
+{
+	struct jsonipc_response* response = ctl_client_run_single_command(self, request);
+	if (!response)
+		return -1;
+
+	int result = response->code;
+	jsonipc_response_destroy(response);
+	return result;
+}
+
+static int ctl_client_reconnect_event_loop(struct ctl_client* self,
+		struct jsonipc_request* request, int timeout)
+{
+	if (ctl_client_connect(self, timeout) != 0)
+		return -1;
+	return ctl_client_register_for_events(self, request);
+}
+
+static int ctl_client_event_loop(struct ctl_client* self,
+		struct jsonipc_request* request, unsigned flags)
+{
+	int result = ctl_client_register_for_events(self, request);
+	if (result != 0)
+		return result;
+
 	self->wait_for_events = true;
 	setup_signals(self);
 	while (self->wait_for_events) {
 		DEBUG("Waiting for an event");
 		json_t* root = read_one_object(self, -1);
-		if (!root)
+		if (!root) {
+			if (errno == ECONNRESET && flags & RECONNECT &&
+					ctl_client_reconnect_event_loop(self,
+						request, -1) == 0)
+				continue;
 			break;
+		}
 		struct jsonipc_error err = JSONIPC_ERR_INIT;
 		struct jsonipc_request* event = jsonipc_event_parse_new(root, &err);
 		json_decref(root);
 		print_event(event, flags);
 		jsonipc_request_destroy(event);
 	}
+	return 0;
+}
+
+static int ctl_client_print_single_command(struct ctl_client* self,
+		struct jsonipc_request* request, unsigned flags)
+{
+	struct jsonipc_response* response = ctl_client_run_single_command(self,
+			request);
+	if (!response)
+		return 1;
+	int result = ctl_client_print_response(self, request, response, flags);
+	jsonipc_response_destroy(response);
+	return result;
 }
 
 int ctl_client_run_command(struct ctl_client* self,
 		int argc, char* argv[], unsigned flags)
 {
-	int result = -1;
-	struct jsonipc_request*	request = ctl_client_parse_args(self, argc, argv);
+	int result = 1;
+	struct jsonipc_request*	request = ctl_client_parse_args(self, argc,
+			argv);
 	if (!request)
 		goto parse_failure;
 
-	if (ctl_client_send_request(self, request) < 0)
-		goto send_failure;
+	if (strcmp(request->method, "event-receive") == 0)
+		result = ctl_client_event_loop(self, request, flags);
+	else
+		result = ctl_client_print_single_command(self, request, flags);
 
-	struct jsonipc_response* response = ctl_client_wait_for_response(self);
-	if (!response)
-		goto receive_failure;
-
-	result = ctl_client_print_response(self, request, response, flags);
-
-	if (result == 0 && strcmp(request->method, "event-receive") == 0)
-		ctl_client_event_loop(self, flags);
-
-	jsonipc_response_destroy(response);
-receive_failure:
-send_failure:
 	jsonipc_request_destroy(request);
 parse_failure:
 	return result;
