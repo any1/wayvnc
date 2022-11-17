@@ -32,17 +32,18 @@
 #include "strlcpy.h"
 #include "util.h"
 
+#define LOG(level, fmt, ...) \
+	fprintf(stderr, "[%s:%d] <" level "> " fmt "\n", __FILE__, __LINE__, \
+		##__VA_ARGS__)
+
 #define WARN(fmt, ...) \
-	fprintf(stderr, "[WARNING] " fmt "\n", ##__VA_ARGS__)
+	LOG("WARNING", fmt, ##__VA_ARGS__)
 
 static bool do_debug = false;
 
 #define DEBUG(fmt, ...) \
 	if (do_debug) \
-		fprintf(stderr, "[%s:%d] " fmt "\n", __FILE__, __LINE__, ##__VA_ARGS__);
-
-#define FAILED_TO(action, ...) \
-	WARN("Failed to " action ": %m", ##__VA_ARGS__);
+	LOG("DEBUG", fmt, ##__VA_ARGS__)
 
 struct ctl_client {
 	void* userdata;
@@ -71,7 +72,7 @@ struct ctl_client* ctl_client_new(const char* socket_path, void* userdata)
 
 	if (strlen(socket_path) >= sizeof(new->addr.sun_path)) {
 		errno = ENAMETOOLONG;
-		FAILED_TO("create unix socket");
+		WARN("Failed to create unix socket: %m");
 		goto socket_failure;
 	}
 	strcpy(new->addr.sun_path, socket_path);
@@ -90,7 +91,7 @@ static int wait_for_socket(const char* socket_path, int timeout)
 	struct stat sb;
 	while (stat(socket_path, &sb) != 0) {
 		if (timeout == 0) {
-			FAILED_TO("find socket path \"%s\"",
+			WARN("Failed to find socket path \"%s\": %m",
 					socket_path);
 			return 1;
 		}
@@ -100,7 +101,7 @@ static int wait_for_socket(const char* socket_path, int timeout)
 					socket_path);
 		}
 		if (usleep(50000) == -1) {
-			FAILED_TO("wait for socket path");
+			WARN("Failed to wait for socket path: %m");
 			return -1;
 		}
 	}
@@ -120,18 +121,18 @@ static int try_connect(struct ctl_client* self, int timeout)
 		close(self->fd);
 	self->fd = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (self->fd < 0) {
-		FAILED_TO("create unix socket");
+		WARN("Failed to create unix socket: %m");
 		return 1;
 	}
 	while (connect(self->fd, (struct sockaddr*)&self->addr,
 				sizeof(self->addr)) != 0) {
 		if (timeout == 0 || errno != ENOENT) {
-			FAILED_TO("connect to unix socket \"%s\"",
+			WARN("Failed to connect to unix socket \"%s\": %m",
 					self->addr.sun_path);
 			return 1;
 		}
 		if (usleep(50000) == -1) {
-			FAILED_TO("wait for connect to succeed");
+			WARN("Failed to wait for connect to succeed: %m");
 			return 1;
 		}
 	}
