@@ -6,3 +6,4 @@ subprojects
 perf.*
 *.pem
 .vimrc
+.cache
