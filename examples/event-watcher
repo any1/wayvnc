@@ -3,7 +3,7 @@
 WAYVNCCTL=${WAYVNCCTL:-wayvncctl}
 
 connection_count_now() {
-    echo "Total clients: $count"
+    echo "Total clients: $1"
 }
 
 while IFS= read -r EVT; do
@@ -12,5 +12,13 @@ while IFS= read -r EVT; do
             count=$(jq -r '.params.connection_count' <<<"$EVT")
             connection_count_now "$count"
             ;;
+        wayvnc-shutdown)
+            echo "wayvncctl is no longer running"
+            connection_count_now 0
+            ;;
+        wayvnc-startup)
+            echo "Ready to receive wayvnc events"
+            ;;
     esac
 done < <("$WAYVNCCTL" --wait --reconnect --json event-receive)
+

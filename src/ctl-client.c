@@ -45,9 +45,13 @@ static bool do_debug = false;
 	if (do_debug) \
 	LOG("DEBUG", fmt, ##__VA_ARGS__)
 
+const char* EVT_LOCAL_SHUTDOWN = "wayvnc-shutdown";
+const char* EVT_LOCAL_STARTUP = "wayvnc-startup";
+
 struct ctl_client {
 	void* userdata;
 	struct sockaddr_un addr;
+	unsigned flags;
 
 	char read_buffer[512];
 	size_t read_len;
@@ -408,12 +412,11 @@ static void print_compact_json(json_t* data)
 
 static int ctl_client_print_response(struct ctl_client* self,
 		struct jsonipc_request* request,
-		struct jsonipc_response* response,
-		unsigned flags)
+		struct jsonipc_response* response)
 {
 	DEBUG("Response code: %d", response->code);
 	if (response->data) {
-		if (flags & PRINT_JSON)
+		if (self->flags & PRINT_JSON)
 			print_compact_json(response->data);
 		else if (response->code == 0)
 			pretty_print(response->data, request);
@@ -534,9 +537,30 @@ static void print_event(struct jsonipc_request* event, unsigned flags)
 		print_compact_json(event->json);
 	} else {
 		printf("\n%s:", event->method);
-		print_as_yaml(event->params, 1, true);
+		if (event->params)
+			print_as_yaml(event->params, 1, true);
+		else
+			printf("<<null>\n");
 	}
 	fflush(stdout);
+}
+
+static void send_local_event(struct ctl_client* self, const char* name)
+{
+	struct jsonipc_request* event = jsonipc_event_new(name, NULL);
+	event->json = jsonipc_request_pack(event, NULL);
+	print_event(event, self->flags);
+	jsonipc_request_destroy(event);
+}
+
+static void send_startup_event(struct ctl_client* self)
+{
+	send_local_event(self, EVT_LOCAL_STARTUP);
+}
+
+static void send_shutdown_event(struct ctl_client* self)
+{
+	send_local_event(self, EVT_LOCAL_SHUTDOWN);
 }
 
 static ssize_t ctl_client_send_request(struct ctl_client* self,
@@ -573,6 +597,8 @@ static int ctl_client_register_for_events(struct ctl_client* self,
 
 	int result = response->code;
 	jsonipc_response_destroy(response);
+	if (result == 0)
+		send_startup_event(self);
 	return result;
 }
 
@@ -585,7 +611,7 @@ static int ctl_client_reconnect_event_loop(struct ctl_client* self,
 }
 
 static int ctl_client_event_loop(struct ctl_client* self,
-		struct jsonipc_request* request, unsigned flags)
+		struct jsonipc_request* request)
 {
 	int result = ctl_client_register_for_events(self, request);
 	if (result != 0)
@@ -597,29 +623,32 @@ static int ctl_client_event_loop(struct ctl_client* self,
 		DEBUG("Waiting for an event");
 		json_t* root = read_one_object(self, -1);
 		if (!root) {
-			if (errno == ECONNRESET && flags & RECONNECT &&
-					ctl_client_reconnect_event_loop(self,
-						request, -1) == 0)
-				continue;
+			if (errno == ECONNRESET) {
+				send_shutdown_event(self);
+				if (self->flags & RECONNECT &&
+						ctl_client_reconnect_event_loop(
+							self, request, -1) == 0)
+					continue;
+			}
 			break;
 		}
 		struct jsonipc_error err = JSONIPC_ERR_INIT;
 		struct jsonipc_request* event = jsonipc_event_parse_new(root, &err);
 		json_decref(root);
-		print_event(event, flags);
+		print_event(event, self->flags);
 		jsonipc_request_destroy(event);
 	}
 	return 0;
 }
 
 static int ctl_client_print_single_command(struct ctl_client* self,
-		struct jsonipc_request* request, unsigned flags)
+		struct jsonipc_request* request)
 {
 	struct jsonipc_response* response = ctl_client_run_single_command(self,
 			request);
 	if (!response)
 		return 1;
-	int result = ctl_client_print_response(self, request, response, flags);
+	int result = ctl_client_print_response(self, request, response);
 	jsonipc_response_destroy(response);
 	return result;
 }
@@ -627,6 +656,7 @@ static int ctl_client_print_single_command(struct ctl_client* self,
 int ctl_client_run_command(struct ctl_client* self,
 		int argc, char* argv[], unsigned flags)
 {
+	self->flags = flags;
 	int result = 1;
 	struct jsonipc_request*	request = ctl_client_parse_args(self, argc,
 			argv);
@@ -634,9 +664,9 @@ int ctl_client_run_command(struct ctl_client* self,
 		goto parse_failure;
 
 	if (strcmp(request->method, "event-receive") == 0)
-		result = ctl_client_event_loop(self, request, flags);
+		result = ctl_client_event_loop(self, request);
 	else
-		result = ctl_client_print_single_command(self, request, flags);
+		result = ctl_client_print_single_command(self, request);
 
 	jsonipc_request_destroy(request);
 parse_failure:
