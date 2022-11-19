@@ -85,6 +85,24 @@ client-disconnected:
 
 ```
 
+## SPECIAL LOCAL EVENT TYPES
+
+Especially useful when using _--wait_ or _--reconnect_ mode, wayvncctl will
+generate 2 additional events not documented in *wayvnc(1)*:
+
+*wayvnc-startup*
+	Sent when a successful wayvnc control connection is established and
+	event registration has succeeded, both upon initial startup and on
+	subsequent registrations with _--reconnect_.
+
+	No paramerers.
+
+*wayvnc-shutdown*
+	Sent when the wayvnc control connection is dropped, usually due to
+	wayvnc exiting.
+
+	No paramerers.
+
 # EXAMPLES
 
 Query the server for all available IPC command names:
@@ -136,7 +154,7 @@ A script that takes an action for each client connect and disconnect event:
 #!/bin/bash
 
 connection_count_now() {
-    echo "Total clients: $count"
+    echo "Total clients: $1"
 }
 
 while IFS= read -r EVT; do
@@ -145,6 +163,9 @@ while IFS= read -r EVT; do
             count=$(jq -r '.params.connection_count' <<<"$EVT")
             connection_count_now "$count"
             ;;
+        wayvnc-shutdown)
+            connection_count_now 0
+	    ;;
     esac
 done < <(wayvncctl --wait --reconnect --json event-receive)
 ```
