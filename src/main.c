@@ -85,8 +85,6 @@ struct wayvnc {
 	const struct seat* selected_seat;
 
 	struct screencopy screencopy;
-	struct pointer pointer_backend;
-	struct keyboard keyboard_backend;
 	struct data_control data_control;
 
 	struct aml_handler* wayland_handler;
@@ -112,6 +110,9 @@ struct wayvnc {
 struct wayvnc_client {
 	struct wayvnc* server;
 	struct nvnc_client* nvnc_client;
+
+	struct pointer pointer;
+	struct keyboard keyboard;
 };
 
 void wayvnc_exit(struct wayvnc* self);
@@ -120,6 +121,8 @@ static void on_nvnc_client_new(struct nvnc_client* client);
 void switch_to_output(struct wayvnc*, struct output*);
 void switch_to_next_output(struct wayvnc*);
 void switch_to_prev_output(struct wayvnc*);
+static void client_init_pointer(struct wayvnc_client* self);
+static void client_init_keyboard(struct wayvnc_client* self);
 
 struct wl_shm* wl_shm = NULL;
 struct zwp_linux_dmabuf_v1* zwp_linux_dmabuf = NULL;
@@ -314,17 +317,8 @@ void wayvnc_destroy(struct wayvnc* self)
 
 	wl_shm_destroy(wl_shm);
 
-	if (self->keyboard_backend.virtual_keyboard) {
-		zwp_virtual_keyboard_v1_destroy(
-				self->keyboard_backend.virtual_keyboard);
-		keyboard_destroy(&self->keyboard_backend);
-	}
-
 	if (self->keyboard_manager)
 		zwp_virtual_keyboard_manager_v1_destroy(self->keyboard_manager);
-
-	if (self->pointer_backend.pointer)
-		pointer_destroy(&self->pointer_backend);
 
 	if (self->pointer_manager)
 		zwlr_virtual_pointer_manager_v1_destroy(self->pointer_manager);
@@ -498,33 +492,29 @@ int init_main_loop(struct wayvnc* self)
 static void on_pointer_event(struct nvnc_client* client, uint16_t x, uint16_t y,
 			     enum nvnc_button_mask button_mask)
 {
-	// TODO: Have a seat per client
-
-	struct nvnc* nvnc = nvnc_client_get_server(client);
-	struct wayvnc* wayvnc = nvnc_get_userdata(nvnc);
+	struct wayvnc_client* wv_client = nvnc_get_userdata(client);
+	struct wayvnc* wayvnc = wv_client->server;
 
 	uint32_t xfx = 0, xfy = 0;
 	output_transform_coord(wayvnc->selected_output, x, y, &xfx, &xfy);
 
-	pointer_set(&wayvnc->pointer_backend, xfx, xfy, button_mask);
+	pointer_set(&wv_client->pointer, xfx, xfy, button_mask);
 }
 
 static void on_key_event(struct nvnc_client* client, uint32_t symbol,
                          bool is_pressed)
 {
-	struct nvnc* nvnc = nvnc_client_get_server(client);
-	struct wayvnc* wayvnc = nvnc_get_userdata(nvnc);
+	struct wayvnc_client* wv_client = nvnc_get_userdata(client);
 
-	keyboard_feed(&wayvnc->keyboard_backend, symbol, is_pressed);
+	keyboard_feed(&wv_client->keyboard, symbol, is_pressed);
 }
 
 static void on_key_code_event(struct nvnc_client* client, uint32_t code,
 		bool is_pressed)
 {
-	struct nvnc* nvnc = nvnc_client_get_server(client);
-	struct wayvnc* wayvnc = nvnc_get_userdata(nvnc);
+	struct wayvnc_client* wv_client = nvnc_get_userdata(client);
 
-	keyboard_feed_code(&wayvnc->keyboard_backend, code + 8, is_pressed);
+	keyboard_feed_code(&wv_client->keyboard, code + 8, is_pressed);
 }
 
 static void on_client_cut_text(struct nvnc* server, const char* text, uint32_t len)
@@ -596,10 +586,10 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port, bool is_unix
 		goto failure;
 	}
 
-	if (self->pointer_backend.pointer)
+	if (self->pointer_manager)
 		nvnc_set_pointer_fn(self->nvnc, on_pointer_event);
 
-	if (self->keyboard_backend.virtual_keyboard) {
+	if (self->keyboard_manager) {
 		nvnc_set_key_fn(self->nvnc, on_key_event);
 		nvnc_set_key_code_fn(self->nvnc, on_key_code_event);
 	}
@@ -827,12 +817,25 @@ static struct wayvnc_client* client_create(struct wayvnc* wayvnc,
 	self->server = wayvnc;
 	self->nvnc_client = nvnc_client;
 
+	client_init_keyboard(self);
+	client_init_pointer(self);
+
 	return self;
 }
 
 static void client_destroy(void* obj)
 {
 	struct wayvnc_client* self = obj;
+
+	if (self->keyboard.virtual_keyboard) {
+		zwp_virtual_keyboard_v1_destroy(
+				self->keyboard.virtual_keyboard);
+		keyboard_destroy(&self->keyboard);
+	}
+
+	if (self->pointer.pointer)
+		pointer_destroy(&self->pointer);
+
 	free(self);
 }
 
@@ -898,26 +901,69 @@ void parse_keyboard_option(struct wayvnc* self, char* arg)
 	self->kb_layout = arg;
 }
 
-void setup_pointer(struct wayvnc* self) {
-	self->pointer_backend.vnc = self->nvnc;
-	self->pointer_backend.output = self->selected_output;
-	if (!self->pointer_manager)
+static void client_init_pointer(struct wayvnc_client* self)
+{
+	struct wayvnc* wayvnc = self->server;
+
+	if (!wayvnc->pointer_manager)
 		return;
 
-	if (self->pointer_backend.pointer)
-		pointer_destroy(&self->pointer_backend);
+	self->pointer.vnc = self->server->nvnc;
+	self->pointer.output = self->server->selected_output;
+
+	if (self->pointer.pointer)
+		pointer_destroy(&self->pointer);
 
 	int pointer_manager_version =
-		zwlr_virtual_pointer_manager_v1_get_version(self->pointer_manager);
+		zwlr_virtual_pointer_manager_v1_get_version(wayvnc->pointer_manager);
 
-	self->pointer_backend.pointer = pointer_manager_version >= 2
+	self->pointer.pointer = pointer_manager_version >= 2
 		? zwlr_virtual_pointer_manager_v1_create_virtual_pointer_with_output(
-			self->pointer_manager, self->selected_seat->wl_seat,
-			self->selected_output->wl_output)
+			wayvnc->pointer_manager, wayvnc->selected_seat->wl_seat,
+			wayvnc->selected_output->wl_output)
 		: zwlr_virtual_pointer_manager_v1_create_virtual_pointer(
-			self->pointer_manager, self->selected_seat->wl_seat);
+			wayvnc->pointer_manager, wayvnc->selected_seat->wl_seat);
 
-	pointer_init(&self->pointer_backend);
+	if (pointer_init(&self->pointer) < 0) {
+		nvnc_log(NVNC_LOG_ERROR, "Failed to initialise pointer");
+	}
+}
+
+static void client_init_keyboard(struct wayvnc_client* self)
+{
+	struct wayvnc* wayvnc = self->server;
+
+	if (!wayvnc->keyboard_manager)
+		return;
+
+	self->keyboard.virtual_keyboard =
+		zwp_virtual_keyboard_manager_v1_create_virtual_keyboard(
+			wayvnc->keyboard_manager,
+			wayvnc->selected_seat->wl_seat);
+
+	struct xkb_rule_names rule_names = {
+		.rules = wayvnc->cfg.xkb_rules,
+		.layout = wayvnc->kb_layout ? wayvnc->kb_layout
+			: wayvnc->cfg.xkb_layout,
+		.model = wayvnc->cfg.xkb_model ? wayvnc->cfg.xkb_model
+			: "pc105",
+		.variant = wayvnc->kb_variant ? wayvnc->kb_variant :
+			wayvnc->cfg.xkb_variant,
+		.options = wayvnc->cfg.xkb_options,
+	};
+
+	if (keyboard_init(&self->keyboard, &rule_names) < 0) {
+		nvnc_log(NVNC_LOG_ERROR, "Failed to initialise keyboard");
+	}
+}
+
+static void reinitialise_pointers(struct wayvnc* self)
+{
+	struct nvnc_client* c;
+	for (c = nvnc_client_first(self->nvnc); c; c = nvnc_client_next(c)) {
+		struct wayvnc_client* client = nvnc_get_userdata(c);
+		client_init_pointer(client);
+	}
 }
 
 void log_selected_output(struct wayvnc* self)
@@ -955,7 +1001,7 @@ void switch_to_output(struct wayvnc* self, struct output* output)
 	}
 	screencopy_stop(&self->screencopy);
 	set_selected_output(self, output);
-	setup_pointer(self);
+	reinitialise_pointers(self);
 	wayvnc_start_capture_immediate(self);
 }
 
@@ -1195,29 +1241,6 @@ int main(int argc, char* argv[])
 	self.selected_seat = seat;
 	self.screencopy.rate_limit = max_rate;
 	self.screencopy.enable_linux_dmabuf = enable_gpu_features;
-
-	if (self.keyboard_manager) {
-		self.keyboard_backend.virtual_keyboard =
-			zwp_virtual_keyboard_manager_v1_create_virtual_keyboard(
-				self.keyboard_manager, self.selected_seat->wl_seat);
-
-		struct xkb_rule_names rule_names = {
-			.rules = self.cfg.xkb_rules,
-			.layout = self.kb_layout ? self.kb_layout : self.cfg.xkb_layout,
-			.model = self.cfg.xkb_model ? self.cfg.xkb_model : "pc105",
-			.variant = self.kb_variant ? self.kb_variant :
-				self.cfg.xkb_variant,
-			.options = self.cfg.xkb_options,
-		};
-
-		if (keyboard_init(&self.keyboard_backend, &rule_names) < 0) {
-			nvnc_log(NVNC_LOG_ERROR, "Failed to initialise keyboard");
-			goto failure;
-		}
-	}
-
-
-	setup_pointer(&self);
 
 #ifdef ENABLE_SCREENCOPY_DMABUF
 	if (init_render_node(&drm_fd) < 0) {
