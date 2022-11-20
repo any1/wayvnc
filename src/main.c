@@ -40,6 +40,7 @@
 #include "xdg-output-unstable-v1.h"
 #include "wlr-output-power-management-unstable-v1.h"
 #include "linux-dmabuf-unstable-v1.h"
+#include "transient-seat-v1.h"
 #include "screencopy.h"
 #include "data-control.h"
 #include "strlcpy.h"
@@ -83,9 +84,10 @@ struct wayvnc {
 	struct zwp_virtual_keyboard_manager_v1* keyboard_manager;
 	struct zwlr_virtual_pointer_manager_v1* pointer_manager;
 	struct zwlr_data_control_manager_v1* data_control_manager;
+	struct ext_transient_seat_manager_v1* transient_seat_manager;
 
 	struct output* selected_output;
-	const struct seat* selected_seat;
+	struct seat* selected_seat;
 
 	struct screencopy screencopy;
 
@@ -102,6 +104,7 @@ struct wayvnc {
 	uint32_t n_frames_captured;
 
 	bool disable_input;
+	bool use_transient_seat;
 
 	int nr_clients;
 	struct aml_ticker* performance_ticker;
@@ -116,6 +119,9 @@ struct wayvnc_client {
 	struct wayvnc* server;
 	struct nvnc_client* nvnc_client;
 
+	struct wl_seat* seat;
+	struct ext_transient_seat_v1* transient_seat;
+
 	unsigned id;
 	struct pointer pointer;
 	struct keyboard keyboard;
@@ -128,6 +134,7 @@ static void on_nvnc_client_new(struct nvnc_client* client);
 void switch_to_output(struct wayvnc*, struct output*);
 void switch_to_next_output(struct wayvnc*);
 void switch_to_prev_output(struct wayvnc*);
+static void client_init_seat(struct wayvnc_client* self);
 static void client_init_pointer(struct wayvnc_client* self);
 static void client_init_keyboard(struct wayvnc_client* self);
 static void client_init_data_control(struct wayvnc_client* self);
@@ -155,7 +162,7 @@ static bool registry_add_input(void* data, struct wl_registry* registry,
 
 		struct seat* seat = seat_new(wl_seat, id);
 		if (!seat) {
-			wl_seat_destroy(wl_seat);
+			wl_seat_release(wl_seat);
 			return true;
 		}
 
@@ -180,6 +187,12 @@ static bool registry_add_input(void* data, struct wl_registry* registry,
 	if (strcmp(interface, zwlr_data_control_manager_v1_interface.name) == 0) {
 		self->data_control_manager = wl_registry_bind(registry, id,
 				&zwlr_data_control_manager_v1_interface, 2);
+		return true;
+	}
+
+	if (strcmp(interface, ext_transient_seat_manager_v1_interface.name) == 0) {
+		self->transient_seat_manager = wl_registry_bind(registry, id,
+				&ext_transient_seat_manager_v1_interface, 1);
 		return true;
 	}
 
@@ -413,6 +426,11 @@ static int init_wayland(struct wayvnc* self)
 	if (!self->keyboard_manager && !self->disable_input) {
 		nvnc_log(NVNC_LOG_ERROR, "Virtual Keyboard protocol not supported by compositor.");
 		nvnc_log(NVNC_LOG_ERROR, "wayvnc may still work if started with --disable-input.");
+		goto failure;
+	}
+
+	if (!self->transient_seat_manager && self->use_transient_seat) {
+		nvnc_log(NVNC_LOG_ERROR, "Transient seat protocol not supported by compositor.");
 		goto failure;
 	}
 
@@ -1000,6 +1018,7 @@ static struct wayvnc_client* client_create(struct wayvnc* wayvnc,
 	self->nvnc_client = nvnc_client;
 
 	self->id = next_client_id++;
+	client_init_seat(self);
 	client_init_keyboard(self);
 	client_init_pointer(self);
 	client_init_data_control(self);
@@ -1022,6 +1041,10 @@ static void client_destroy(void* obj)
 
 	if (self->data_control.manager)
 		data_control_destroy(&self->data_control);
+
+	if (self->server->use_transient_seat) {
+		ext_transient_seat_v1_destroy(self->transient_seat);
+	}
 
 	free(self);
 }
@@ -1107,13 +1130,70 @@ static void client_init_pointer(struct wayvnc_client* self)
 
 	self->pointer.pointer = pointer_manager_version >= 2
 		? zwlr_virtual_pointer_manager_v1_create_virtual_pointer_with_output(
-			wayvnc->pointer_manager, wayvnc->selected_seat->wl_seat,
+			wayvnc->pointer_manager, self->seat,
 			wayvnc->selected_output->wl_output)
 		: zwlr_virtual_pointer_manager_v1_create_virtual_pointer(
-			wayvnc->pointer_manager, wayvnc->selected_seat->wl_seat);
+			wayvnc->pointer_manager, self->seat);
 
 	if (pointer_init(&self->pointer) < 0) {
 		nvnc_log(NVNC_LOG_ERROR, "Failed to initialise pointer");
+	}
+}
+
+static void handle_transient_seat_ready(void* data,
+		struct ext_transient_seat_v1* transient_seat,
+		uint32_t global_name)
+{
+	(void)transient_seat;
+
+	struct wayvnc_client* client = data;
+	struct wayvnc* wayvnc = client->server;
+
+	struct seat* seat = seat_find_by_id(&wayvnc->seats, global_name);
+	assert(seat);
+
+	client->seat = seat->wl_seat;
+}
+
+static void handle_transient_seat_denied(void* data,
+		struct ext_transient_seat_v1* transient_seat)
+{
+	(void)transient_seat;
+
+	struct wayvnc_client* client = data;
+	struct wayvnc* wayvnc = client->server;
+
+	// TODO: Should this perhaps be fatal?
+	nvnc_log(NVNC_LOG_WARNING, "Transient seat denied");
+
+	client->seat = wayvnc->selected_seat->wl_seat;
+}
+
+static void client_init_seat(struct wayvnc_client* self)
+{
+	struct wayvnc* wayvnc = self->server;
+
+	if (wayvnc->disable_input)
+		return;
+
+	if (wayvnc->use_transient_seat) {
+		self->transient_seat = ext_transient_seat_manager_v1_create(
+				wayvnc->transient_seat_manager);
+
+		static const struct ext_transient_seat_v1_listener listener = {
+			.ready = handle_transient_seat_ready,
+			.denied = handle_transient_seat_denied,
+		};
+		ext_transient_seat_v1_add_listener(self->transient_seat,
+				&listener, self);
+
+		// TODO: Make this asynchronous
+		wl_display_roundtrip(wayvnc->display);
+		wl_display_dispatch(wayvnc->display);
+
+		assert(self->seat);
+	} else {
+		self->seat = wayvnc->selected_seat->wl_seat;
 	}
 }
 
@@ -1126,8 +1206,7 @@ static void client_init_keyboard(struct wayvnc_client* self)
 
 	self->keyboard.virtual_keyboard =
 		zwp_virtual_keyboard_manager_v1_create_virtual_keyboard(
-			wayvnc->keyboard_manager,
-			wayvnc->selected_seat->wl_seat);
+			wayvnc->keyboard_manager, self->seat);
 
 	struct xkb_rule_names rule_names = {
 		.rules = wayvnc->cfg.xkb_rules,
@@ -1163,7 +1242,7 @@ static void client_init_data_control(struct wayvnc_client* self)
 
 	self->data_control.manager = wayvnc->data_control_manager;
 	data_control_init(&self->data_control, wayvnc->display, wayvnc->nvnc,
-			wayvnc->selected_seat->wl_seat);
+			self->seat);
 }
 
 void log_selected_output(struct wayvnc* self)
@@ -1266,6 +1345,7 @@ int main(int argc, char* argv[])
 	bool show_performance = false;
 	int max_rate = 30;
 	bool disable_input = false;
+	bool use_transient_seat = false;
 
 	int drm_fd MAYBE_UNUSED = -1;
 
@@ -1290,6 +1370,8 @@ int main(int argc, char* argv[])
 		  "Select seat by name." },
 		{ 'S', "socket", "<path>",
 		  "Control socket path." },
+		{ 't', "transient-seat", NULL,
+		  "Use transient seat." },
 		{ 'r', "render-cursor", NULL,
 		  "Enable overlay cursor rendering." },
 		{ 'f', "max-fps", "<fps>",
@@ -1342,6 +1424,7 @@ int main(int argc, char* argv[])
 	log_level = log_level_from_string(
 			option_parser_get_value(&option_parser, "log-level"));
 	max_rate = atoi(option_parser_get_value(&option_parser, "max-fps"));
+	use_transient_seat = option_parser_get_value(&option_parser, "transient-seat");
 
 	keyboard_options = option_parser_get_value(&option_parser, "keyboard");
 	if (keyboard_options)
@@ -1358,6 +1441,16 @@ int main(int argc, char* argv[])
 
 	if (seat_name && disable_input) {
 		nvnc_log(NVNC_LOG_ERROR, "seat and disable-input are conflicting options");
+		return 1;
+	}
+
+	if (use_transient_seat && disable_input) {
+		nvnc_log(NVNC_LOG_ERROR, "transient-seat and disable-input are conflicting options");
+		return 1;
+	}
+
+	if (seat_name && use_transient_seat) {
+		nvnc_log(NVNC_LOG_ERROR, "transient seat and seat are conflicting options");
 		return 1;
 	}
 
@@ -1386,6 +1479,7 @@ int main(int argc, char* argv[])
 	if (!port) port = DEFAULT_PORT;
 
 	self.disable_input = disable_input;
+	self.use_transient_seat = use_transient_seat;
 
 	if (init_wayland(&self) < 0) {
 		nvnc_log(NVNC_LOG_ERROR, "Failed to initialise wayland");
@@ -1415,7 +1509,7 @@ int main(int argc, char* argv[])
 			nvnc_log(NVNC_LOG_ERROR, "No such seat");
 			goto failure;
 		}
-	} else if (!self.disable_input) {
+	} else if (!self.disable_input && !self.use_transient_seat) {
 		seat = seat_first(&self.seats);
 		if (!seat) {
 			nvnc_log(NVNC_LOG_ERROR, "No seat found");
