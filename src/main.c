@@ -80,12 +80,12 @@ struct wayvnc {
 	struct zxdg_output_manager_v1* xdg_output_manager;
 	struct zwp_virtual_keyboard_manager_v1* keyboard_manager;
 	struct zwlr_virtual_pointer_manager_v1* pointer_manager;
+	struct zwlr_data_control_manager_v1* data_control_manager;
 
 	struct output* selected_output;
 	const struct seat* selected_seat;
 
 	struct screencopy screencopy;
-	struct data_control data_control;
 
 	struct aml_handler* wayland_handler;
 	struct aml_signal* signal_handler;
@@ -113,6 +113,7 @@ struct wayvnc_client {
 
 	struct pointer pointer;
 	struct keyboard keyboard;
+	struct data_control data_control;
 };
 
 void wayvnc_exit(struct wayvnc* self);
@@ -123,6 +124,7 @@ void switch_to_next_output(struct wayvnc*);
 void switch_to_prev_output(struct wayvnc*);
 static void client_init_pointer(struct wayvnc_client* self);
 static void client_init_keyboard(struct wayvnc_client* self);
+static void client_init_data_control(struct wayvnc_client* self);
 
 struct wl_shm* wl_shm = NULL;
 struct zwp_linux_dmabuf_v1* zwp_linux_dmabuf = NULL;
@@ -323,8 +325,8 @@ void wayvnc_destroy(struct wayvnc* self)
 	if (self->pointer_manager)
 		zwlr_virtual_pointer_manager_v1_destroy(self->pointer_manager);
 
-	if (self->data_control.manager)
-		zwlr_data_control_manager_v1_destroy(self->data_control.manager);
+	if (self->data_control_manager)
+		zwlr_data_control_manager_v1_destroy(self->data_control_manager);
 
 	if (self->screencopy.manager)
 		zwlr_screencopy_manager_v1_destroy(self->screencopy.manager);
@@ -517,12 +519,13 @@ static void on_key_code_event(struct nvnc_client* client, uint32_t code,
 	keyboard_feed_code(&wv_client->keyboard, code + 8, is_pressed);
 }
 
-static void on_client_cut_text(struct nvnc* server, const char* text, uint32_t len)
+static void on_client_cut_text(struct nvnc_client* nvnc_client,
+		const char* text, uint32_t len)
 {
-	struct wayvnc* wayvnc = nvnc_get_userdata(server);
+	struct wayvnc_client* client = nvnc_get_userdata(nvnc_client);
 
-	if (!wayvnc->disable_input && wayvnc->data_control.manager) {
-		data_control_to_clipboard(&wayvnc->data_control, text, len);
+	if (client->data_control.manager) {
+		data_control_to_clipboard(&client->data_control, text, len);
 	}
 }
 
@@ -595,8 +598,7 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port, bool is_unix
 	}
 
 	nvnc_set_new_client_fn(self->nvnc, on_nvnc_client_new);
-
-	nvnc_set_cut_text_receive_fn(self->nvnc, on_client_cut_text);
+	nvnc_set_cut_text_fn(self->nvnc, on_client_cut_text);
 
 	struct nvnc_fb* placeholder_fb =
 		create_placeholder_buffer(self->selected_output->width,
@@ -819,6 +821,7 @@ static struct wayvnc_client* client_create(struct wayvnc* wayvnc,
 
 	client_init_keyboard(self);
 	client_init_pointer(self);
+	client_init_data_control(self);
 
 	return self;
 }
@@ -835,6 +838,9 @@ static void client_destroy(void* obj)
 
 	if (self->pointer.pointer)
 		pointer_destroy(&self->pointer);
+
+	if (self->data_control.manager)
+		data_control_destroy(&self->data_control);
 
 	free(self);
 }
@@ -964,6 +970,18 @@ static void reinitialise_pointers(struct wayvnc* self)
 		struct wayvnc_client* client = nvnc_get_userdata(c);
 		client_init_pointer(client);
 	}
+}
+
+static void client_init_data_control(struct wayvnc_client* self)
+{
+	struct wayvnc* wayvnc = self->server;
+
+	if (!wayvnc->data_control_manager)
+		return;
+
+	self->data_control.manager = wayvnc->data_control_manager;
+	data_control_init(&self->data_control, wayvnc->display, wayvnc->nvnc,
+			wayvnc->selected_seat->wl_seat);
 }
 
 void log_selected_output(struct wayvnc* self)
@@ -1271,10 +1289,6 @@ int main(int argc, char* argv[])
 		goto capture_failure;
 	}
 
-	if (self.data_control.manager)
-		data_control_init(&self.data_control, self.display, self.nvnc,
-				self.selected_seat->wl_seat);
-
 	self.screencopy.overlay_cursor = overlay_cursor;
 
 	if (show_performance)
@@ -1309,8 +1323,6 @@ int main(int argc, char* argv[])
 		zwp_linux_dmabuf_v1_destroy(zwp_linux_dmabuf);
 	if (self.screencopy.manager)
 		screencopy_destroy(&self.screencopy);
-	if (self.data_control.manager)
-		data_control_destroy(&self.data_control);
 #ifdef ENABLE_SCREENCOPY_DMABUF
 	if (gbm_device) {
 		gbm_device_destroy(gbm_device);
