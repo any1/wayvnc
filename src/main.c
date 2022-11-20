@@ -109,9 +109,14 @@ struct wayvnc {
 	struct ctl* ctl;
 };
 
+struct wayvnc_client {
+	struct wayvnc* server;
+	struct nvnc_client* nvnc_client;
+};
+
 void wayvnc_exit(struct wayvnc* self);
 void on_capture_done(struct screencopy* sc);
-static void on_client_new(struct nvnc_client* client);
+static void on_nvnc_client_new(struct nvnc_client* client);
 void switch_to_output(struct wayvnc*, struct output*);
 void switch_to_next_output(struct wayvnc*);
 void switch_to_prev_output(struct wayvnc*);
@@ -599,7 +604,7 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port, bool is_unix
 		nvnc_set_key_code_fn(self->nvnc, on_key_code_event);
 	}
 
-	nvnc_set_new_client_fn(self->nvnc, on_client_new);
+	nvnc_set_new_client_fn(self->nvnc, on_nvnc_client_new);
 
 	nvnc_set_cut_text_receive_fn(self->nvnc, on_client_cut_text);
 
@@ -812,7 +817,26 @@ static void stop_performance_ticker(struct wayvnc* self)
 	aml_stop(aml_get_default(), self->performance_ticker);
 }
 
-static void on_client_cleanup(struct nvnc_client* client)
+static struct wayvnc_client* client_create(struct wayvnc* wayvnc,
+		struct nvnc_client* nvnc_client)
+{
+	struct wayvnc_client* self = calloc(1, sizeof(*self));
+	if (!self)
+		return NULL;
+
+	self->server = wayvnc;
+	self->nvnc_client = nvnc_client;
+
+	return self;
+}
+
+static void client_destroy(void* obj)
+{
+	struct wayvnc_client* self = obj;
+	free(self);
+}
+
+static void on_nvnc_client_cleanup(struct nvnc_client* client)
 {
 	struct nvnc* nvnc = nvnc_client_get_server(client);
 	struct wayvnc* self = nvnc_get_userdata(nvnc);
@@ -835,10 +859,14 @@ static void on_client_cleanup(struct nvnc_client* client)
 	}
 }
 
-static void on_client_new(struct nvnc_client* client)
+static void on_nvnc_client_new(struct nvnc_client* client)
 {
 	struct nvnc* nvnc = nvnc_client_get_server(client);
 	struct wayvnc* self = nvnc_get_userdata(nvnc);
+
+	struct wayvnc_client* wayvnc_client = client_create(self, client);
+	assert(wayvnc_client);
+	nvnc_set_userdata(client, wayvnc_client, client_destroy);
 
 	if (self->nr_clients == 0) {
 		nvnc_log(NVNC_LOG_INFO, "Starting screen capture");
@@ -846,7 +874,7 @@ static void on_client_new(struct nvnc_client* client)
 		wayvnc_start_capture_immediate(self);
 	}
 	self->nr_clients++;
-	nvnc_set_client_cleanup_fn(client, on_client_cleanup);
+	nvnc_set_client_cleanup_fn(client, on_nvnc_client_cleanup);
 	nvnc_log(NVNC_LOG_DEBUG, "Client connected, new client count: %d",
 			self->nr_clients);
 
