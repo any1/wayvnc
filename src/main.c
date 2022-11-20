@@ -85,7 +85,7 @@ struct wayvnc {
 	struct zwlr_data_control_manager_v1* data_control_manager;
 
 	struct output* selected_output;
-	const struct seat* selected_seat;
+	struct seat* selected_seat;
 
 	struct screencopy screencopy;
 
@@ -116,6 +116,8 @@ struct wayvnc_client {
 	struct wayvnc* server;
 	struct nvnc_client* nvnc_client;
 
+	struct wl_seat* seat;
+
 	unsigned id;
 	struct pointer pointer;
 	struct keyboard keyboard;
@@ -128,6 +130,7 @@ static void on_nvnc_client_new(struct nvnc_client* client);
 void switch_to_output(struct wayvnc*, struct output*);
 void switch_to_next_output(struct wayvnc*);
 void switch_to_prev_output(struct wayvnc*);
+static void client_init_seat(struct wayvnc_client* self);
 static void client_init_pointer(struct wayvnc_client* self);
 static void client_init_keyboard(struct wayvnc_client* self);
 static void client_init_data_control(struct wayvnc_client* self);
@@ -155,7 +158,7 @@ static bool registry_add_input(void* data, struct wl_registry* registry,
 
 		struct seat* seat = seat_new(wl_seat, id);
 		if (!seat) {
-			wl_seat_destroy(wl_seat);
+			wl_seat_release(wl_seat);
 			return true;
 		}
 
@@ -1000,6 +1003,7 @@ static struct wayvnc_client* client_create(struct wayvnc* wayvnc,
 	self->nvnc_client = nvnc_client;
 
 	self->id = next_client_id++;
+	client_init_seat(self);
 	client_init_keyboard(self);
 	client_init_pointer(self);
 	client_init_data_control(self);
@@ -1107,14 +1111,24 @@ static void client_init_pointer(struct wayvnc_client* self)
 
 	self->pointer.pointer = pointer_manager_version >= 2
 		? zwlr_virtual_pointer_manager_v1_create_virtual_pointer_with_output(
-			wayvnc->pointer_manager, wayvnc->selected_seat->wl_seat,
+			wayvnc->pointer_manager, self->seat,
 			wayvnc->selected_output->wl_output)
 		: zwlr_virtual_pointer_manager_v1_create_virtual_pointer(
-			wayvnc->pointer_manager, wayvnc->selected_seat->wl_seat);
+			wayvnc->pointer_manager, self->seat);
 
 	if (pointer_init(&self->pointer) < 0) {
 		nvnc_log(NVNC_LOG_ERROR, "Failed to initialise pointer");
 	}
+}
+
+static void client_init_seat(struct wayvnc_client* self)
+{
+	struct wayvnc* wayvnc = self->server;
+
+	if (wayvnc->disable_input)
+		return;
+
+	self->seat = wayvnc->selected_seat->wl_seat;
 }
 
 static void client_init_keyboard(struct wayvnc_client* self)
@@ -1126,8 +1140,7 @@ static void client_init_keyboard(struct wayvnc_client* self)
 
 	self->keyboard.virtual_keyboard =
 		zwp_virtual_keyboard_manager_v1_create_virtual_keyboard(
-			wayvnc->keyboard_manager,
-			wayvnc->selected_seat->wl_seat);
+			wayvnc->keyboard_manager, self->seat);
 
 	struct xkb_rule_names rule_names = {
 		.rules = wayvnc->cfg.xkb_rules,
@@ -1163,7 +1176,7 @@ static void client_init_data_control(struct wayvnc_client* self)
 
 	self->data_control.manager = wayvnc->data_control_manager;
 	data_control_init(&self->data_control, wayvnc->display, wayvnc->nvnc,
-			wayvnc->selected_seat->wl_seat);
+			self->seat);
 }
 
 void log_selected_output(struct wayvnc* self)
