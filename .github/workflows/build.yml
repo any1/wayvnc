@@ -1,0 +1,31 @@
+name: Build check
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: checkout aml
+      uses: actions/checkout@v3
+      with:
+        repository: any1/aml
+        path: subprojects/aml
+    - name: checkout neatvnc
+      uses: actions/checkout@v3
+      with:
+        repository: any1/neatvnc
+        path: subprojects/neatvnc
+    - name: setup
+      run: sudo apt install -y meson libdrm-dev libxkbcommon-dev libwlroots-dev libjansson-dev
+    - name: configure
+      run: meson build
+    - name: make
+      run: ninja -C build
