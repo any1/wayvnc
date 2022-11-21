@@ -1,0 +1,30 @@
+name: CONTRIBUTING.md compliance
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - reopened
+
+jobs:
+  pr_description:
+    runs-on: ubuntu-latest
+    steps:
+    - name: PR description contains appropriate notice text
+      run: |-
+        tr -s '[:space:]' ' ' \
+          <<< '${{ github.event.pull_request.body }}' \
+        | \
+        grep -qF \
+          "$(base64 -d <<< 'SSBoYXZlIHJlYWQgYW5kIHVuZGVyc3Rvb2QgQ09OVFJJQlVUSU5HLm1kIGFuZCBpdHMgYXNzb2NpYXRlZCBkb2N1bWVudHMuCg==')" \
+        || { \
+          echo >&2; \
+          echo "Ypur PR description is missing something." >&2; \
+          echo >&2; \
+          echo "Hint: Have you read CONTRIBUTING.md?" >&2; \
+          echo >&2; \
+          exit 1; \
+        }
+
+
+
