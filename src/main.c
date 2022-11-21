@@ -170,7 +170,7 @@ static bool registry_add_input(void* data, struct wl_registry* registry,
 	}
 
 	if (strcmp(interface, zwlr_data_control_manager_v1_interface.name) == 0) {
-		self->data_control.manager = wl_registry_bind(registry, id,
+		self->data_control_manager = wl_registry_bind(registry, id,
 				&zwlr_data_control_manager_v1_interface, 2);
 		return true;
 	}
