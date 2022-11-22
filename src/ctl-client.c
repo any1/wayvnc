@@ -392,6 +392,26 @@ static void pretty_version(json_t* data)
 		printf("  %s: %s\n", key, json_string_value(value));
 }
 
+static void pretty_client_list(json_t* data)
+{
+	int n = json_array_size(data);
+	printf("There %s %d VNC client%s connected%s\n", (n == 1) ? "is" : "are",
+			n, (n == 1) ? "" : "s", (n > 0) ? ":" : ".");
+	int i;
+	json_t* value;
+	json_array_foreach(data, i, value) {
+		char* id = NULL;
+		char* hostname = NULL;
+		char* username = NULL;
+		json_unpack(value, "{s:s, s?s, s?s}", "id", &id, "hostname",
+				&hostname, "username", &username);
+		printf("  client[%s]: ", id);
+		if (username)
+			printf("%s@", username);
+		printf("%s\n", hostname ? hostname : "<unknown>");
+	}
+}
+
 static void pretty_print(json_t* data,
 		struct jsonipc_request* request)
 {
@@ -400,6 +420,8 @@ static void pretty_print(json_t* data,
 		print_help(data, request->params);
 	else if (strcmp(method, "version") == 0)
 		pretty_version(data);
+	else if (strcmp(method, "get-clients") == 0)
+		pretty_client_list(data);
 	else
 		json_dumpf(data, stdout, JSON_INDENT(2));
 }

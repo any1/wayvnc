@@ -17,10 +17,15 @@
 #pragma once
 
 #include "output.h"
-#include <wayland-client.h>
 
 struct ctl;
 struct cmd_response;
+
+struct ctl_server_vnc_client {
+	char id[64];
+	char hostname[256];
+	char username[256];
+};
 
 struct ctl_server_actions {
 	void* userdata;
@@ -28,6 +33,12 @@ struct ctl_server_actions {
 			enum output_cycle_direction direction);
 	struct cmd_response* (*on_output_switch)(struct ctl*,
 			const char* output_name);
+
+	// Return number of elements created
+	// Allocate 'clients' array or set ton ULL if none
+	// Receiver will free(clients) when done.
+	int (*get_client_list)(struct ctl*,
+			struct ctl_server_vnc_client** clients);
 };
 
 struct ctl* ctl_server_new(const char* socket_path,

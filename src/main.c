@@ -464,6 +464,35 @@ struct cmd_response* on_output_switch(struct ctl* ctl,
 	return cmd_ok();
 }
 
+static int get_client_list(struct ctl* ctl,
+		struct ctl_server_vnc_client** clients)
+{
+	struct wayvnc* self = ctl_server_userdata(ctl);
+	if (self->nr_clients == 0) {
+		*clients = NULL;
+		return 0;
+	}
+	*clients = calloc(self->nr_clients, sizeof(**clients));
+	struct nvnc_client* nvnc_client = nvnc_client_first(self->nvnc);
+	for (int i = 0; i < self->nr_clients && nvnc_client; ++i) {
+		struct wayvnc_client* client = nvnc_get_userdata(nvnc_client);
+		struct ctl_server_vnc_client* ctl_client =&(*clients)[i];
+
+		snprintf(ctl_client->id, sizeof(ctl_client->id), "%u",
+				client->id);
+		const char* hostname = nvnc_client_get_hostname(nvnc_client);
+		if (hostname)
+			strlcpy(ctl_client->hostname, hostname,
+					sizeof(ctl_client->hostname));
+		const char* username = nvnc_client_get_auth_username(nvnc_client);
+		if (username)
+			strlcpy(ctl_client->username, username,
+					sizeof(ctl_client->username));
+		nvnc_client = nvnc_client_next(nvnc_client);
+	}
+	return self->nr_clients;
+}
+
 int init_main_loop(struct wayvnc* self)
 {
 	struct aml* loop = aml_get_default();
@@ -1304,6 +1333,7 @@ int main(int argc, char* argv[])
 		.userdata = &self,
 		.on_output_cycle = on_output_cycle,
 		.on_output_switch = on_output_switch,
+		.get_client_list = get_client_list,
 	};
 	self.ctl = ctl_server_new(socket_path, &ctl_actions);
 	if (!self.ctl)
