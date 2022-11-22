@@ -127,6 +127,8 @@ int main(int argc, char* argv[])
 		}
 	}
 	argc -= optind;
+	if (argc <= 0)
+		return wayvncctl_usage(stderr, 1);
 	argv = &argv[optind];
 
 	ctl_client_debug_log(verbose);
