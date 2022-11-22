@@ -111,6 +111,7 @@ struct wayvnc_client {
 	struct wayvnc* server;
 	struct nvnc_client* nvnc_client;
 
+	unsigned id;
 	struct pointer pointer;
 	struct keyboard keyboard;
 	struct data_control data_control;
@@ -809,6 +810,8 @@ static void stop_performance_ticker(struct wayvnc* self)
 	aml_stop(aml_get_default(), self->performance_ticker);
 }
 
+static unsigned next_client_id = 1;
+
 static struct wayvnc_client* client_create(struct wayvnc* wayvnc,
 		struct nvnc_client* nvnc_client)
 {
@@ -819,6 +822,7 @@ static struct wayvnc_client* client_create(struct wayvnc* wayvnc,
 	self->server = wayvnc;
 	self->nvnc_client = nvnc_client;
 
+	self->id = next_client_id++;
 	client_init_keyboard(self);
 	client_init_pointer(self);
 	client_init_data_control(self);
@@ -847,6 +851,7 @@ static void client_destroy(void* obj)
 
 static void on_nvnc_client_cleanup(struct nvnc_client* client)
 {
+	struct wayvnc_client* wayvnc_client = nvnc_get_userdata(client);
 	struct nvnc* nvnc = nvnc_client_get_server(client);
 	struct wayvnc* self = nvnc_get_userdata(nvnc);
 
@@ -854,8 +859,8 @@ static void on_nvnc_client_cleanup(struct nvnc_client* client)
 	nvnc_log(NVNC_LOG_DEBUG, "Client disconnected, new client count: %d",
 			self->nr_clients);
 
-	char id[11];
-	snprintf(id, 11, "%p", nvnc);
+	char id[64];
+	snprintf(id, sizeof(id), "%u", wayvnc_client->id);
 	ctl_server_event_disconnected(self->ctl, id,
 			nvnc_client_get_hostname(client),
 			nvnc_client_get_auth_username(client),
@@ -887,8 +892,8 @@ static void on_nvnc_client_new(struct nvnc_client* client)
 	nvnc_log(NVNC_LOG_DEBUG, "Client connected, new client count: %d",
 			self->nr_clients);
 
-	char id[11];
-	snprintf(id, 11, "%p", nvnc);
+	char id[64];
+	snprintf(id, sizeof(id), "%u", wayvnc_client->id);
 	ctl_server_event_connected(self->ctl, id,
 			nvnc_client_get_hostname(client),
 			nvnc_client_get_auth_username(client),
