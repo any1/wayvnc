@@ -46,6 +46,7 @@ enum cmd_type {
 	CMD_VERSION,
 	CMD_EVENT_RECEIVE,
 	CMD_SET_OUTPUT,
+	CMD_GET_CLIENTS,
 	CMD_UNKNOWN,
 };
 #define CMD_LIST_LEN CMD_UNKNOWN
@@ -94,6 +95,11 @@ static struct cmd_info cmd_list[] = {
 			{NULL, NULL},
 		}
 	},
+	[CMD_GET_CLIENTS] = { "get-clients",
+		"Return a list of all currently connected  VNC sessions",
+		{{NULL, NULL}}
+	},
+
 };
 
 #define CLIENT_EVENT_PARAMS(including) \
@@ -283,6 +289,7 @@ static struct cmd* parse_command(struct jsonipc_request* ipc,
 		break;
 	case CMD_VERSION:
 	case CMD_EVENT_RECEIVE:
+	case CMD_GET_CLIENTS:
 		cmd = calloc(1, sizeof(*cmd));
 		cmd->type = cmd_type;
 		break;
@@ -308,6 +315,7 @@ static void client_destroy(struct ctl_client* self)
 	wl_list_remove(&self->link);
 	free(self);
 }
+
 static void set_internal_error(struct cmd_response** err, int code,
 		const char* fmt, ...)
 {
@@ -419,6 +427,27 @@ static struct cmd_response* generate_version_object()
 	return response;
 }
 
+static struct cmd_response* generate_vnc_client_list(struct ctl* self)
+{
+	struct ctl_server_vnc_client* clients;
+	size_t num_clients = self->actions.get_client_list(self, &clients);
+	struct cmd_response* response = cmd_ok();
+
+	response->data = json_array();
+	for (int i = 0; i < num_clients; ++i) {
+		json_t* packed = json_pack("{s:s}", "id", clients[i].id);
+		if (clients[i].hostname[0] != '\0')
+			json_object_set_new(packed, "hostname",
+					json_string(clients[i].hostname));
+		if (clients[i].username[0] != '\0')
+			json_object_set_new(packed, "username",
+					json_string(clients[i].username));
+		json_array_append_new(response->data, packed);
+	}
+	free(clients);
+	return response;
+}
+
 static struct cmd_response* ctl_server_dispatch_cmd(struct ctl* self,
 		struct ctl_client* client, struct cmd* cmd)
 {
@@ -446,6 +475,9 @@ static struct cmd_response* ctl_server_dispatch_cmd(struct ctl* self,
 	case CMD_EVENT_RECEIVE:
 		client->accept_events = true;
 		response = cmd_ok();
+		break;
+	case CMD_GET_CLIENTS:
+		response = generate_vnc_client_list(self);
 		break;
 	case CMD_UNKNOWN:
 		break;

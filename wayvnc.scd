@@ -199,6 +199,11 @@ which parameters are supplied:
 *switch-to=output-name*
 	Switch to a specific output by name.
 
+_GET-CLIENTS_
+
+The *get-clients* command retrieves a list of all VNC clients currently
+connected to wayvnc.
+
 ## IPC EVENTS
 
 _CLIENT-CONNECTED_
