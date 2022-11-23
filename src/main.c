@@ -493,6 +493,30 @@ static int get_client_list(struct ctl* ctl,
 	return self->nr_clients;
 }
 
+static int get_output_list(struct ctl* ctl,
+		struct ctl_server_output** outputs)
+{
+	struct wayvnc* self = ctl_server_userdata(ctl);
+	int n = wl_list_length(&self->outputs);
+	if (n == 0) {
+		*outputs = NULL;
+		return 0;
+	}
+	*outputs = calloc(n, sizeof(**outputs));
+	struct output* output;
+	struct ctl_server_output* item = *outputs;
+	wl_list_for_each(output, &self->outputs, link) {
+		strlcpy(item->name, output->name, sizeof(item->name));
+		strlcpy(item->description, output->description,
+				sizeof(item->description));
+		item->height = output->height;
+		item->width = output->width;
+		item->captured = (output->id == self->selected_output->id);
+		item++;
+	}
+	return n;
+}
+
 int init_main_loop(struct wayvnc* self)
 {
 	struct aml* loop = aml_get_default();
@@ -1334,6 +1358,7 @@ int main(int argc, char* argv[])
 		.on_output_cycle = on_output_cycle,
 		.on_output_switch = on_output_switch,
 		.get_client_list = get_client_list,
+		.get_output_list = get_output_list,
 	};
 	self.ctl = ctl_server_new(socket_path, &ctl_actions);
 	if (!self.ctl)

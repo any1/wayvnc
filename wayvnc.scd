@@ -68,11 +68,15 @@ is also possible to run wayvnc without a physical display attached.
 
 ## MULTIPLE OUTPUTS
 
-If the Wayland session consists of  multiple outputs, only one will be captured.
+If the Wayland session consists of multiple outputs, only one will be captured.
 By default this will be the first one, but can be specified by the _-o_ command
 line argument. The argument accepts the short name such as _eDP-1_ or _DP-4_.
 Running wayvnc in verbose mode (_-v_) will display the names of all outputs on
-startup.
+startup, or you can query them at runtime via the *wayvncctl get-outputs*
+command.
+
+You can also change which output is being captured on the fly via the *wayvncctl
+set-output* command.
 
 # CONFIGURATION
 
@@ -203,6 +207,11 @@ _GET-CLIENTS_
 
 The *get-clients* command retrieves a list of all VNC clients currently
 connected to wayvnc.
+
+_GET-OUTPUTS_
+
+The *get-outputs* command retrieves a list of all outputs known to wayvnc and
+whether or not each one is currently being captured.
 
 ## IPC EVENTS
 

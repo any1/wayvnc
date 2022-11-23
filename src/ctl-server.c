@@ -47,6 +47,7 @@ enum cmd_type {
 	CMD_EVENT_RECEIVE,
 	CMD_SET_OUTPUT,
 	CMD_GET_CLIENTS,
+	CMD_GET_OUTPUTS,
 	CMD_UNKNOWN,
 };
 #define CMD_LIST_LEN CMD_UNKNOWN
@@ -99,7 +100,10 @@ static struct cmd_info cmd_list[] = {
 		"Return a list of all currently connected  VNC sessions",
 		{{NULL, NULL}}
 	},
-
+	[CMD_GET_OUTPUTS] = { "get-outputs",
+		"Return a list of all currently detected Wayland outputs",
+		{{NULL, NULL}}
+	},
 };
 
 #define CLIENT_EVENT_PARAMS(including) \
@@ -290,6 +294,7 @@ static struct cmd* parse_command(struct jsonipc_request* ipc,
 	case CMD_VERSION:
 	case CMD_EVENT_RECEIVE:
 	case CMD_GET_CLIENTS:
+	case CMD_GET_OUTPUTS:
 		cmd = calloc(1, sizeof(*cmd));
 		cmd->type = cmd_type;
 		break;
@@ -448,6 +453,25 @@ static struct cmd_response* generate_vnc_client_list(struct ctl* self)
 	return response;
 }
 
+static struct cmd_response* generate_output_list(struct ctl* self)
+{
+	struct ctl_server_output* outputs;
+	size_t num_outputs = self->actions.get_output_list(self, &outputs);
+	struct cmd_response* response = cmd_ok();
+
+	response->data = json_array();
+	for (int i = 0; i < num_outputs; ++i)
+		json_array_append_new(response->data, json_pack(
+					"{s:s, s:s, s:i, s:i, s:b}",
+				"name", outputs[i].name,
+				"description", outputs[i].description,
+				"height", outputs[i].height,
+				"width", outputs[i].width,
+				"captured", outputs[i].captured));
+	free(outputs);
+	return response;
+}
+
 static struct cmd_response* ctl_server_dispatch_cmd(struct ctl* self,
 		struct ctl_client* client, struct cmd* cmd)
 {
@@ -478,6 +502,9 @@ static struct cmd_response* ctl_server_dispatch_cmd(struct ctl* self,
 		break;
 	case CMD_GET_CLIENTS:
 		response = generate_vnc_client_list(self);
+		break;
+	case CMD_GET_OUTPUTS:
+		response = generate_output_list(self);
 		break;
 	case CMD_UNKNOWN:
 		break;

@@ -27,6 +27,14 @@ struct ctl_server_vnc_client {
 	char username[256];
 };
 
+struct ctl_server_output {
+	char name[65];
+	char description[128];
+	unsigned height;
+	unsigned width;
+	bool captured;
+};
+
 struct ctl_server_actions {
 	void* userdata;
 	struct cmd_response* (*on_output_cycle)(struct ctl*,
@@ -39,6 +47,12 @@ struct ctl_server_actions {
 	// Receiver will free(clients) when done.
 	int (*get_client_list)(struct ctl*,
 			struct ctl_server_vnc_client** clients);
+
+	// Return number of elements created
+	// Allocate 'outputs' array or set to NULL if none
+	// Receiver will free(outputs) when done.
+	int (*get_output_list)(struct ctl*,
+			struct ctl_server_output** outputs);
 };
 
 struct ctl* ctl_server_new(const char* socket_path,
