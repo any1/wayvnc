@@ -412,6 +412,29 @@ static void pretty_client_list(json_t* data)
 	}
 }
 
+static void pretty_output_list(json_t* data)
+{
+	int n = json_array_size(data);
+	printf("There %s %d output%s%s\n", (n == 1) ? "is" : "are",
+			n, (n == 1) ? "" : "s", (n > 0) ? ":" : ".");
+	int i;
+	json_t* value;
+	json_array_foreach(data, i, value) {
+		char* name = NULL;
+		char* description = NULL;
+		int height = -1;
+		int width = -1;
+		int captured = false;
+		json_unpack(value, "{s:s, s:s, s:i, s:i, s:b}", "name", &name, 
+				"description", &description,
+				"height", &height,
+				"width", &width,
+				"captured", &captured);
+		printf("%s output[%s]: %s (%dx%d)\n",
+				captured ? "*" : " ", name, description, width,
+				height);
+	}
+}
 static void pretty_print(json_t* data,
 		struct jsonipc_request* request)
 {
@@ -422,6 +445,8 @@ static void pretty_print(json_t* data,
 		pretty_version(data);
 	else if (strcmp(method, "get-clients") == 0)
 		pretty_client_list(data);
+	else if (strcmp(method, "get-outputs") == 0)
+		pretty_output_list(data);
 	else
 		json_dumpf(data, stdout, JSON_INDENT(2));
 }
