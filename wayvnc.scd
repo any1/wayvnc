@@ -203,6 +203,16 @@ which parameters are supplied:
 *switch-to=output-name*
 	Switch to a specific output by name.
 
+_DISCONNECT_CLIENT_
+
+The *disconnect-client* command disconnects a single VNC client.
+
+Parameters:
+
+*id*
+	Required: The ID of the client to disconnect.  This ID can be found from the
+	_GET-CLIENTS_ command or receipt of a _CLIENT-CONNECTED_ event.
+
 _GET-CLIENTS_
 
 The *get-clients* command retrieves a list of all VNC clients currently
