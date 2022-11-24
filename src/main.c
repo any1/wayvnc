@@ -517,6 +517,28 @@ static int get_output_list(struct ctl* ctl,
 	return n;
 }
 
+static struct cmd_response* on_disconnect_client(struct ctl* ctl,
+		const char* id_string)
+{
+	int id = atoi(id_string);
+	if (id <= 0)
+		return cmd_failed("Invalid client ID \"%s\"", id_string);
+
+	struct wayvnc* self = ctl_server_userdata(ctl);
+	for (struct nvnc_client* nvnc_client = nvnc_client_first(self->nvnc);
+			nvnc_client;
+			nvnc_client = nvnc_client_next(nvnc_client)) {
+		struct wayvnc_client* client = nvnc_get_userdata(nvnc_client);
+		if (client->id == id) {
+			nvnc_log(NVNC_LOG_WARNING, "Disconnecting client %d via control socket command",
+					client->id);
+			nvnc_client_close(nvnc_client);
+			return cmd_ok();
+		}
+	}
+	return cmd_failed("No such client with ID \"%s\"", id_string);
+}
+
 int init_main_loop(struct wayvnc* self)
 {
 	struct aml* loop = aml_get_default();
@@ -1360,6 +1382,7 @@ int main(int argc, char* argv[])
 		.on_output_switch = on_output_switch,
 		.get_client_list = get_client_list,
 		.get_output_list = get_output_list,
+		.on_disconnect_client = on_disconnect_client,
 	};
 	self.ctl = ctl_server_new(socket_path, &ctl_actions);
 	if (!self.ctl)

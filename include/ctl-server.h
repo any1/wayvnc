@@ -41,6 +41,8 @@ struct ctl_server_actions {
 			enum output_cycle_direction direction);
 	struct cmd_response* (*on_output_switch)(struct ctl*,
 			const char* output_name);
+	struct cmd_response* (*on_disconnect_client)(struct ctl*,
+			const char* id);
 
 	// Return number of elements created
 	// Allocate 'clients' array or set ton ULL if none

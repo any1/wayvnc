@@ -48,6 +48,7 @@ enum cmd_type {
 	CMD_SET_OUTPUT,
 	CMD_GET_CLIENTS,
 	CMD_GET_OUTPUTS,
+	CMD_DISCONNECT_CLIENT,
 	CMD_UNKNOWN,
 };
 #define CMD_LIST_LEN CMD_UNKNOWN
@@ -104,6 +105,13 @@ static struct cmd_info cmd_list[] = {
 		"Return a list of all currently detected Wayland outputs",
 		{{NULL, NULL}}
 	},
+	[CMD_DISCONNECT_CLIENT] = { "disconnect-client",
+		"Disconnect a VNC session",
+		{
+			{"id", "The ID of the client to disconnect"},
+			{NULL, NULL},
+		}
+	},
 };
 
 #define CLIENT_EVENT_PARAMS(including) \
@@ -138,6 +146,11 @@ struct cmd_set_output {
 	struct cmd cmd;
 	char target[64];
 	enum output_cycle_direction cycle;
+};
+
+struct cmd_disconnect_client {
+	struct cmd cmd;
+	char id[64];
 };
 
 struct cmd_response {
@@ -257,6 +270,21 @@ static struct cmd_set_output* cmd_set_output_new(json_t* args,
 	return cmd;
 }
 
+static struct cmd_disconnect_client* cmd_disconnect_client_new(json_t* args,
+		struct jsonipc_error* err)
+{
+	const char* id = NULL;
+	if (json_unpack(args, "{s:s}",
+			"id", &id) == -1) {
+		jsonipc_error_printf(err, EINVAL,
+				"required: \"id\"");
+		return NULL;
+	}
+	struct cmd_disconnect_client* cmd = calloc(1, sizeof(*cmd));
+	strlcpy(cmd->id, id, sizeof(cmd->id));
+	return cmd;
+}
+
 static json_t* list_allowed(struct cmd_info (*list)[], size_t len)
 {
 	json_t* allowed = json_array();
@@ -288,6 +316,9 @@ static struct cmd* parse_command(struct jsonipc_request* ipc,
 		break;
 	case CMD_SET_OUTPUT:
 		cmd = (struct cmd*)cmd_set_output_new(ipc->params, err);
+		break;
+	case CMD_DISCONNECT_CLIENT:
+		cmd = (struct cmd*)cmd_disconnect_client_new(ipc->params, err);
 		break;
 	case CMD_VERSION:
 	case CMD_EVENT_RECEIVE:
@@ -490,6 +521,12 @@ static struct cmd_response* ctl_server_dispatch_cmd(struct ctl* self,
 			response = self->actions.on_output_switch(self, c->target);
 		else
 			response = self->actions.on_output_cycle(self, c->cycle);
+		break;
+		}
+	case CMD_DISCONNECT_CLIENT: {
+		struct cmd_disconnect_client* c =
+			(struct cmd_disconnect_client*)cmd;
+		response = self->actions.on_disconnect_client(self, c->id);
 		break;
 		}
 	case CMD_VERSION:
