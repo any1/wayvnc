@@ -212,7 +212,6 @@ static struct cmd_help* cmd_help_new(json_t* args,
 		return NULL;
 	}
 	struct cmd_help* cmd = calloc(1, sizeof(*cmd));
-	cmd->cmd.type = CMD_HELP;
 	if (command) {
 		strlcpy(cmd->id, command, sizeof(cmd->id));
 		cmd->id_is_command = true;
@@ -241,7 +240,6 @@ static struct cmd_set_output* cmd_set_output_new(json_t* args,
 		return NULL;
 	}
 	struct cmd_set_output* cmd = calloc(1, sizeof(*cmd));
-	cmd->cmd.type = CMD_SET_OUTPUT;
 	if (target) {
 		strlcpy(cmd->target, target, sizeof(cmd->target));
 	} else if (cycle) {
@@ -296,7 +294,6 @@ static struct cmd* parse_command(struct jsonipc_request* ipc,
 	case CMD_GET_CLIENTS:
 	case CMD_GET_OUTPUTS:
 		cmd = calloc(1, sizeof(*cmd));
-		cmd->type = cmd_type;
 		break;
 	case CMD_UNKNOWN:
 		jsonipc_error_set_new(err, ENOENT,
@@ -305,7 +302,9 @@ static struct cmd* parse_command(struct jsonipc_request* ipc,
 					jprintf("Unknown command \"%s\"",
 						ipc->method),
 					"commands", list_allowed_commands()));
+		return NULL;
 	}
+	cmd->type = cmd_type;
 	return cmd;
 }
 
