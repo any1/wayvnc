@@ -1054,7 +1054,8 @@ void switch_to_output(struct wayvnc* self, struct output* output)
 	screencopy_stop(&self->screencopy);
 	set_selected_output(self, output);
 	reinitialise_pointers(self);
-	wayvnc_start_capture_immediate(self);
+	if (self->nr_clients > 0)
+		wayvnc_start_capture_immediate(self);
 }
 
 void switch_to_next_output(struct wayvnc* self)
