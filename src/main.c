@@ -1087,6 +1087,8 @@ void set_selected_output(struct wayvnc* self, struct output* output) {
 	self->screencopy.wl_output = output->wl_output;
 	output->on_dimension_change = on_output_dimension_change;
 	output->userdata = self;
+	if (self->ctl)
+		ctl_server_event_capture_changed(self->ctl, output->name);
 	log_selected_output(self);
 }
 

@@ -262,6 +262,16 @@ Parameters:
 *username=...*
 	The username used to authenticate this client. May be null.
 
+_CAPTURE_CHANGED_
+
+The *capture-changed* event is sent when the currently captured output
+changes.
+
+Parameters:
+
+*output=...*
+	The name of the output now being captured.
+
 ## IPC MESSAGE FORMAT
 
 The *wayvncctl(1)* command line utility will construct properly-formatted json

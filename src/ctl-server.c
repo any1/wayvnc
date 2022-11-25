@@ -56,6 +56,7 @@ enum cmd_type {
 enum event_type {
 	EVT_CLIENT_CONNECTED,
 	EVT_CLIENT_DISCONNECTED,
+	EVT_CAPTURE_CHANGED,
 	EVT_UNKNOWN,
 };
 #define EVT_LIST_LEN EVT_UNKNOWN
@@ -130,6 +131,14 @@ static struct cmd_info evt_list[] = {
 		"Sent when a vnc client disconnects from wayvnc",
 		{ CLIENT_EVENT_PARAMS("not including") }
 	},
+	[EVT_CAPTURE_CHANGED] = {"capture-changed",
+		"Sent when wayvnc changes which output is captured",
+		{
+			{"output", "The name of the output now being captured"},
+			{NULL, NULL},
+		},
+	},
+
 };
 
 struct cmd {
@@ -1037,4 +1046,11 @@ void ctl_server_event_disconnected(struct ctl* self,
 {
 	ctl_server_event_connect(self, EVT_CLIENT_DISCONNECTED, client_id,
 			client_hostname, client_username, new_connection_count);
+}
+
+void ctl_server_event_capture_changed(struct ctl* self,
+		const char* captured_output)
+{
+	ctl_server_enqueue_event(self, EVT_CAPTURE_CHANGED,
+			json_pack("{s:s}", "output", captured_output));
 }

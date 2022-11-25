@@ -76,3 +76,6 @@ void ctl_server_event_disconnected(struct ctl*,
 		const char* client_hostname,
 		const char* client_username,
 		int new_connection_count);
+
+void ctl_server_event_capture_changed(struct ctl*,
+		const char* captured_output);
