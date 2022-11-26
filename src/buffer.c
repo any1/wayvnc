@@ -308,8 +308,9 @@ static bool wv_buffer_pool_match_buffer(struct wv_buffer_pool* pool,
 
 	switch (pool->type) {
 	case WV_BUFFER_SHM:
-		if (pool->stride != buffer->stride)
+		if (pool->stride != buffer->stride) {
 			return false;
+		}
 
 		/* fall-through */
 #ifdef ENABLE_SCREENCOPY_DMABUF
