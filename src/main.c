@@ -539,6 +539,14 @@ static struct cmd_response* on_disconnect_client(struct ctl* ctl,
 	return cmd_failed("No such client with ID \"%s\"", id_string);
 }
 
+static struct cmd_response* on_wayvnc_exit(struct ctl* ctl)
+{
+	struct wayvnc* self = ctl_server_userdata(ctl);
+	nvnc_log(NVNC_LOG_WARNING, "Shutting down via control socket command");
+	wayvnc_exit(self);
+	return cmd_ok();
+}
+
 int init_main_loop(struct wayvnc* self)
 {
 	struct aml* loop = aml_get_default();
@@ -1384,6 +1392,7 @@ int main(int argc, char* argv[])
 		.get_client_list = get_client_list,
 		.get_output_list = get_output_list,
 		.on_disconnect_client = on_disconnect_client,
+		.on_wayvnc_exit = on_wayvnc_exit,
 	};
 	self.ctl = ctl_server_new(socket_path, &ctl_actions);
 	if (!self.ctl)
