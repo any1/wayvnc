@@ -104,6 +104,8 @@ struct wayvnc {
 	int nr_clients;
 	struct aml_ticker* performance_ticker;
 
+	struct aml_timer* capture_retry_timer;
+
 	struct ctl* ctl;
 };
 
@@ -334,6 +336,9 @@ void wayvnc_destroy(struct wayvnc* self)
 
 	if (self->performance_ticker)
 		aml_unref(self->performance_ticker);
+
+	if (self->capture_retry_timer)
+		aml_unref(self->capture_retry_timer);
 
 	wl_registry_destroy(self->registry);
 	wl_display_disconnect(self->display);
@@ -720,12 +725,34 @@ int wayvnc_start_capture(struct wayvnc* self)
 
 int wayvnc_start_capture_immediate(struct wayvnc* self)
 {
+	if (self->capture_retry_timer)
+		return 0;
+
 	int rc = screencopy_start_immediate(&self->screencopy);
 	if (rc < 0) {
 		nvnc_log(NVNC_LOG_ERROR, "Failed to start capture. Exiting...");
 		wayvnc_exit(self);
 	}
 	return rc;
+}
+
+static void on_capture_restart_timer(void* obj)
+{
+	struct wayvnc* self = aml_get_userdata(obj);
+	aml_unref(self->capture_retry_timer);
+	self->capture_retry_timer = NULL;
+	wayvnc_start_capture_immediate(self);
+}
+
+static void wayvnc_restart_capture(struct wayvnc* self)
+{
+	if (self->capture_retry_timer)
+		return;
+
+	int timeout = 100000;
+	self->capture_retry_timer = aml_timer_new(timeout,
+			on_capture_restart_timer, self, NULL);
+	aml_start(aml_get_default(), self->capture_retry_timer);
 }
 
 // TODO: Handle transform change too
@@ -812,7 +839,7 @@ void on_capture_done(struct screencopy* sc)
 		wayvnc_exit(self);
 		break;
 	case SCREENCOPY_FAILED:
-		wayvnc_start_capture_immediate(self);
+		wayvnc_restart_capture(self);
 		break;
 	case SCREENCOPY_DONE:
 		wayvnc_process_frame(self);
