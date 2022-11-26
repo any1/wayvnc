@@ -28,6 +28,7 @@
 #include <jansson.h>
 
 #include "output.h"
+#include "ctl-commands.h"
 #include "ctl-server.h"
 #include "json-ipc.h"
 #include "util.h"
@@ -39,111 +40,6 @@
 enum send_priority {
 	SEND_FIFO,
 	SEND_IMMEDIATE,
-};
-
-enum cmd_type {
-	CMD_HELP,
-	CMD_VERSION,
-	CMD_EVENT_RECEIVE,
-	CMD_SET_OUTPUT,
-	CMD_GET_CLIENTS,
-	CMD_GET_OUTPUTS,
-	CMD_DISCONNECT_CLIENT,
-	CMD_WAYVNC_EXIT,
-	CMD_UNKNOWN,
-};
-#define CMD_LIST_LEN CMD_UNKNOWN
-
-enum event_type {
-	EVT_CLIENT_CONNECTED,
-	EVT_CLIENT_DISCONNECTED,
-	EVT_CAPTURE_CHANGED,
-	EVT_UNKNOWN,
-};
-#define EVT_LIST_LEN EVT_UNKNOWN
-
-struct cmd_param_info {
-	char* name;
-	char* description;
-};
-
-struct cmd_info {
-	char* name;
-	char* description;
-	struct cmd_param_info params[5];
-};
-
-static struct cmd_info cmd_list[] = {
-	[CMD_HELP] = { "help",
-		"List all commands and events, or show usage of a specific command or event",
-		{
-			{"command", "The command to show (optional)"},
-			{"event", "The event to show (optional)"},
-			{NULL, NULL},
-		}
-	},
-	[CMD_VERSION] = { "version",
-		"Query the version of the wayvnc process",
-		{{NULL, NULL}}
-	},
-	[CMD_EVENT_RECEIVE] = { "event-receive",
-		"Register to begin receiving asynchronous events from wayvnc",
-		// TODO: Event type filtering?
-		{{NULL, NULL}}
-	},
-	[CMD_SET_OUTPUT] = { "set-output",
-		"Switch the actively captured output",
-		{
-			{"switch-to", "The specific output name to capture"},
-			{"cycle", "Either \"next\" or \"prev\""},
-			{NULL, NULL},
-		}
-	},
-	[CMD_GET_CLIENTS] = { "get-clients",
-		"Return a list of all currently connected  VNC sessions",
-		{{NULL, NULL}}
-	},
-	[CMD_GET_OUTPUTS] = { "get-outputs",
-		"Return a list of all currently detected Wayland outputs",
-		{{NULL, NULL}}
-	},
-	[CMD_DISCONNECT_CLIENT] = { "disconnect-client",
-		"Disconnect a VNC session",
-		{
-			{"id", "The ID of the client to disconnect"},
-			{NULL, NULL},
-		}
-	},
-	[CMD_WAYVNC_EXIT] = { "wayvnc-exit",
-		"Disconnect all clients and shut down wayvnc",
-		{{NULL,NULL}},
-	},
-};
-
-#define CLIENT_EVENT_PARAMS(including) \
-	{"id", "A unique identifier for this client"}, \
-	{"connection_count", "The total number of connected VNC clients " including " this one."}, \
-	{"hostname", "The hostname or IP address of this client (may be null)"}, \
-	{"username", "The username used to authentice this client (may be null)."}, \
-	{NULL, NULL},
-
-static struct cmd_info evt_list[] = {
-	[EVT_CLIENT_CONNECTED] = {"client-connected",
-		"Sent when a new vnc client connects to wayvnc",
-		{ CLIENT_EVENT_PARAMS("including") }
-	},
-	[EVT_CLIENT_DISCONNECTED] = {"client-disconnected",
-		"Sent when a vnc client disconnects from wayvnc",
-		{ CLIENT_EVENT_PARAMS("not including") }
-	},
-	[EVT_CAPTURE_CHANGED] = {"capture-changed",
-		"Sent when wayvnc changes which output is captured",
-		{
-			{"output", "The name of the output now being captured"},
-			{NULL, NULL},
-		},
-	},
-
 };
 
 struct cmd {
@@ -214,7 +110,7 @@ static enum cmd_type parse_command_name(const char* name)
 	if (!name || name[0] == '\0')
 		return CMD_UNKNOWN;
 	for (int i = 0; i < CMD_LIST_LEN; ++i) {
-		if (strcmp(name, cmd_list[i].name) == 0) {
+		if (strcmp(name, ctl_command_list[i].name) == 0) {
 			return i;
 		}
 	}
@@ -310,12 +206,12 @@ static json_t* list_allowed(struct cmd_info (*list)[], size_t len)
 
 static json_t* list_allowed_commands()
 {
-	return list_allowed(&cmd_list, CMD_LIST_LEN);
+	return list_allowed(&ctl_command_list, CMD_LIST_LEN);
 }
 
 static json_t* list_allowed_events()
 {
-	return list_allowed(&evt_list, EVT_LIST_LEN);
+	return list_allowed(&ctl_event_list, EVT_LIST_LEN);
 }
 
 static struct cmd* parse_command(struct jsonipc_request* ipc,
@@ -441,8 +337,8 @@ static struct cmd_info* find_info(const char* id, struct cmd_info (*list)[],
 static struct cmd_response* generate_help_object(const char* id, bool id_is_command)
 {
 	struct cmd_info* info = id_is_command ?
-		find_info(id, &cmd_list, CMD_LIST_LEN) :
-		find_info(id, &evt_list, EVT_LIST_LEN);
+		find_info(id, &ctl_command_list, CMD_LIST_LEN) :
+		find_info(id, &ctl_event_list, EVT_LIST_LEN);
 	json_t* data;
 	if (!info) {
 		data = json_pack("{s:o, s:o}",
@@ -521,7 +417,7 @@ static struct cmd_response* ctl_server_dispatch_cmd(struct ctl* self,
 		struct ctl_client* client, struct cmd* cmd)
 {
 	assert(cmd->type != CMD_UNKNOWN);
-	const struct cmd_info* info = &cmd_list[cmd->type];
+	const struct cmd_info* info = &ctl_command_list[cmd->type];
 	nvnc_log(NVNC_LOG_INFO, "Dispatching control client command '%s'", info->name);
 	struct cmd_response* response = NULL;
 	switch (cmd->type) {
@@ -992,7 +888,7 @@ json_t* pack_connection_event_params(
 int ctl_server_enqueue_event(struct ctl* self, enum event_type evt_type,
 		json_t* params)
 {
-	const char* event_name = evt_list[evt_type].name;
+	const char* event_name = ctl_event_list[evt_type].name;
 	char* param_str = json_dumps(params, JSON_COMPACT);
 	nvnc_log(NVNC_LOG_DEBUG, "Enqueueing %s event: %s", event_name, param_str);
 	free(param_str);

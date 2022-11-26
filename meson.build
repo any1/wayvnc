@@ -96,6 +96,7 @@ sources = [
 	'src/util.c',
 	'src/json-ipc.c',
 	'src/ctl-server.c',
+	'src/ctl-commands.c',
 	'src/option-parser.c',
 ]
 
