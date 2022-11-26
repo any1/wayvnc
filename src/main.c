@@ -525,8 +525,9 @@ static int get_output_list(struct ctl* ctl,
 static struct cmd_response* on_disconnect_client(struct ctl* ctl,
 		const char* id_string)
 {
-	int id = atoi(id_string);
-	if (id <= 0)
+	char* endptr;
+	unsigned int id = strtoul(id_string, &endptr, 0);
+	if (!*id_string || *endptr)
 		return cmd_failed("Invalid client ID \"%s\"", id_string);
 
 	struct wayvnc* self = ctl_server_userdata(ctl);
