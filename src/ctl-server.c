@@ -434,7 +434,7 @@ static struct cmd_response* generate_vnc_client_list(struct ctl* self)
 	struct cmd_response* response = cmd_ok();
 
 	response->data = json_array();
-	for (int i = 0; i < num_clients; ++i) {
+	for (size_t i = 0; i < num_clients; ++i) {
 		json_t* packed = json_pack("{s:s}", "id", clients[i].id);
 		if (clients[i].hostname[0] != '\0')
 			json_object_set_new(packed, "hostname",
