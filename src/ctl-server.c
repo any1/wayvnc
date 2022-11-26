@@ -505,7 +505,7 @@ static struct cmd_response* generate_output_list(struct ctl* self)
 	struct cmd_response* response = cmd_ok();
 
 	response->data = json_array();
-	for (int i = 0; i < num_outputs; ++i)
+	for (size_t i = 0; i < num_outputs; ++i)
 		json_array_append_new(response->data, json_pack(
 					"{s:s, s:s, s:i, s:i, s:b}",
 				"name", outputs[i].name,
