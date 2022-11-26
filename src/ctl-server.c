@@ -49,6 +49,7 @@ enum cmd_type {
 	CMD_GET_CLIENTS,
 	CMD_GET_OUTPUTS,
 	CMD_DISCONNECT_CLIENT,
+	CMD_WAYVNC_EXIT,
 	CMD_UNKNOWN,
 };
 #define CMD_LIST_LEN CMD_UNKNOWN
@@ -112,6 +113,10 @@ static struct cmd_info cmd_list[] = {
 			{"id", "The ID of the client to disconnect"},
 			{NULL, NULL},
 		}
+	},
+	[CMD_WAYVNC_EXIT] = { "wayvnc-exit",
+		"Disconnect all clients and shut down wayvnc",
+		{{NULL,NULL}},
 	},
 };
 
@@ -333,6 +338,7 @@ static struct cmd* parse_command(struct jsonipc_request* ipc,
 	case CMD_EVENT_RECEIVE:
 	case CMD_GET_CLIENTS:
 	case CMD_GET_OUTPUTS:
+	case CMD_WAYVNC_EXIT:
 		cmd = calloc(1, sizeof(*cmd));
 		break;
 	case CMD_UNKNOWN:
@@ -538,6 +544,9 @@ static struct cmd_response* ctl_server_dispatch_cmd(struct ctl* self,
 		response = self->actions.on_disconnect_client(self, c->id);
 		break;
 		}
+	case CMD_WAYVNC_EXIT:
+		response = self->actions.on_wayvnc_exit(self);
+		break;
 	case CMD_VERSION:
 		response = generate_version_object();
 		break;

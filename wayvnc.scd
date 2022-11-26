@@ -213,6 +213,10 @@ Parameters:
 	Required: The ID of the client to disconnect.  This ID can be found from the
 	_GET-CLIENTS_ command or receipt of a _CLIENT-CONNECTED_ event.
 
+_WAYVNC_EXIT_
+
+The *wayvnc-exit* command disconnects all clients and shuts down wayvnc.
+
 _GET-CLIENTS_
 
 The *get-clients* command retrieves a list of all VNC clients currently
