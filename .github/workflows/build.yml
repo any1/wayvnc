@@ -24,7 +24,7 @@ jobs:
         repository: any1/neatvnc
         path: subprojects/neatvnc
     - name: setup
-      run: sudo apt install -y meson libdrm-dev libxkbcommon-dev libwlroots-dev libjansson-dev
+      run: sudo apt install -y meson libdrm-dev libxkbcommon-dev libwlroots-dev libjansson-dev libpam0g-dev libgnutls28-dev libavfilter-dev libavcodec-dev libavutil-dev libturbojpeg0-dev scdoc
     - name: configure
       run: meson build
     - name: make
