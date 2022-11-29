@@ -21,10 +21,20 @@
 #include <stdbool.h>
 
 struct zxdg_output_v1;
+struct zwlr_output_power_v1;
+
+enum output_power_state {
+	OUTPUT_POWER_UNKNOWN = 0,
+	OUTPUT_POWER_OFF,
+	OUTPUT_POWER_ON,
+};
+
+const char* output_power_state_name(enum output_power_state state);
 
 struct output {
 	struct wl_output* wl_output;
 	struct zxdg_output_v1* xdg_output;
+	struct zwlr_output_power_v1* wlr_output_power;
 	struct wl_list link;
 
 	uint32_t id;
@@ -41,12 +51,14 @@ struct output {
 	char model[256];
 	char name[256];
 	char description[256];
+	enum output_power_state power;
 
 	bool is_dimension_changed;
 	bool is_transform_changed;
 
 	void (*on_dimension_change)(struct output*);
 	void (*on_transform_change)(struct output*);
+	void (*on_power_change)(struct output*);
 
 	void* userdata;
 };
@@ -55,6 +67,8 @@ struct output* output_new(struct wl_output* wl_output, uint32_t id);
 void output_destroy(struct output* output);
 void output_set_xdg_output(struct output* output,
                            struct zxdg_output_v1* xdg_output);
+void output_set_wlr_output_power(struct output* output,
+                           struct zwlr_output_power_v1* wlr_output_power);
 void output_list_destroy(struct wl_list* list);
 struct output* output_find_by_id(struct wl_list* list, uint32_t id);
 struct output* output_find_by_name(struct wl_list* list, const char* name);
