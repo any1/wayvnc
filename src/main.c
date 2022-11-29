@@ -39,6 +39,7 @@
 #include "wlr-virtual-pointer-unstable-v1.h"
 #include "virtual-keyboard-unstable-v1.h"
 #include "xdg-output-unstable-v1.h"
+#include "wlr-output-power-management-unstable-v1.h"
 #include "linux-dmabuf-unstable-v1.h"
 #include "screencopy.h"
 #include "data-control.h"
@@ -78,6 +79,7 @@ struct wayvnc {
 	struct cfg cfg;
 
 	struct zxdg_output_manager_v1* xdg_output_manager;
+	struct zwlr_output_power_manager_v1* wlr_output_power_manager;
 	struct zwp_virtual_keyboard_manager_v1* keyboard_manager;
 	struct zwlr_virtual_pointer_manager_v1* pointer_manager;
 	struct zwlr_data_control_manager_v1* data_control_manager;
@@ -208,6 +210,13 @@ static void registry_add(void* data, struct wl_registry* registry,
 		return;
 	}
 
+	if (strcmp(interface, zwlr_output_power_manager_v1_interface.name) == 0) {
+		self->wlr_output_power_manager =
+			wl_registry_bind(registry, id,
+					&zwlr_output_power_manager_v1_interface, 1);
+		return;
+	}
+
 	if (strcmp(interface, zwlr_screencopy_manager_v1_interface.name) == 0) {
 		self->screencopy.manager =
 			wl_registry_bind(registry, id,
@@ -320,6 +329,10 @@ void wayvnc_destroy(struct wayvnc* self)
 
 	zxdg_output_manager_v1_destroy(self->xdg_output_manager);
 
+	if (self->wlr_output_power_manager)
+		zwlr_output_power_manager_v1_destroy(
+				self->wlr_output_power_manager);
+
 	wl_shm_destroy(wl_shm);
 
 	if (self->keyboard_manager)
@@ -344,15 +357,22 @@ void wayvnc_destroy(struct wayvnc* self)
 	wl_display_disconnect(self->display);
 }
 
-static void init_xdg_outputs(struct wayvnc* self)
+static void init_outputs(struct wayvnc* self)
 {
 	struct output* output;
 	wl_list_for_each(output, &self->outputs, link) {
 		struct zxdg_output_v1* xdg_output =
 			zxdg_output_manager_v1_get_xdg_output(
 				self->xdg_output_manager, output->wl_output);
-
 		output_set_xdg_output(output, xdg_output);
+
+		if (self->wlr_output_power_manager) {
+			struct zwlr_output_power_v1* wlr_output_power =
+				zwlr_output_power_manager_v1_get_output_power(
+						self->wlr_output_power_manager,
+						output->wl_output);
+			output_set_wlr_output_power(output, wlr_output_power);
+		}
 	}
 }
 
@@ -379,7 +399,7 @@ static int init_wayland(struct wayvnc* self)
 	wl_display_dispatch(self->display);
 	wl_display_roundtrip(self->display);
 
-	init_xdg_outputs(self);
+	init_outputs(self);
 
 	if (!self->pointer_manager && !self->disable_input) {
 		nvnc_log(NVNC_LOG_ERROR, "Virtual Pointer protocol not supported by compositor.");
@@ -771,6 +791,14 @@ void on_output_dimension_change(struct output* output)
 	wayvnc_start_capture_immediate(self);
 }
 
+static void on_output_power_change(struct output* output)
+{
+	struct wayvnc* self = output->userdata;
+	assert(self->selected_output == output);
+
+	nvnc_trace("Output %s power state changed to %s", output->name, output_power_state_name(output->power));
+}
+
 static uint32_t calculate_region_area(struct pixman_region16* region)
 {
 	uint32_t area = 0;
@@ -1107,11 +1135,12 @@ void log_selected_output(struct wayvnc* self)
 	struct output* output;
 	wl_list_for_each(output, &self->outputs, link) {
 		bool this_output = (output->id == self->selected_output->id);
-		nvnc_log(NVNC_LOG_INFO, "%s %s %dx%d+%dx%d",
+		nvnc_log(NVNC_LOG_INFO, "%s %s %dx%d+%dx%d Power:%s",
 				this_output ? ">>" : "--",
 				output->description,
 				output->width, output->height,
-				output->x, output->y);
+				output->x, output->y,
+				output_power_state_name(output->power));
 	}
 }
 
@@ -1122,6 +1151,7 @@ void set_selected_output(struct wayvnc* self, struct output* output) {
 	self->selected_output = output;
 	self->screencopy.wl_output = output->wl_output;
 	output->on_dimension_change = on_output_dimension_change;
+	output->on_power_change = on_output_power_change;
 	output->userdata = self;
 	if (self->ctl)
 		ctl_server_event_capture_changed(self->ctl, output->name);

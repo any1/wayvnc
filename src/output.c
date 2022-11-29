@@ -27,6 +27,7 @@
 #include "strlcpy.h"
 
 #include "xdg-output-unstable-v1.h"
+#include "wlr-output-power-management-unstable-v1.h"
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
@@ -179,6 +180,8 @@ static const struct wl_output_listener output_listener = {
 void output_destroy(struct output* output)
 {
 	zxdg_output_v1_destroy(output->xdg_output);
+	if (output->wlr_output_power)
+		zwlr_output_power_v1_destroy(output->wlr_output_power);
 	wl_output_destroy(output->wl_output);
 	free(output);
 }
@@ -204,6 +207,7 @@ struct output* output_new(struct wl_output* wl_output, uint32_t id)
 
 	output->wl_output = wl_output;
 	output->id = id;
+	output->power = OUTPUT_POWER_UNKNOWN;
 
 	wl_output_add_listener(output->wl_output, &output_listener,
 			output);
@@ -252,6 +256,63 @@ void output_set_xdg_output(struct output* self,
 
 	zxdg_output_v1_add_listener(self->xdg_output, &xdg_output_listener,
 	                            self);
+}
+
+const char* output_power_state_name(enum output_power_state state)
+{
+	switch(state) {
+	case OUTPUT_POWER_ON:
+		return "ON";
+	case OUTPUT_POWER_OFF:
+		return "OFF";
+	case OUTPUT_POWER_UNKNOWN:
+		return "??";
+	}
+}
+
+static void output_power_mode(void *data,
+		     struct zwlr_output_power_v1 *zwlr_output_power_v1,
+		     uint32_t mode)
+{
+	struct output* self = data;
+	nvnc_trace("Output %s power state changed to %s", self->name,
+			(mode == ZWLR_OUTPUT_POWER_V1_MODE_ON) ? "ON" : "OFF");
+
+	enum output_power_state old = self->power;
+	switch (mode) {
+	case ZWLR_OUTPUT_POWER_V1_MODE_OFF:
+		self->power = OUTPUT_POWER_OFF;
+		break;
+	case ZWLR_OUTPUT_POWER_V1_MODE_ON:
+		self->power = OUTPUT_POWER_ON;
+		break;
+	}
+	if (old != self->power && self->on_power_change)
+		self->on_power_change(self);
+}
+
+static void output_power_failed(void *data,
+		     struct zwlr_output_power_v1 *zwlr_output_power_v1)
+{
+	struct output* self = data;
+	nvnc_log(NVNC_LOG_WARNING, "Output %s power state failure", self->name);
+	self->power = OUTPUT_POWER_UNKNOWN;
+	zwlr_output_power_v1_destroy(self->wlr_output_power);
+	self->wlr_output_power = NULL;
+}
+
+static const struct zwlr_output_power_v1_listener wlr_output_power_listener = {
+	.mode = output_power_mode,
+	.failed = output_power_failed,
+};
+
+void output_set_wlr_output_power(struct output* self,
+                           struct zwlr_output_power_v1* wlr_output_power)
+{
+	self->wlr_output_power = wlr_output_power;
+
+	zwlr_output_power_v1_add_listener(self->wlr_output_power,
+			&wlr_output_power_listener, self);
 }
 
 struct output* output_find_by_id(struct wl_list* list, uint32_t id)
