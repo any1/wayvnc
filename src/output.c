@@ -19,6 +19,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <errno.h>
+#include <assert.h>
 #include <wayland-client-protocol.h>
 #include <wayland-client.h>
 #include <neatvnc.h>
@@ -313,6 +315,21 @@ void output_set_wlr_output_power(struct output* self,
 
 	zwlr_output_power_v1_add_listener(self->wlr_output_power,
 			&wlr_output_power_listener, self);
+}
+
+int output_set_power_state(struct output* output, enum output_power_state state)
+{
+	assert(state != OUTPUT_POWER_UNKNOWN);
+	if (!output->wlr_output_power) {
+		errno = ENOENT;
+		return -1;
+	}
+	nvnc_log(NVNC_LOG_TRACE, "Output %s requesting power %s", output->name,
+			output_power_state_name(state));
+	int mode = (state == OUTPUT_POWER_ON) ? ZWLR_OUTPUT_POWER_V1_MODE_ON :
+		ZWLR_OUTPUT_POWER_V1_MODE_OFF;
+	zwlr_output_power_v1_set_mode(output->wlr_output_power, mode);
+	return 0;
 }
 
 struct output* output_find_by_id(struct wl_list* list, uint32_t id)

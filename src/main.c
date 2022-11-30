@@ -750,8 +750,10 @@ int wayvnc_start_capture_immediate(struct wayvnc* self)
 		return 0;
 
 	if (self->selected_output->power == OUTPUT_POWER_OFF) {
-		nvnc_log(NVNC_LOG_WARNING, "Output is in powersaving mode. Delaying capture until it turns on.");
-		// TODO: Attempt to turn it on?
+		nvnc_log(NVNC_LOG_WARNING, "Selected output is in powersaving mode. Delaying capture until it turns on.");
+		if (output_set_power_state(self->selected_output, OUTPUT_POWER_ON)
+				== 0)
+			nvnc_log(NVNC_LOG_WARNING, "Requested power ON.");
 		return 0;
 	}
 
