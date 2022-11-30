@@ -670,6 +670,27 @@ static struct nvnc_fb* create_placeholder_buffer(uint16_t width, uint16_t height
 	return fb;
 }
 
+static int blank_screen(struct wayvnc* self)
+{
+	struct nvnc_fb* placeholder_fb =
+		create_placeholder_buffer(self->selected_output->width,
+				self->selected_output->height);
+	if (!placeholder_fb) {
+		nvnc_log(NVNC_LOG_ERROR, "Failed to allocate a placeholder buffer");
+		return -1;
+	}
+
+	struct pixman_region16 damage;
+	pixman_region_init_rect(&damage, 0, 0,
+			nvnc_fb_get_width(placeholder_fb),
+			nvnc_fb_get_height(placeholder_fb));
+
+	nvnc_display_feed_buffer(self->nvnc_display, placeholder_fb, &damage);
+	pixman_region_fini(&damage);
+	nvnc_fb_unref(placeholder_fb);
+	return 0;
+}
+
 int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port, bool is_unix)
 {
 	self->nvnc = is_unix ? nvnc_open_unix(addr) : nvnc_open(addr, port);
@@ -710,22 +731,8 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port, bool is_unix
 	nvnc_set_new_client_fn(self->nvnc, on_nvnc_client_new);
 	nvnc_set_cut_text_fn(self->nvnc, on_client_cut_text);
 
-	struct nvnc_fb* placeholder_fb =
-		create_placeholder_buffer(self->selected_output->width,
-				self->selected_output->height);
-	if (!placeholder_fb) {
-		nvnc_log(NVNC_LOG_ERROR, "Failed to allocate a placeholder buffer");
+	if (blank_screen(self) != 0)
 		goto failure;
-	}
-
-	struct pixman_region16 damage;
-	pixman_region_init_rect(&damage, 0, 0,
-			nvnc_fb_get_width(placeholder_fb),
-			nvnc_fb_get_height(placeholder_fb));
-
-	nvnc_display_feed_buffer(self->nvnc_display, placeholder_fb, &damage);
-	pixman_region_fini(&damage);
-	nvnc_fb_unref(placeholder_fb);
 
 	return 0;
 
@@ -815,7 +822,7 @@ static void on_output_power_change(struct output* output)
 	case OUTPUT_POWER_OFF:
 		nvnc_log(NVNC_LOG_WARNING, "Output is now off. Pausing frame capture");
 		screencopy_stop(&self->screencopy);
-		// TODO: Add a placeholder frame?
+		blank_screen(self);
 		break;
 	default:
 		break;
