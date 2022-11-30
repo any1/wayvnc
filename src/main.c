@@ -749,6 +749,12 @@ int wayvnc_start_capture_immediate(struct wayvnc* self)
 	if (self->capture_retry_timer)
 		return 0;
 
+	if (self->selected_output->power == OUTPUT_POWER_OFF) {
+		nvnc_log(NVNC_LOG_WARNING, "Output is in powersaving mode. Delaying capture until it turns on.");
+		// TODO: Attempt to turn it on?
+		return 0;
+	}
+
 	int rc = screencopy_start_immediate(&self->screencopy);
 	if (rc < 0) {
 		nvnc_log(NVNC_LOG_ERROR, "Failed to start capture. Exiting...");
@@ -793,10 +799,25 @@ void on_output_dimension_change(struct output* output)
 
 static void on_output_power_change(struct output* output)
 {
-	struct wayvnc* self = output->userdata;
-	assert(self->selected_output == output);
-
 	nvnc_trace("Output %s power state changed to %s", output->name, output_power_state_name(output->power));
+
+	struct wayvnc* self = output->userdata;
+	if (self->selected_output != output || self->nr_clients == 0)
+		return;
+
+	switch (output->power) {
+	case OUTPUT_POWER_ON:
+		nvnc_log(NVNC_LOG_WARNING, "Output is now on. Restarting frame capture");
+		wayvnc_start_capture_immediate(self);
+		break;
+	case OUTPUT_POWER_OFF:
+		nvnc_log(NVNC_LOG_WARNING, "Output is now off. Pausing frame capture");
+		screencopy_stop(&self->screencopy);
+		// TODO: Add a placeholder frame?
+		break;
+	default:
+		break;
+	}
 }
 
 static uint32_t calculate_region_area(struct pixman_region16* region)
