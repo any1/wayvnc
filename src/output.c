@@ -270,6 +270,8 @@ const char* output_power_state_name(enum output_power_state state)
 	case OUTPUT_POWER_UNKNOWN:
 		return "??";
 	}
+	abort();
+	return NULL;
 }
 
 static void output_power_mode(void *data,
