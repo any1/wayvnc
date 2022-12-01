@@ -268,7 +268,7 @@ const char* output_power_state_name(enum output_power_state state)
 	case OUTPUT_POWER_OFF:
 		return "OFF";
 	case OUTPUT_POWER_UNKNOWN:
-		return "??";
+		return "UNKNOWN";
 	}
 	abort();
 	return NULL;
