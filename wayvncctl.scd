@@ -44,11 +44,13 @@ For a full list of currently supported commands, see
 *wayvnc(1)* section _IPC COMMANDS_, or run the
 *wayvncctl help* command.
 
-Running *wayvncctl help* contacts the server over the control socket and returns
-a list of the available commands.
+Running *wayvncctl help* returns a list of the available commands and events.
 
 Running *wayvncctl command-name --help* returns a description of the server-side
 command and its available parameters.
+
+Running *wayvncctl help --event=event-name* returns a description of the
+server-side event and expected parameters.
 
 # ASYNCHRONOUS EVENTS
 
@@ -109,12 +111,24 @@ Query the server for all available IPC command names:
 
 ```
 $ wayvncctl help
-Allowed commands:
-  - help
-  - version
-  - set-output
+Commands:
+    - help
+    - version
+    - event-receive
+    - set-output
+    - get-clients
+    - get-outputs
+    - disconnect-client
+    - wayvnc-exit
 
 Run 'wayvncctl command-name --help' for command-specific details.
+
+Events:
+    - client-connected
+    - client-disconnected
+    - capture-changed
+
+Run 'wayvncctl help --event=event-name' for event-specific details.
 ```
 
 Get help on the "set-output" IPC command:

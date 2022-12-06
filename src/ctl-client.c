@@ -144,7 +144,7 @@ static int try_connect(struct ctl_client* self, int timeout)
 	return 0;
 }
 
-int ctl_client_connect(struct ctl_client* self, int timeout)
+static int ctl_client_connect(struct ctl_client* self, int timeout)
 {
 	// TODO: Support arbitrary timeouts?
 	assert(timeout == 0 || timeout == -1);
@@ -311,79 +311,6 @@ out:
 	printf("\n");
 }
 
-static void print_command_usage(const char* name, json_t* data)
-{
-	char* desc = NULL;
-	json_t* params = NULL;
-	json_unpack(data, "{s:s, s?o}", "description", &desc,
-			"params", &params);
-	printf("Usage: wayvncctl [options] %s%s\n\n%s\n", name,
-			params ? " [params]" : "",
-			desc);
-	if (params) {
-		printf("\nParameters:");
-		const char* param_name;
-		json_t* param_value;
-		json_object_foreach(params, param_name, param_value) {
-			printf("\n  --%s=...\n    %s\n", param_name,
-					json_string_value(param_value));
-		}
-	}
-	printf("\nRun 'wayvncctl --help' for allowed Options\n");
-}
-
-static void print_event_details(const char* name, json_t* data)
-{
-	char* desc = NULL;
-	json_t* params = NULL;
-	json_unpack(data, "{s:s, s?o}", "description", &desc,
-			"params", &params);
-	printf("Event: %s\n\n%s\n", name,
-			desc);
-	if (params) {
-		printf("\nParameters:");
-		const char* param_name;
-		json_t* param_value;
-		json_object_foreach(params, param_name, param_value) {
-			printf("\n  %s:...\n    %s\n", param_name,
-					json_string_value(param_value));
-		}
-	}
-}
-
-static void print_help(json_t* data, json_t* request)
-{
-	if (json_object_get(data, "commands")) {
-		printf("Allowed commands:\n");
-		json_t* cmd_list = json_object_get(data, "commands");
-
-		size_t index;
-		json_t* value;
-		json_array_foreach(cmd_list, index, value) {
-			printf("  - %s\n", json_string_value(value));
-		}
-		printf("\nRun 'wayvncctl command-name --help' for command-specific details.\n");
-
-		printf("\nSupported events:\n");
-		json_t* evt_list = json_object_get(data, "events");
-		json_array_foreach(evt_list, index, value) {
-			printf("  - %s\n", json_string_value(value));
-		}
-		printf("\nRun 'wayvncctl help --event=event-name' for event-specific details.\n");
-		return;
-	}
-
-	bool is_command = json_object_get(request, "command");
-	const char* key;
-	json_t* value;
-	json_object_foreach(data, key, value) {
-		if (is_command)
-			print_command_usage(key, value);
-		else
-			print_event_details(key, value);
-	}
-}
-
 static void pretty_version(json_t* data)
 {
 	printf("wayvnc is running:\n");
@@ -441,9 +368,6 @@ static void pretty_print(json_t* data,
 {
 	enum cmd_type cmd = ctl_command_parse_name(request->method);
 	switch (cmd) {
-	case CMD_HELP:
-		print_help(data, request->params);
-		break;
 	case CMD_VERSION:
 		pretty_version(data);
 		break;
@@ -459,7 +383,8 @@ static void pretty_print(json_t* data,
 		printf("Ok\n");
 		break;
 	case CMD_EVENT_RECEIVE:
-		abort(); // Event loop code handles this one
+	case CMD_HELP:
+		abort(); // Handled directly by ctl_client_run_command
 	case CMD_UNKNOWN:
 		json_dumpf(data, stdout, JSON_INDENT(2));
 	}
@@ -477,7 +402,7 @@ static int ctl_client_print_response(struct ctl_client* self,
 {
 	DEBUG("Response code: %d", response->code);
 	if (response->data) {
-		if (self->flags & PRINT_JSON)
+		if (self->flags & CTL_CLIENT_PRINT_JSON)
 			print_compact_json(response->data);
 		else if (response->code == 0)
 			pretty_print(response->data, request);
@@ -594,7 +519,7 @@ static void print_as_yaml(json_t* data, int level, bool needs_leading_newline)
 
 static void print_event(struct jsonipc_request* event, unsigned flags)
 {
-	if (flags & PRINT_JSON) {
+	if (flags & CTL_CLIENT_PRINT_JSON) {
 		print_compact_json(event->json);
 	} else {
 		printf("\n%s:", event->method);
@@ -641,7 +566,7 @@ static ssize_t ctl_client_send_request(struct ctl_client* self,
 }
 
 static struct jsonipc_response* ctl_client_run_single_command(struct ctl_client* self,
-		struct jsonipc_request *request)
+		struct jsonipc_request* request)
 {
 	if (ctl_client_send_request(self, request) < 0)
 		return NULL;
@@ -686,7 +611,7 @@ static int ctl_client_event_loop(struct ctl_client* self,
 		if (!root) {
 			if (errno == ECONNRESET) {
 				send_shutdown_event(self);
-				if (self->flags & RECONNECT &&
+				if (self->flags & CTL_CLIENT_RECONNECT &&
 						ctl_client_reconnect_event_loop(
 							self, request, -1) == 0)
 					continue;
@@ -714,6 +639,93 @@ static int ctl_client_print_single_command(struct ctl_client* self,
 	return result;
 }
 
+void ctl_client_print_command_list(FILE* stream)
+{
+	fprintf(stream, "Commands:\n");
+	for (size_t i = 0; i < CMD_LIST_LEN; ++i)
+		fprintf(stream, "    - %s\n", ctl_command_list[i].name);
+	fprintf(stream, "\nRun 'wayvncctl command-name --help' for command-specific details.\n");
+}
+
+void ctl_client_print_event_list(FILE* stream)
+{
+	printf("Events:\n");
+	for (size_t i = 0; i < EVT_LIST_LEN; ++i)
+		printf("    - %s\n", ctl_event_list[i].name);
+	printf("\nRun 'wayvncctl help --event=event-name' for event-specific details.\n");
+}
+
+static void print_cmd_info_params(const struct cmd_info* info)
+{
+	if (info->params[0].name != NULL) {
+		printf("\nParameters:");
+		for (int i = 0; info->params[i].name != NULL; ++i)
+			printf("\n  --%s=...\n    %s\n", info->params[i].name,
+					info->params[i].description);
+	}
+}
+
+static int print_command_usage(const char* cmd_name)
+{
+	enum cmd_type type = ctl_command_parse_name(cmd_name);
+	struct cmd_info* info = ctl_command_by_type(type);
+	if (!info) {
+		WARN("No such command \"%s\"\n", cmd_name);
+		return 1;
+	}
+	bool params = info->params[0].name != NULL;
+	printf("Usage: wayvncctl [options] %s%s\n\n%s\n", info->name,
+			params ? " [params]" : "",
+			info->description);
+	print_cmd_info_params(info);
+	printf("\nRun 'wayvncctl --help' for allowed options\n");
+	if (type == CMD_EVENT_RECEIVE) {
+		printf("\n");
+		ctl_client_print_event_list(stdout);
+	}
+	return 0;
+}
+
+static int print_event_details(const char* evt_name)
+{
+	struct cmd_info* info = ctl_event_by_name(evt_name);
+	if (!info) {
+		WARN("No such event \"%s\"\n", evt_name);
+		return 1;
+	}
+	printf("Event: %s\n\n%s\n", info->name,
+			info->description);
+	print_cmd_info_params(info);
+	return 0;
+}
+
+static int ctl_client_print_help(struct ctl_client* self,
+		struct jsonipc_request* request)
+{
+	if (self->flags & CTL_CLIENT_PRINT_JSON) {
+		WARN("JSON output is not supported for the \"help\" command");
+		return 1;
+	}
+
+	json_t* params = request->params;
+	const char* cmd_name = NULL;
+	const char* evt_name = NULL;
+	if (params)
+		json_unpack(params, "{s?s, s?s}", "command", &cmd_name,
+				"event", &evt_name);
+
+	if (cmd_name)
+		return print_command_usage(cmd_name);
+	if (evt_name)
+		return print_event_details(evt_name);
+
+	ctl_client_print_command_list(stdout);
+	printf("\n");
+	ctl_client_print_event_list(stdout);
+
+	return 0;
+}
+
 int ctl_client_run_command(struct ctl_client* self,
 		int argc, char* argv[], unsigned flags)
 {
@@ -725,7 +737,17 @@ int ctl_client_run_command(struct ctl_client* self,
 		goto parse_failure;
 
 	enum cmd_type cmd = ctl_command_parse_name(request->method);
+	if (cmd != CMD_HELP) {
+		int timeout = (flags & CTL_CLIENT_SOCKET_WAIT) ? -1 : 0;
+		result = ctl_client_connect(self, timeout);
+		if (result != 0)
+			return result;
+	}
+
 	switch (cmd) {
+	case CMD_HELP:
+		result = ctl_client_print_help(self, request);
+		break;
 	case CMD_EVENT_RECEIVE:
 		result = ctl_client_event_loop(self, request);
 		break;
