@@ -33,7 +33,10 @@ struct option_parser {
 	int n_opts;
 };
 
-void option_parser_init(struct option_parser* self, const struct wv_option* options);
+#define OPTION_PARSER_CHECK_ALL_ARGUMENTS 0
+#define OPTION_PARSER_STOP_ON_FIRST_NONOPTION 1
 
-void option_parser_print_usage(struct option_parser* self, FILE* stream);
+void option_parser_init(struct option_parser* self, const struct wv_option* options, unsigned flags);
+
+void option_parser_print_options(struct option_parser* self, FILE* stream);
 int option_parser_getopt(struct option_parser* self, int argc, char* argv[]);

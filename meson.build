@@ -120,6 +120,7 @@ ctlsources = [
 	'src/json-ipc.c',
 	'src/ctl-client.c',
 	'src/strlcpy.c',
+	'src/option-parser.c',
 ]
 
 ctldependencies = [

@@ -909,7 +909,7 @@ void on_capture_done(struct screencopy* sc)
 int wayvnc_usage(struct option_parser* parser, FILE* stream, int rc)
 {
 	fprintf(stream, "Usage: wayvnc [options] [address [port]]\n\n");
-	option_parser_print_usage(parser, stream);
+	option_parser_print_options(parser, stream);
 	fprintf(stream, "\n");
 	return rc;
 }
@@ -1297,7 +1297,8 @@ int main(int argc, char* argv[])
 	};
 
 	struct option_parser option_parser;
-	option_parser_init(&option_parser, opts);
+	option_parser_init(&option_parser, opts,
+			OPTION_PARSER_CHECK_ALL_ARGUMENTS);
 
 	while (1) {
 		int c = option_parser_getopt(&option_parser, argc, argv);

@@ -30,7 +30,8 @@ static int count_options(const struct wv_option* opts)
 }
 
 void option_parser_init(struct option_parser* self,
-		const struct wv_option* options)
+		const struct wv_option* options,
+		unsigned flags)
 {
 	memset(self, 0, sizeof(*self));
 
@@ -39,6 +40,9 @@ void option_parser_init(struct option_parser* self,
 
 	int short_opt_index = 0;
 	int long_opt_index = 0;
+
+	if (flags && OPTION_PARSER_STOP_ON_FIRST_NONOPTION)
+		self->short_opts[short_opt_index++] = '+';
 
 	for (int i = 0; i < self->n_opts; ++i) {
 		assert(options[i].short_opt); // TODO: Make this optional?
@@ -157,8 +161,9 @@ static void format_option(const struct wv_option* opt, int left_col_width,
 	}
 }
 
-void option_parser_print_usage(struct option_parser* self, FILE* stream)
+void option_parser_print_options(struct option_parser* self, FILE* stream)
 {
+	fprintf(stream, "Options:\n");
 	int left_col_width = get_left_col_width(self->options, self->n_opts);
 
 	for (int i = 0; i < self->n_opts; ++i) {

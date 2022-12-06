@@ -32,6 +32,7 @@
 
 #include "util.h"
 #include "ctl-client.h"
+#include "option-parser.h"
 
 #define MAYBE_UNUSED __attribute__((unused))
 
@@ -41,30 +42,16 @@ struct wayvncctl {
 	struct ctl_client* ctl;
 };
 
-static int wayvncctl_usage(FILE* stream, int rc)
+static int wayvncctl_usage(FILE* stream, struct option_parser* options, int rc)
 {
 	static const char* usage =
 "Usage: wayvncctl [options] [command [--param1=value1 ...]]\n"
 "\n"
 "Connects to and interacts with a running wayvnc instance."
 "\n"
-"Try 'wayvncctl help' for a list of available commands.\n"
-"\n"
-"Options:\n"
-"    -S,--socket=<path>                   Wayvnc control socket path.\n"
-"                                         Default: $XDG_RUNTIME_DIR/wayvncctl\n"
-"    -w,--wait                            Wait for wayvnc to start up if it's\n"
-"                                         not already running.\n"
-"    -r,--reconnect                       If disconnected while waiting for\n"
-"                                         events, wait for wayvnc to restart.\n"
-"    -j,--json                            Output json on stdout.\n"
-"    -V,--version                         Show version info.\n"
-"    -v,--verbose                         Be more verbose.\n"
-"    -h,--help                            Get help (this text).\n"
-"\n";
-
-	fprintf(stream, "%s", usage);
-
+"Try 'wayvncctl help' for a list of available commands.";
+	fprintf(stream, "%s\n\n", usage);
+	option_parser_print_options(options, stream);
 	return rc;
 }
 
@@ -78,27 +65,36 @@ int main(int argc, char* argv[])
 {
 	struct wayvncctl self = { 0 };
 
-	static const char* shortopts = "+S:hVvjwr";
-
 	bool verbose = false;
 	const char* socket_path = NULL;
 	int wait_for_socket = 0;
 
 	unsigned flags = 0;
 
-	static const struct option longopts[] = {
-		{ "socket", required_argument, NULL, 'S' },
-		{ "wait", no_argument, NULL, 'w' },
-		{ "reconnect", no_argument, NULL, 'r' },
-		{ "json", no_argument, NULL, 'j' },
-		{ "help", no_argument, NULL, 'h' },
-		{ "version", no_argument, NULL, 'V' },
-		{ "verbose", no_argument, NULL, 'v' },
-		{ NULL, 0, NULL, 0 }
+	static const struct wv_option opts[] = {
+		{ 'S', "socket", "<path>",
+		  "Control socket path." },
+		{ 'w', "wait", NULL,
+                  "Wait for wayvnc to start up if it's not already running." },
+		{ 'r', "reconnect", NULL,
+		  "If disconnected while waiting for events, wait for wayvnc to restart." },
+		{ 'j', "json", NULL,
+		  "Output json on stdout." },
+		{ 'V', "version", NULL,
+		  "Show version info." },
+		{ 'v', "verbose", NULL,
+		  "Be more verbose." },
+		{ 'h', "help", NULL,
+		  "Get help (this text)." },
+		{ '\0', NULL, NULL, NULL }
 	};
 
+	struct option_parser option_parser;
+	option_parser_init(&option_parser, opts,
+			OPTION_PARSER_STOP_ON_FIRST_NONOPTION);
+
 	while (1) {
-		int c = getopt_long(argc, argv, shortopts, longopts, NULL);
+		int c = option_parser_getopt(&option_parser, argc, argv);
 		if (c < 0)
 			break;
 
@@ -121,14 +117,14 @@ int main(int argc, char* argv[])
 		case 'V':
 			return show_version();
 		case 'h':
-			return wayvncctl_usage(stdout, 0);
+			return wayvncctl_usage(stdout, &option_parser, 0);
 		default:
-			return wayvncctl_usage(stderr, 1);
+			return wayvncctl_usage(stderr, &option_parser, 1);
 		}
 	}
 	argc -= optind;
 	if (argc <= 0)
-		return wayvncctl_usage(stderr, 1);
+		return wayvncctl_usage(stderr, &option_parser, 1);
 	argv = &argv[optind];
 
 	ctl_client_debug_log(verbose);
