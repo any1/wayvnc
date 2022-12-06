@@ -28,6 +28,7 @@
 
 #include "json-ipc.h"
 #include "ctl-client.h"
+#include "ctl-commands.h"
 #include "ctl-server.h"
 #include "strlcpy.h"
 #include "util.h"
@@ -438,17 +439,30 @@ static void pretty_output_list(json_t* data)
 static void pretty_print(json_t* data,
 		struct jsonipc_request* request)
 {
-	const char* method = request->method;
-	if (strcmp(method, "help") == 0)
+	enum cmd_type cmd = ctl_command_parse_name(request->method);
+	switch (cmd) {
+	case CMD_HELP:
 		print_help(data, request->params);
-	else if (strcmp(method, "version") == 0)
+		break;
+	case CMD_VERSION:
 		pretty_version(data);
-	else if (strcmp(method, "get-clients") == 0)
+		break;
+	case CMD_GET_CLIENTS:
 		pretty_client_list(data);
-	else if (strcmp(method, "get-outputs") == 0)
+		break;
+	case CMD_GET_OUTPUTS:
 		pretty_output_list(data);
-	else
+		break;
+	case CMD_DISCONNECT_CLIENT:
+	case CMD_SET_OUTPUT:
+	case CMD_WAYVNC_EXIT:
+		printf("Ok\n");
+		break;
+	case CMD_EVENT_RECEIVE:
+		abort(); // Event loop code handles this one
+	case CMD_UNKNOWN:
 		json_dumpf(data, stdout, JSON_INDENT(2));
+	}
 }
 
 static void print_compact_json(json_t* data)
@@ -710,10 +724,15 @@ int ctl_client_run_command(struct ctl_client* self,
 	if (!request)
 		goto parse_failure;
 
-	if (strcmp(request->method, "event-receive") == 0)
+	enum cmd_type cmd = ctl_command_parse_name(request->method);
+	switch (cmd) {
+	case CMD_EVENT_RECEIVE:
 		result = ctl_client_event_loop(self, request);
-	else
+		break;
+	default:
 		result = ctl_client_print_single_command(self, request);
+		break;
+	}
 
 	jsonipc_request_destroy(request);
 parse_failure:

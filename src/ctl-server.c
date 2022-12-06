@@ -105,18 +105,6 @@ static void cmd_response_destroy(struct cmd_response* self)
 	free(self);
 }
 
-static enum cmd_type parse_command_name(const char* name)
-{
-	if (!name || name[0] == '\0')
-		return CMD_UNKNOWN;
-	for (int i = 0; i < CMD_LIST_LEN; ++i) {
-		if (strcmp(name, ctl_command_list[i].name) == 0) {
-			return i;
-		}
-	}
-	return CMD_UNKNOWN;
-}
-
 static struct cmd_help* cmd_help_new(json_t* args,
 		struct jsonipc_error* err)
 {
@@ -218,7 +206,7 @@ static struct cmd* parse_command(struct jsonipc_request* ipc,
 		struct jsonipc_error* err)
 {
 	nvnc_trace("Parsing command %s", ipc->method);
-	enum cmd_type cmd_type = parse_command_name(ipc->method);
+	enum cmd_type cmd_type = ctl_command_parse_name(ipc->method);
 	struct cmd* cmd = NULL;
 	switch (cmd_type) {
 	case CMD_HELP:
@@ -323,22 +311,11 @@ static json_t* client_next_object(struct ctl_client* self, struct cmd_response**
 	return root;
 }
 
-static struct cmd_info* find_info(const char* id, struct cmd_info (*list)[],
-		size_t len)
-{
-	for (size_t i = 0; i < len; ++i) {
-		struct cmd_info* info = &(*list)[i];
-		if (strcmp(info->name, id) == 0)
-			return info;
-	}
-	return NULL;
-}
-
 static struct cmd_response* generate_help_object(const char* id, bool id_is_command)
 {
 	struct cmd_info* info = id_is_command ?
-		find_info(id, &ctl_command_list, CMD_LIST_LEN) :
-		find_info(id, &ctl_event_list, EVT_LIST_LEN);
+		ctl_command_by_name(id) :
+		ctl_event_by_name(id);
 	json_t* data;
 	if (!info) {
 		data = json_pack("{s:o, s:o}",
@@ -416,8 +393,8 @@ static struct cmd_response* generate_output_list(struct ctl* self)
 static struct cmd_response* ctl_server_dispatch_cmd(struct ctl* self,
 		struct ctl_client* client, struct cmd* cmd)
 {
-	assert(cmd->type != CMD_UNKNOWN);
-	const struct cmd_info* info = &ctl_command_list[cmd->type];
+	const struct cmd_info* info = ctl_command_by_type(cmd->type);
+	assert(info);
 	nvnc_log(NVNC_LOG_INFO, "Dispatching control client command '%s'", info->name);
 	struct cmd_response* response = NULL;
 	switch (cmd->type) {

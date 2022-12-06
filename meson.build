@@ -119,6 +119,7 @@ ctlsources = [
 	'src/util.c',
 	'src/json-ipc.c',
 	'src/ctl-client.c',
+	'src/ctl-commands.c',
 	'src/strlcpy.c',
 	'src/option-parser.c',
 ]
