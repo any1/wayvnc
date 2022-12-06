@@ -48,5 +48,13 @@ struct cmd_info {
 	struct cmd_param_info params[5];
 };
 
+enum cmd_type ctl_command_parse_name(const char* name);
+struct cmd_info* ctl_command_by_type(enum cmd_type type);
+struct cmd_info* ctl_command_by_name(const char* name);
+
+enum event_type ctl_event_parse_name(const char* name);
+struct cmd_info* ctl_event_by_type(enum event_type type);
+struct cmd_info* ctl_event_by_name(const char* name);
+
 extern struct cmd_info ctl_command_list[];
 extern struct cmd_info ctl_event_list[];

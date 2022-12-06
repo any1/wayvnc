@@ -17,6 +17,7 @@
 #include "ctl-commands.h"
 
 #include <stdlib.h>
+#include <string.h>
 
 struct cmd_info ctl_command_list[] = {
 	[CMD_HELP] = { "help",
@@ -90,3 +91,51 @@ struct cmd_info ctl_event_list[] = {
 	},
 
 };
+
+enum cmd_type ctl_command_parse_name(const char* name)
+{
+	if (!name || name[0] == '\0')
+		return CMD_UNKNOWN;
+	for (size_t i = 0; i < CMD_LIST_LEN; ++i) {
+		if (strcmp(name, ctl_command_list[i].name) == 0) {
+			return i;
+		}
+	}
+	return CMD_UNKNOWN;
+}
+
+enum event_type ctl_event_parse_name(const char* name)
+{
+	if (!name || name[0] == '\0')
+		return EVT_UNKNOWN;
+	for (size_t i = 0; i < EVT_LIST_LEN; ++i) {
+		if (strcmp(name, ctl_event_list[i].name) == 0) {
+			return i;
+		}
+	}
+	return EVT_UNKNOWN;
+}
+
+struct cmd_info* ctl_command_by_type(enum cmd_type cmd)
+{
+	if (cmd == CMD_UNKNOWN)
+		return NULL;
+	return &ctl_command_list[cmd];
+}
+
+struct cmd_info* ctl_command_by_name(const char* name)
+{
+	return ctl_command_by_type(ctl_command_parse_name(name));
+}
+
+struct cmd_info* ctl_event_by_type(enum event_type evt)
+{
+	if (evt == EVT_UNKNOWN)
+		return NULL;
+	return &ctl_event_list[evt];
+}
+
+struct cmd_info* ctl_event_by_name(const char* name)
+{
+	return ctl_event_by_type(ctl_event_parse_name(name));
+}
