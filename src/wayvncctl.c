@@ -47,11 +47,11 @@ static int wayvncctl_usage(FILE* stream, struct option_parser* options, int rc)
 	static const char* usage =
 "Usage: wayvncctl [options] [command [--param1=value1 ...]]\n"
 "\n"
-"Connects to and interacts with a running wayvnc instance."
-"\n"
-"Try 'wayvncctl help' for a list of available commands.";
+"Connects to and interacts with a running wayvnc instance.";
 	fprintf(stream, "%s\n\n", usage);
 	option_parser_print_options(options, stream);
+	fprintf(stream, "\n");
+	ctl_client_print_command_list(stream);
 	return rc;
 }
 
@@ -67,7 +67,6 @@ int main(int argc, char* argv[])
 
 	bool verbose = false;
 	const char* socket_path = NULL;
-	int wait_for_socket = 0;
 
 	unsigned flags = 0;
 
@@ -103,13 +102,13 @@ int main(int argc, char* argv[])
 			socket_path = optarg;
 			break;
 		case 'w':
-			wait_for_socket = -1;
+			flags |= CTL_CLIENT_SOCKET_WAIT;
 			break;
 		case 'r':
-			flags |= RECONNECT;
+			flags |= CTL_CLIENT_RECONNECT;
 			break;
 		case 'j':
-			flags |= PRINT_JSON;
+			flags |= CTL_CLIENT_PRINT_JSON;
 			break;
 		case 'v':
 			verbose = true;
@@ -133,13 +132,8 @@ int main(int argc, char* argv[])
 	if (!self.ctl)
 		goto ctl_client_failure;
 
-	int result = ctl_client_connect(self.ctl, wait_for_socket);
-	if (result != 0)
-		goto socket_failure;
+	int result = ctl_client_run_command(self.ctl, argc, argv, flags);
 
-	result = ctl_client_run_command(self.ctl, argc, argv, flags);
-
-socket_failure:
 	ctl_client_destroy(self.ctl);
 
 	return result;

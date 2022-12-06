@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <stdio.h>
 #include <stdbool.h>
 
 struct ctl_client;
@@ -26,9 +27,12 @@ struct ctl_client* ctl_client_new(const char* socket_path, void* userdata);
 void ctl_client_destroy(struct ctl_client*);
 void* ctl_client_userdata(struct ctl_client*);
 
-#define PRINT_JSON 0x00000001
-#define RECONNECT  0x00000002
+#define CTL_CLIENT_PRINT_JSON  (1 << 0)
+#define CTL_CLIENT_SOCKET_WAIT (1 << 1)
+#define CTL_CLIENT_RECONNECT   (1 << 2)
 
-int ctl_client_connect(struct ctl_client* self, int timeout);
 int ctl_client_run_command(struct ctl_client* self,
 		int argc, char* argv[], unsigned flags);
+
+void ctl_client_print_command_list(FILE* stream);
+void ctl_client_print_event_list(FILE* stream);
