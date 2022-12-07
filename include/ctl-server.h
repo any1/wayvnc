@@ -33,6 +33,7 @@ struct ctl_server_output {
 	unsigned height;
 	unsigned width;
 	bool captured;
+	char power[8];
 };
 
 struct ctl_server_actions {

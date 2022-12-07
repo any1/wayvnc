@@ -380,12 +380,13 @@ static struct cmd_response* generate_output_list(struct ctl* self)
 	response->data = json_array();
 	for (size_t i = 0; i < num_outputs; ++i)
 		json_array_append_new(response->data, json_pack(
-					"{s:s, s:s, s:i, s:i, s:b}",
+					"{s:s, s:s, s:i, s:i, s:b, s:s}",
 				"name", outputs[i].name,
 				"description", outputs[i].description,
 				"height", outputs[i].height,
 				"width", outputs[i].width,
-				"captured", outputs[i].captured));
+				"captured", outputs[i].captured,
+				"power", outputs[i].power));
 	free(outputs);
 	return response;
 }
