@@ -537,6 +537,8 @@ static int get_output_list(struct ctl* ctl,
 		item->height = output->height;
 		item->width = output->width;
 		item->captured = (output->id == self->selected_output->id);
+		strlcpy(item->power, output_power_state_name(output->power),
+				sizeof(item->power));
 		item++;
 	}
 	return n;
