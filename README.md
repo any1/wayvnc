@@ -68,6 +68,16 @@ dnf install -y meson gcc ninja-build pkg-config egl-wayland egl-wayland-devel \
 ```
 apt build-dep wayvnc
 ```
+
+#### For Ubuntu
+```
+apt install meson libdrm-dev libxkbcommon-dev libwlroots-dev libjansson-dev \
+	libpam0g-dev libgnutls28-dev libavfilter-dev libavcodec-dev \
+	libavutil-dev libturbojpeg0-dev scdoc
+```
+
+#### Additional build-time dependencies
+
 The easiest way to satisfy the neatvnc and aml dependencies is to link to them
 in the subprojects directory:
 ```
@@ -85,7 +95,10 @@ mkdir neatvnc/subprojects
 cd neatvnc/subprojects
 ln -s ../../aml .
 cd -
+```
 
+### Configure and Build
+```
 meson build
 ninja -C build
 ```
@@ -145,29 +158,47 @@ The `help` command can interactively query the available IPC commands:
 
 ```
 $ wayvncctl help
-{
-    "commands": [
-        "help",
-        "version",
-        "set-output",
-	...
-    ]
-}
+Commands:
+    - help
+    - version
+    - event-receive
+    - set-output
+    - get-clients
+    - get-outputs
+    - disconnect-client
+    - wayvnc-exit
+
+Run 'wayvncctl command-name --help' for command-specific details.
+
+Events:
+    - client-connected
+    - client-disconnected
+    - capture-changed
+
+Run 'wayvncctl help --event=event-name' for event-specific details.
 ```
 
+And give descriptions and usage for specific commands:
 ```
-$ wayvncctl help command=help
-{
-    "help": {
-        "description": "List all commands, or show usage of a specific command",
-        "params": [
-            {
-                "command": "The command to show (optional)"
-            }
-        ]
-    }
-}
+$ wayvncctl set-output --help
+Usage: wayvncctl [options] set-output [params]
+
+Switch the actively captured output
+
+Parameters:
+  --switch-to=...
+    The specific output name to capture
+
+  --cycle=...
+    Either "next" or "prev"
+
+Run 'wayvncctl --help' for allowed options
 ```
 
 See the `wayvnc(1)` manpage for an in-depth description of the IPC protocol and
-the available commands.
+the available commands, and `wayvncctl(1)` for more on the command line
+interface.
+
+There is also a handy event-loop mode that can be used to run commands when
+various events occur in wayvnc. See
+[examples/event-watcher](examples/event-watcher) for more details.
