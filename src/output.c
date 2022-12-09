@@ -326,7 +326,7 @@ int output_set_power_state(struct output* output, enum output_power_state state)
 		errno = ENOENT;
 		return -1;
 	}
-	nvnc_log(NVNC_LOG_TRACE, "Output %s requesting power %s", output->name,
+	nvnc_trace("Output %s requesting power %s", output->name,
 			output_power_state_name(state));
 	int mode = (state == OUTPUT_POWER_ON) ? ZWLR_OUTPUT_POWER_V1_MODE_ON :
 		ZWLR_OUTPUT_POWER_V1_MODE_OFF;
