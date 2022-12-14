@@ -1,0 +1,99 @@
+#!/bin/bash
+
+WAYVNCCTL=${WAYVNCCTL:-wayvncctl}
+SWAYMSG=${SWAYMSG:-swaymsg}
+
+SWAY_HAS_UNPLUG=false
+IFS=" .-" read -r _ _ SWAYMAJOR SWAYMINOR _ < <($SWAYMSG -v)
+if [[ $SWAYMAJOR -ge 1 && $SWAYMINOR -ge 8 ]]; then
+    echo "Detected sway version 1.8 or later: Enabling virtual output device mode"
+    SWAY_HAS_UNPLUG=true
+else
+    echo "Detected sway version 1.7 or earlier: Not enabling virtual output device mode"
+fi
+
+find_output_matching() {
+    local pattern=$1
+    $WAYVNCCTL -j get-outputs | jq -r ".[].name | match(\"$pattern\").string"
+}
+
+wait_for_output_matching() {
+    local pattern=$1
+    local output
+    output=$(find_output_matching "$pattern")
+    while [[ -z $output ]]; do
+        sleep 0.5
+        output=$(find_output_matching "$pattern")
+    done
+    echo "$output"
+}
+
+OUTPUTS_TO_RECONNECT=()
+HEADLESS=
+restore_outputs() {
+    [[ ${#OUTPUTS_TO_RECONNECT[@]} -ge 1 ]] || return
+    echo "Restoring original output state"
+    for output in "${OUTPUTS_TO_RECONNECT[@]}"; do
+        echo "Re-enabling output $output"
+        $SWAYMSG output "$output" enable
+    done
+    if [[ $SWAY_HAS_UNPLUG == true && $HEADLESS ]]; then
+        local firstOutput=${OUTPUTS_TO_RECONNECT[0]}
+        echo "Switching wayvnc back to physical output $firstOutput"
+        wait_for_output_matching "$firstOutput" >/dev/null
+        $WAYVNCCTL set-output --switch-to="$firstOutput"
+        echo "Removing virtual output $HEADLESS"
+        $SWAYMSG output "$HEADLESS" unplug
+    fi
+    OUTPUTS_TO_RECONNECT=()
+    HEADLESS=
+}
+trap restore_outputs EXIT
+
+collapse_outputs() {
+    if [[ $SWAY_HAS_UNPLUG == true ]]; then
+        local preexisting="$(find_output_matching 'HEADLESS-\\d+')"
+        if [[ $preexisting ]]; then
+            echo "Switching to preexisting virtual output $preexisting"
+            $WAYVNCCTL set-output --switch-to="$preexisting"
+        else
+            echo "Creating a virtual display"
+            $SWAYMSG create_output
+            echo "Waiting for virtusl output to be created..."
+            HEADLESS=$(wait_for_output_matching 'HEADLESS-\\d+')
+            echo "Switching to virtual output $HEADLESS"
+            $WAYVNCCTL set-output --switch-to="$HEADLESS"
+        fi
+    fi
+    for output in $($WAYVNCCTL -j get-outputs | jq -r '.[] | select(.captured==false).name'); do
+        echo "Disabling extra output $output"
+        $SWAYMSG output "$output" disable
+        OUTPUTS_TO_RECONNECT+=("$output")
+    done
+}
+
+connection_count_now() {
+    local count=$1
+    if [[ $count == 1 ]]; then
+        collapse_outputs
+    elif [[ $count == 0 ]]; then
+        restore_outputs
+    fi
+}
+
+while IFS= read -r EVT; do
+    case "$(jq -r '.method' <<<"$EVT")" in
+        client-*onnected)
+            count=$(jq -r '.params.connection_count' <<<"$EVT")
+            connection_count_now "$count"
+            ;;
+        wayvnc-shutdown)
+            echo "wayvncctl is no longer running"
+            connection_count_now 0
+            ;;
+        wayvnc-startup)
+            echo "Ready to receive wayvnc events"
+            ;;
+    esac
+done < <("$WAYVNCCTL" --wait --reconnect --json event-receive)
+
