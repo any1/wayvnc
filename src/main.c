@@ -20,7 +20,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <unistd.h>
-#include <getopt.h>
 #include <assert.h>
 #include <inttypes.h>
 #include <errno.h>
@@ -1069,7 +1068,7 @@ static void on_nvnc_client_new(struct nvnc_client* client)
 			self->nr_clients);
 }
 
-void parse_keyboard_option(struct wayvnc* self, char* arg)
+void parse_keyboard_option(struct wayvnc* self, const char* arg)
 {
 	// Find optional variant, separated by -
 	char* index = strchr(arg, '-');
@@ -1252,6 +1251,7 @@ int main(int argc, char* argv[])
 	const char* output_name = NULL;
 	const char* seat_name = NULL;
 	const char* socket_path = NULL;
+	const char* keyboard_options = NULL;
 
 	bool overlay_cursor = false;
 	bool show_performance = false;
@@ -1263,6 +1263,8 @@ int main(int argc, char* argv[])
 	int log_level = NVNC_LOG_WARNING;
 
 	static const struct wv_option opts[] = {
+		{ .positional = "address" },
+		{ .positional = "port" },
 		{ 'C', "config", "<path>",
 		  "Select a config file." },
 		{ 'g', "gpu", NULL,
@@ -1278,7 +1280,8 @@ int main(int argc, char* argv[])
 		{ 'r', "render-cursor", NULL,
 		  "Enable overlay cursor rendering." },
 		{ 'f', "max-fps", "<fps>",
-		  "Set rate limit (default 30)." },
+		  "Set rate limit (default 30).",
+		  .default_ = "30" },
 		{ 'p', "performance", NULL,
 		  "Show performance counters." },
 		{ 'u', "unix-socket", NULL,
@@ -1290,84 +1293,53 @@ int main(int argc, char* argv[])
 		{ 'v', "verbose", NULL,
 		  "Be more verbose. Same as setting --log-level=info" },
 		{ 'L', "log-level", "<level>",
-		  "Set log level. The levels are: error, warning, info, debug trace and quiet." },
+		  "Set log level. The levels are: error, warning, info, debug trace and quiet.",
+		  .default_ = "warning" },
 		{ 'h', "help", NULL,
 		  "Get help (this text)." },
 		{ '\0', NULL, NULL, NULL }
 	};
 
 	struct option_parser option_parser;
-	option_parser_init(&option_parser, opts,
-			OPTION_PARSER_CHECK_ALL_ARGUMENTS);
+	option_parser_init(&option_parser, opts);
 
-	while (1) {
-		int c = option_parser_getopt(&option_parser, argc, argv);
-		if (c < 0)
-			break;
+	if (option_parser_parse(&option_parser, argc,
+				(const char* const*)argv) < 0)
+		return wayvnc_usage(&option_parser, stderr, 1);
 
-		switch (c) {
-		case 'C':
-			cfg_file = optarg;
-			break;
-		case 'g':
-			enable_gpu_features = true;
-			break;
-		case 'o':
-			output_name = optarg;
-			break;
-		case 'k':
-			parse_keyboard_option(&self, optarg);
-			break;
-		case 's':
-			seat_name = optarg;
-			break;
-		case 'S':
-			socket_path = optarg;
-			break;
-		case 'r':
-			overlay_cursor = true;
-			break;
-		case 'f':
-			max_rate = atoi(optarg);
-			break;
-		case 'p':
-			show_performance = true;
-			break;
-		case 'u':
-			use_unix_socket = true;
-			break;
-		case 'd':
-			disable_input = true;
-			break;
-		case 'v':
-			log_level = NVNC_LOG_INFO;
-			break;
-		case 'L':
-			log_level = log_level_from_string(optarg);
-			if (log_level < 0) {
-				fprintf(stderr, "Invalid log level: %s\n",
-						optarg);
-				return wayvnc_usage(&option_parser, stderr, 1);
-			}
-			break;
-		case 'V':
-			return show_version();
-		case 'h':
-			return wayvnc_usage(&option_parser, stdout, 0);
-		default:
-			return wayvnc_usage(&option_parser, stderr, 1);
-		}
+	if (option_parser_get_value(&option_parser, "version")) {
+		return show_version();
 	}
+
+	if (option_parser_get_value(&option_parser, "help")) {
+		return wayvnc_usage(&option_parser, stdout, 0);
+	}
+
+	cfg_file = option_parser_get_value(&option_parser, "config");
+	enable_gpu_features = !!option_parser_get_value(&option_parser, "gpu");
+	output_name = option_parser_get_value(&option_parser, "output");
+	seat_name = option_parser_get_value(&option_parser, "seat");
+	socket_path = option_parser_get_value(&option_parser, "socket");
+	overlay_cursor = !!option_parser_get_value(&option_parser, "render-cursor");
+	show_performance = !!option_parser_get_value(&option_parser, "performance");
+	use_unix_socket = !!option_parser_get_value(&option_parser, "unix");
+	disable_input = !!option_parser_get_value(&option_parser, "disable-input");
+	log_level = option_parser_get_value(&option_parser, "verbose")
+		? NVNC_LOG_INFO : NVNC_LOG_WARNING;
+	log_level = log_level_from_string(
+			option_parser_get_value(&option_parser, "log-level"));
+	max_rate = atoi(option_parser_get_value(&option_parser, "max-fps"));
+
+	keyboard_options = option_parser_get_value(&option_parser, "keyboard");
+	if (keyboard_options)
+		parse_keyboard_option(&self, keyboard_options);
 
 	nvnc_set_log_level(log_level);
 
-	int n_args = argc - optind;
-
-	if (n_args >= 1)
-		address = argv[optind];
-
-	if (n_args >= 2)
-		port = atoi(argv[optind + 1]);
+	address = option_parser_get_value(&option_parser, "address");
+	const char* port_str = option_parser_get_value(&option_parser, "port");
+	if (port_str)
+		port = atoi(port_str);
 
 	if (seat_name && disable_input) {
 		nvnc_log(NVNC_LOG_ERROR, "seat and disable-input are conflicting options");

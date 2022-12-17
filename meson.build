@@ -19,6 +19,7 @@ c_args = [
 	'-DAML_UNSTABLE_API=1',
 
 	'-Wno-unused-parameter',
+	'-Wno-missing-field-initializers',
 ]
 
 git = find_program('git', native: true, required: false)
@@ -196,4 +197,8 @@ if scdoc.found()
 			install_dir: '@0@/man1'.format(mandir)
 		)
 	endforeach
+endif
+
+if get_option('tests')
+	subdir('test')
 endif
