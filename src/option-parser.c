@@ -15,53 +15,30 @@
  */
 
 #include "option-parser.h"
+#include "strlcpy.h"
 
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
 #include <assert.h>
 
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
+
 static int count_options(const struct wv_option* opts)
 {
 	int n = 0;
-	while (opts[n].short_opt || opts[n].long_opt)
+	while (opts[n].short_opt || opts[n].long_opt || opts[n].positional)
 		n++;
 	return n;
 }
 
 void option_parser_init(struct option_parser* self,
-		const struct wv_option* options,
-		unsigned flags)
+		const struct wv_option* options)
 {
 	memset(self, 0, sizeof(*self));
 
 	self->options = options;
 	self->n_opts = count_options(options);
-
-	int short_opt_index = 0;
-	int long_opt_index = 0;
-
-	if (flags && OPTION_PARSER_STOP_ON_FIRST_NONOPTION)
-		self->short_opts[short_opt_index++] = '+';
-
-	for (int i = 0; i < self->n_opts; ++i) {
-		assert(options[i].short_opt); // TODO: Make this optional?
-
-		self->short_opts[short_opt_index++] = options[i].short_opt;
-		if (options[i].schema)
-			self->short_opts[short_opt_index++] = ':';
-
-		if (!options[i].long_opt)
-			continue;
-
-		const struct wv_option* src_opt = &options[i];
-		struct option* dst_opt = &self->long_opts[long_opt_index++];
-
-		dst_opt->val = src_opt->short_opt;
-		dst_opt->name = src_opt->long_opt;
-		dst_opt->has_arg = src_opt->schema ?
-			required_argument : no_argument;
-	}
 }
 
 static int get_left_col_width(const struct wv_option* opts, int n)
@@ -129,7 +106,8 @@ static void reflow_text(char* dst, const char* src, int width)
 static void format_option(const struct wv_option* opt, int left_col_width,
 		FILE* stream)
 {
-	assert(opt->help);
+	if (!opt->help)
+		return;
 
 	int n_chars = fprintf(stream, "    ");
 	if (opt->short_opt)
@@ -171,7 +149,223 @@ void option_parser_print_options(struct option_parser* self, FILE* stream)
 	}
 }
 
-int option_parser_getopt(struct option_parser* self, int argc, char* argv[])
+static const struct wv_option* find_long_option(
+		const struct option_parser* self, const char* name)
 {
-	return getopt_long(argc, argv, self->short_opts, self->long_opts, NULL);
+	for (int i = 0; i < self->n_opts; ++i) {
+		if (!self->options[i].long_opt)
+			continue;
+
+		if (strcmp(self->options[i].long_opt, name) == 0)
+			return &self->options[i];
+	}
+	return NULL;
+}
+
+static const struct wv_option* find_short_option(
+		const struct option_parser* self, char name)
+{
+	for (int i = 0; i < self->n_opts; ++i)
+		if (self->options[i].short_opt == name)
+			return &self->options[i];
+	return NULL;
+}
+
+static const struct wv_option* find_positional_option(
+		struct option_parser* self, int position)
+{
+	int current_pos = 0;
+	for (int i = 0; i < self->n_opts; ++i) {
+		if (!self->options[i].positional)
+			continue;
+
+		if (current_pos == position)
+			return &self->options[i];
+
+		current_pos += 1;
+	}
+	return NULL;
+}
+
+static int append_value(struct option_parser* self,
+		const struct wv_option* option, const char* value)
+{
+	if ((size_t)self->n_values >= ARRAY_SIZE(self->values)) {
+		fprintf(stderr, "ERROR: Too many arguments!\n");
+		return -1;
+	}
+
+	struct wv_option_value* dst = &self->values[self->n_values++];
+	dst->option = option;
+	strlcpy(dst->value, value, sizeof(dst->value));
+
+	return 0;
+}
+
+static int parse_long_arg(struct option_parser* self, int argc,
+		const char* const* argv, int index)
+{
+	int count = 1;
+	char name[256];
+	strlcpy(name, argv[index] + 2, sizeof(name));
+	char* eq = strchr(name, '=');
+	if (eq)
+		*eq = '\0';
+
+	const struct wv_option* opt = find_long_option(self, name);
+	if (!opt) {
+		fprintf(stderr, "ERROR: Unknown option: \"%s\"\n", name);
+		return -1;
+	}
+
+	const char* value = "1";
+	if (opt->schema) {
+		if (eq) {
+			value = eq + 1;
+		} else {
+			if (index + 1 >= argc) {
+				fprintf(stderr, "ERROR: An argument is required for the \"%s\" option\n",
+						opt->long_opt);
+				return -1;
+			}
+
+			value = argv[index + 1];
+			count += 1;
+		}
+	}
+
+	if (append_value(self, opt, value) < 0)
+		return -1;
+
+	return count;
+}
+
+static int parse_short_args(struct option_parser* self, char argc,
+		const char* const* argv, int index)
+{
+	int count = 1;
+	int len = strlen(argv[index]);
+
+	for (int i = 1; i < len; ++i) {
+		char name = argv[index][i];
+		const struct wv_option* opt = find_short_option(self, name);
+		if (!opt) {
+			fprintf(stderr, "ERROR: Unknown option: \"%c\"\n", name);
+			return -1;
+		}
+
+		const char* value = "1";
+		if (opt->schema) {
+			const char* tail = argv[index] + i + 1;
+			if (tail[0] == '=') {
+				value = tail + 1;
+			} else if (tail[0]) {
+				value = tail;
+			} else {
+				if (index + 1 >= argc) {
+					fprintf(stderr, "ERROR: An argument is required for the \"%c\" option\n",
+							opt->short_opt);
+
+					return -1;
+				}
+
+				value = argv[index + 1];
+				count += 1;
+			}
+		}
+
+		if (append_value(self, opt, value) < 0)
+			return -1;
+
+		if (opt->schema)
+			break;
+	}
+
+	return count;
+}
+
+static int parse_positional_arg(struct option_parser* self, char argc,
+		const char* const* argv, int i)
+{
+	const struct wv_option* opt = find_positional_option(self, self->position);
+	if (!opt)
+		return 1;
+
+	if (append_value(self, opt, argv[i]) < 0)
+		return -1;
+
+	self->position += 1;
+
+	return opt->is_subcommand ? 0 : 1;
+}
+
+int option_parser_parse(struct option_parser* self, int argc,
+		const char* const* argv)
+{
+	int i = 1;
+	while (i < argc) {
+		if (argv[i][0] == '-') {
+			if (argv[i][1] == '-') {
+				if (argv[i][2] == '\0')
+					return 0;
+
+				int rc = parse_long_arg(self, argc, argv, i);
+				if (rc < 0)
+					return -1;
+				i += rc;
+			} else {
+				int rc = parse_short_args(self, argc, argv, i);
+				if (rc < 0)
+					return -1;
+				i += rc;
+			}
+		} else {
+			int rc = parse_positional_arg(self, argc, argv, i);
+			if (rc < 0)
+				return -1;
+			if (rc == 0)
+				break;
+			i += rc;
+		}
+	}
+	self->endpos = i;
+	return 0;
+}
+
+const char* option_parser_get_value(const struct option_parser* self,
+		const char* name)
+{
+	const struct wv_option* opt;
+
+	bool is_short = name[0] && !name[1];
+
+	for (int i = 0; i < self->n_values; ++i) {
+		const struct wv_option_value* value = &self->values[i];
+		opt = value->option;
+
+		if (is_short) {
+			if (opt->short_opt && opt->short_opt == *name)
+				return value->value;
+		} else {
+			if (opt->long_opt && strcmp(opt->long_opt, name) == 0)
+				return value->value;
+		}
+
+		if (opt->positional && strcmp(opt->positional, name) == 0)
+			return value->value;
+	}
+
+	if (is_short) {
+		opt = find_short_option(self, name[0]);
+		if (opt)
+			return opt->default_;
+	} else {
+		opt = find_long_option(self, name);
+		if (opt)
+			return opt->default_;
+	}
+
+	// TODO: Add positional option?
+
+	return NULL;
 }

@@ -6,3 +6,5 @@ option('man-pages', type: 'feature', value: 'auto',
 	description: 'Generate and install man pages')
 option('systemtap', type: 'boolean', value: false,
 	description: 'Enable tracing using sdt')
+option('tests', type: 'boolean', value: false,
+	description: 'Build unit tests')

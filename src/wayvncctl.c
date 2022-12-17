@@ -20,7 +20,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <unistd.h>
-#include <getopt.h>
 #include <assert.h>
 #include <inttypes.h>
 #include <errno.h>
@@ -71,6 +70,8 @@ int main(int argc, char* argv[])
 	unsigned flags = 0;
 
 	static const struct wv_option opts[] = {
+		{ .positional = "command",
+		  .is_subcommand = true },
 		{ 'S', "socket", "<path>",
 		  "Control socket path." },
 		{ 'w', "wait", NULL,
@@ -85,46 +86,36 @@ int main(int argc, char* argv[])
 		  "Be more verbose." },
 		{ 'h', "help", NULL,
 		  "Get help (this text)." },
-		{ '\0', NULL, NULL, NULL }
+		{ }
 	};
 
 	struct option_parser option_parser;
-	option_parser_init(&option_parser, opts,
-			OPTION_PARSER_STOP_ON_FIRST_NONOPTION);
-
-	while (1) {
-		int c = option_parser_getopt(&option_parser, argc, argv);
-		if (c < 0)
-			break;
-
-		switch (c) {
-		case 'S':
-			socket_path = optarg;
-			break;
-		case 'w':
-			flags |= CTL_CLIENT_SOCKET_WAIT;
-			break;
-		case 'r':
-			flags |= CTL_CLIENT_RECONNECT;
-			break;
-		case 'j':
-			flags |= CTL_CLIENT_PRINT_JSON;
-			break;
-		case 'v':
-			verbose = true;
-			break;
-		case 'V':
-			return show_version();
-		case 'h':
-			return wayvncctl_usage(stdout, &option_parser, 0);
-		default:
-			return wayvncctl_usage(stderr, &option_parser, 1);
-		}
-	}
-	argc -= optind;
-	if (argc <= 0)
+	option_parser_init(&option_parser, opts);
+	if (option_parser_parse(&option_parser, argc,
+				(const char* const*)argv) < 0)
 		return wayvncctl_usage(stderr, &option_parser, 1);
-	argv = &argv[optind];
+
+	if (option_parser_get_value(&option_parser, "help"))
+		return wayvncctl_usage(stdout, &option_parser, 0);
+
+	if (option_parser_get_value(&option_parser, "version"))
+		return show_version();
+
+	socket_path = option_parser_get_value(&option_parser, "socket");
+	flags |= option_parser_get_value(&option_parser, "wait")
+		? CTL_CLIENT_SOCKET_WAIT : 0;
+	flags |= option_parser_get_value(&option_parser, "reconnect")
+		? CTL_CLIENT_RECONNECT : 0;
+	flags |= option_parser_get_value(&option_parser, "json")
+		? CTL_CLIENT_PRINT_JSON : 0;
+	verbose = !!option_parser_get_value(&option_parser, "verbose");
+
+	// No command; nothing to do...
+	if (!option_parser_get_value(&option_parser, "command"))
+		return 0;
+
+	argc -= option_parser.endpos;
+	argv += option_parser.endpos;
 
 	ctl_client_debug_log(verbose);
 

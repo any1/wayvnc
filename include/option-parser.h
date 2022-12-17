@@ -17,26 +17,40 @@
 #pragma once
 
 #include <stdio.h>
-#include <getopt.h>
+#include <stdbool.h>
 
 struct wv_option {
 	char short_opt;
 	const char* long_opt;
 	const char* schema;
 	const char* help;
+	const char* default_;
+	const char* positional;
+	bool is_subcommand;
+};
+
+struct wv_option_value {
+	const struct wv_option* option;
+	char value[256];
 };
 
 struct option_parser {
 	const struct wv_option* options;
-	char short_opts[128];
-	struct option long_opts[128];
 	int n_opts;
+
+	struct wv_option_value values[128];
+	int n_values;
+	int position;
+
+	int endpos;
 };
 
-#define OPTION_PARSER_CHECK_ALL_ARGUMENTS 0
-#define OPTION_PARSER_STOP_ON_FIRST_NONOPTION 1
-
-void option_parser_init(struct option_parser* self, const struct wv_option* options, unsigned flags);
+void option_parser_init(struct option_parser* self,
+		const struct wv_option* options);
 
 void option_parser_print_options(struct option_parser* self, FILE* stream);
-int option_parser_getopt(struct option_parser* self, int argc, char* argv[]);
+
+int option_parser_parse(struct option_parser* self, int argc,
+		const char* const* argv);
+const char* option_parser_get_value(const struct option_parser* self,
+		const char* name);
