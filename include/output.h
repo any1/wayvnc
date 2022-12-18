@@ -20,7 +20,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+struct zxdg_output_manager_v1;
 struct zxdg_output_v1;
+struct zwlr_output_power_manager_v1;
 struct zwlr_output_power_v1;
 
 enum output_power_state {
@@ -65,10 +67,7 @@ struct output {
 
 struct output* output_new(struct wl_output* wl_output, uint32_t id);
 void output_destroy(struct output* output);
-void output_set_xdg_output(struct output* output,
-                           struct zxdg_output_v1* xdg_output);
-void output_set_wlr_output_power(struct output* output,
-                           struct zwlr_output_power_v1* wlr_output_power);
+void output_setup_wl_managers(struct wl_list* list);
 int output_set_power_state(struct output* output, enum output_power_state state);
 void output_list_destroy(struct wl_list* list);
 struct output* output_find_by_id(struct wl_list* list, uint32_t id);

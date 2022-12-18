@@ -78,8 +78,6 @@ struct wayvnc {
 	struct wl_list seats;
 	struct cfg cfg;
 
-	struct zxdg_output_manager_v1* xdg_output_manager;
-	struct zwlr_output_power_manager_v1* wlr_output_power_manager;
 	struct zwp_virtual_keyboard_manager_v1* keyboard_manager;
 	struct zwlr_virtual_pointer_manager_v1* pointer_manager;
 	struct zwlr_data_control_manager_v1* data_control_manager;
@@ -134,6 +132,8 @@ static void client_init_data_control(struct wayvnc_client* self);
 struct wl_shm* wl_shm = NULL;
 struct zwp_linux_dmabuf_v1* zwp_linux_dmabuf = NULL;
 struct gbm_device* gbm_device = NULL;
+struct zxdg_output_manager_v1* xdg_output_manager = NULL;
+struct zwlr_output_power_manager_v1* wlr_output_power_manager = NULL;
 
 static bool registry_add_input(void* data, struct wl_registry* registry,
 			 uint32_t id, const char* interface,
@@ -190,6 +190,7 @@ static void registry_add(void* data, struct wl_registry* registry,
 	struct wayvnc* self = data;
 
 	if (strcmp(interface, wl_output_interface.name) == 0) {
+		nvnc_trace("Registering new output %u", id);
 		struct wl_output* wl_output =
 			wl_registry_bind(registry, id, &wl_output_interface, 3);
 		if (!wl_output)
@@ -204,16 +205,20 @@ static void registry_add(void* data, struct wl_registry* registry,
 	}
 
 	if (strcmp(interface, zxdg_output_manager_v1_interface.name) == 0) {
-		self->xdg_output_manager =
+		nvnc_trace("Registering new xdg_output_manager");
+		xdg_output_manager =
 			wl_registry_bind(registry, id,
 			                 &zxdg_output_manager_v1_interface, 3);
+
+		output_setup_wl_managers(&self->outputs);
 		return;
 	}
 
 	if (strcmp(interface, zwlr_output_power_manager_v1_interface.name) == 0) {
-		self->wlr_output_power_manager =
-			wl_registry_bind(registry, id,
+		nvnc_trace("Registering new wlr_output_power_manager");
+		wlr_output_power_manager = wl_registry_bind(registry, id,
 					&zwlr_output_power_manager_v1_interface, 1);
+		output_setup_wl_managers(&self->outputs);
 		return;
 	}
 
@@ -327,11 +332,11 @@ void wayvnc_destroy(struct wayvnc* self)
 	output_list_destroy(&self->outputs);
 	seat_list_destroy(&self->seats);
 
-	zxdg_output_manager_v1_destroy(self->xdg_output_manager);
+	if (xdg_output_manager)
+		zxdg_output_manager_v1_destroy(xdg_output_manager);
 
-	if (self->wlr_output_power_manager)
-		zwlr_output_power_manager_v1_destroy(
-				self->wlr_output_power_manager);
+	if (wlr_output_power_manager)
+		zwlr_output_power_manager_v1_destroy(wlr_output_power_manager);
 
 	wl_shm_destroy(wl_shm);
 
@@ -357,25 +362,6 @@ void wayvnc_destroy(struct wayvnc* self)
 	wl_display_disconnect(self->display);
 }
 
-static void init_outputs(struct wayvnc* self)
-{
-	struct output* output;
-	wl_list_for_each(output, &self->outputs, link) {
-		struct zxdg_output_v1* xdg_output =
-			zxdg_output_manager_v1_get_xdg_output(
-				self->xdg_output_manager, output->wl_output);
-		output_set_xdg_output(output, xdg_output);
-
-		if (self->wlr_output_power_manager) {
-			struct zwlr_output_power_v1* wlr_output_power =
-				zwlr_output_power_manager_v1_get_output_power(
-						self->wlr_output_power_manager,
-						output->wl_output);
-			output_set_wlr_output_power(output, wlr_output_power);
-		}
-	}
-}
-
 static int init_wayland(struct wayvnc* self)
 {
 	static const struct wl_registry_listener registry_listener = {
@@ -399,8 +385,6 @@ static int init_wayland(struct wayvnc* self)
 	wl_display_dispatch(self->display);
 	wl_display_roundtrip(self->display);
 
-	init_outputs(self);
-
 	if (!self->pointer_manager && !self->disable_input) {
 		nvnc_log(NVNC_LOG_ERROR, "Virtual Pointer protocol not supported by compositor.");
 		nvnc_log(NVNC_LOG_ERROR, "wayvnc may still work if started with --disable-input.");
@@ -412,9 +396,6 @@ static int init_wayland(struct wayvnc* self)
 		nvnc_log(NVNC_LOG_ERROR, "wayvnc may still work if started with --disable-input.");
 		goto failure;
 	}
-
-	wl_display_dispatch(self->display);
-	wl_display_roundtrip(self->display);
 
 	if (!self->screencopy.manager) {
 		nvnc_log(NVNC_LOG_ERROR, "Screencopy protocol not supported by compositor. Exiting. Refer to FAQ section in man page.");

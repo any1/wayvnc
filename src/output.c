@@ -31,6 +31,9 @@
 #include "xdg-output-unstable-v1.h"
 #include "wlr-output-power-management-unstable-v1.h"
 
+extern struct zxdg_output_manager_v1* xdg_output_manager;
+extern struct zwlr_output_power_manager_v1* wlr_output_power_manager;
+
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
@@ -181,7 +184,8 @@ static const struct wl_output_listener output_listener = {
 
 void output_destroy(struct output* output)
 {
-	zxdg_output_v1_destroy(output->xdg_output);
+	if (output->xdg_output)
+		zxdg_output_v1_destroy(output->xdg_output);
 	if (output->wlr_output_power)
 		zwlr_output_power_v1_destroy(output->wlr_output_power);
 	wl_output_destroy(output->wl_output);
@@ -197,24 +201,6 @@ void output_list_destroy(struct wl_list* list)
 		wl_list_remove(&output->link);
 		output_destroy(output);
 	}
-}
-
-struct output* output_new(struct wl_output* wl_output, uint32_t id)
-{
-	struct output* output = calloc(1, sizeof(*output));
-	if (!output) {
-		nvnc_log(NVNC_LOG_ERROR, "OOM");
-		return NULL;
-	}
-
-	output->wl_output = wl_output;
-	output->id = id;
-	output->power = OUTPUT_POWER_UNKNOWN;
-
-	wl_output_add_listener(output->wl_output, &output_listener,
-			output);
-
-	return output;
 }
 
 void output_logical_position(void* data, struct zxdg_output_v1* xdg_output,
@@ -233,6 +219,7 @@ void output_name(void* data, struct zxdg_output_v1* xdg_output,
 	struct output* self = data;
 
 	strlcpy(self->name, name, sizeof(self->name));
+	nvnc_trace("Output %u name: %s", self->id, self->name);
 }
 
 void output_description(void* data, struct zxdg_output_v1* xdg_output,
@@ -241,6 +228,7 @@ void output_description(void* data, struct zxdg_output_v1* xdg_output,
 	struct output* self = data;
 
 	strlcpy(self->description, description, sizeof(self->description));
+	nvnc_trace("Output %u description: %s", self->id, self->description);
 }
 
 static const struct zxdg_output_v1_listener xdg_output_listener = {
@@ -251,13 +239,17 @@ static const struct zxdg_output_v1_listener xdg_output_listener = {
 	.description = output_description,
 };
 
-void output_set_xdg_output(struct output* self,
-                           struct zxdg_output_v1* xdg_output)
+static void output_setup_xdg_output_manager(struct output* self)
 {
-	self->xdg_output = xdg_output;
+	if (!xdg_output_manager || self->xdg_output)
+		return;
 
+	struct zxdg_output_v1* xdg_output =
+		zxdg_output_manager_v1_get_xdg_output(
+			xdg_output_manager, self->wl_output);
+	self->xdg_output = xdg_output;
 	zxdg_output_v1_add_listener(self->xdg_output, &xdg_output_listener,
-	                            self);
+			self);
 }
 
 const char* output_power_state_name(enum output_power_state state)
@@ -310,9 +302,15 @@ static const struct zwlr_output_power_v1_listener wlr_output_power_listener = {
 	.failed = output_power_failed,
 };
 
-void output_set_wlr_output_power(struct output* self,
-                           struct zwlr_output_power_v1* wlr_output_power)
+static void output_setup_wlr_output_power_manager(struct output* self)
 {
+	if (!wlr_output_power_manager || self->wlr_output_power)
+		return;
+
+	struct zwlr_output_power_v1* wlr_output_power =
+		zwlr_output_power_manager_v1_get_output_power(
+				wlr_output_power_manager,
+				self->wl_output);
 	self->wlr_output_power = wlr_output_power;
 
 	zwlr_output_power_v1_add_listener(self->wlr_output_power,
@@ -381,4 +379,34 @@ struct output* output_cycle(const struct wl_list* list,
 	}
 	struct output* output;
 	return wl_container_of(iter, output, link);
+}
+
+void output_setup_wl_managers(struct wl_list* list)
+{
+	struct output* output;
+	wl_list_for_each(output, list, link) {
+		output_setup_xdg_output_manager(output);
+		output_setup_wlr_output_power_manager(output);
+	}
+}
+
+struct output* output_new(struct wl_output* wl_output, uint32_t id)
+{
+	struct output* output = calloc(1, sizeof(*output));
+	if (!output) {
+		nvnc_log(NVNC_LOG_ERROR, "OOM");
+		return NULL;
+	}
+
+	output->wl_output = wl_output;
+	output->id = id;
+	output->power = OUTPUT_POWER_UNKNOWN;
+
+	wl_output_add_listener(output->wl_output, &output_listener,
+			output);
+
+	output_setup_xdg_output_manager(output);
+	output_setup_wlr_output_power_manager(output);
+
+	return output;
 }
