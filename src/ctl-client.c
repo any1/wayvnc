@@ -54,7 +54,7 @@ struct ctl_client {
 	struct sockaddr_un addr;
 	unsigned flags;
 
-	char read_buffer[512];
+	char read_buffer[1024];
 	size_t read_len;
 
 	bool wait_for_events;
