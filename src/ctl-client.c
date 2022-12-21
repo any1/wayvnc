@@ -222,8 +222,13 @@ static json_t* json_from_buffer(struct ctl_client* self)
 	if (root) {
 		advance_read_buffer(&self->read_buffer, &self->read_len, err.position);
 	} else if (json_error_code(&err) == json_error_premature_end_of_input) {
-		DEBUG("Awaiting more data");
-		errno = ENODATA;
+		if (self->read_len == sizeof(self->read_buffer)) {
+			WARN("Response message is too long");
+			errno = EMSGSIZE;
+		} else {
+			DEBUG("Awaiting more data");
+			errno = ENODATA;
+		}
 	} else {
 		WARN("Json parsing failed: %s", err.text);
 		errno = EINVAL;
