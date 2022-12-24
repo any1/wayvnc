@@ -107,6 +107,7 @@ struct wayvnc {
 	struct aml_timer* capture_retry_timer;
 
 	struct ctl* ctl;
+	bool is_initializing;
 };
 
 struct wayvnc_client {
@@ -201,6 +202,10 @@ static void registry_add(void* data, struct wl_registry* registry,
 			return;
 
 		wl_list_insert(&self->outputs, &output->link);
+		if (!self->is_initializing) {
+			wl_display_dispatch(self->display);
+			wl_display_roundtrip(self->display);
+		}
 		return;
 	}
 
@@ -364,6 +369,7 @@ void wayvnc_destroy(struct wayvnc* self)
 
 static int init_wayland(struct wayvnc* self)
 {
+	self->is_initializing = true;
 	static const struct wl_registry_listener registry_listener = {
 		.global = registry_add,
 		.global_remove = registry_remove,
@@ -384,6 +390,7 @@ static int init_wayland(struct wayvnc* self)
 
 	wl_display_dispatch(self->display);
 	wl_display_roundtrip(self->display);
+	self->is_initializing = false;
 
 	if (!self->pointer_manager && !self->disable_input) {
 		nvnc_log(NVNC_LOG_ERROR, "Virtual Pointer protocol not supported by compositor.");
