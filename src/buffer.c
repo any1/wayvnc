@@ -312,8 +312,8 @@ static bool wv_buffer_pool_match_buffer(struct wv_buffer_pool* pool,
 			return false;
 		}
 
-		/* fall-through */
 #ifdef ENABLE_SCREENCOPY_DMABUF
+		/* fall-through */
 	case WV_BUFFER_DMABUF:
 #endif
 		if (pool->width != buffer->width
