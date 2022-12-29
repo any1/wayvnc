@@ -376,15 +376,25 @@ static int init_wayland(struct wayvnc* self)
 	};
 
 	self->display = wl_display_connect(NULL);
-	if (!self->display)
+	if (!self->display) {
+		const char* display_name = getenv("WAYLAND_DISPLAY");
+		if (!display_name) {
+			nvnc_log(NVNC_LOG_ERROR, "WAYLAND_DISPLAY is not set in the environment");
+		} else {
+			nvnc_log(NVNC_LOG_ERROR, "Failed to connect to WAYLAND_DISPLAY=\"%s\"", display_name);
+			nvnc_log(NVNC_LOG_ERROR, "Ensure wayland is running with that display name");
+		}
 		return -1;
+	}
 
 	wl_list_init(&self->outputs);
 	wl_list_init(&self->seats);
 
 	self->registry = wl_display_get_registry(self->display);
-	if (!self->registry)
+	if (!self->registry) {
+		nvnc_log(NVNC_LOG_ERROR, "Could not locate the wayland compositor object registry");
 		goto failure;
+	}
 
 	wl_registry_add_listener(self->registry, &registry_listener, self);
 
