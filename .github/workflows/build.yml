@@ -1,4 +1,4 @@
-name: Build check
+name: Build and Unit Test
 
 on:
   push:
@@ -7,10 +7,8 @@ on:
     branches: [ "master" ]
 
 jobs:
-  build:
-
+  check:
     runs-on: ubuntu-latest
-
     steps:
     - uses: actions/checkout@v3
     - name: checkout aml
@@ -23,11 +21,11 @@ jobs:
       with:
         repository: any1/neatvnc
         path: subprojects/neatvnc
-    - name: setup
+    - name: prepare environment
       run: sudo apt install -y meson libdrm-dev libxkbcommon-dev libwlroots-dev libjansson-dev libpam0g-dev libgnutls28-dev libavfilter-dev libavcodec-dev libavutil-dev libturbojpeg0-dev scdoc
     - name: configure
       run: meson build -D tests=true
-    - name: make
+    - name: compile
       run: meson compile -C build
     - name: unit tests
-      run: meson test  -C build
+      run: meson test --verbose -C build
