@@ -26,6 +26,8 @@ jobs:
     - name: setup
       run: sudo apt install -y meson libdrm-dev libxkbcommon-dev libwlroots-dev libjansson-dev libpam0g-dev libgnutls28-dev libavfilter-dev libavcodec-dev libavutil-dev libturbojpeg0-dev scdoc
     - name: configure
-      run: meson build
+      run: meson build -D tests=true
     - name: make
-      run: ninja -C build
+      run: meson compile -C build
+    - name: unit tests
+      run: meson test  -C build
