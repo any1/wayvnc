@@ -32,6 +32,7 @@
 #include "ctl-server.h"
 #include "strlcpy.h"
 #include "util.h"
+#include "option-parser.h"
 
 #define LOG(level, fmt, ...) \
 	fprintf(stderr, "[%s:%d] <" level "> " fmt "\n", __FILE__, __LINE__, \
@@ -170,42 +171,26 @@ void* ctl_client_userdata(struct ctl_client* self)
 }
 
 static struct jsonipc_request* ctl_client_parse_args(struct ctl_client* self,
-		int argc, char* argv[])
+		enum cmd_type* cmd, struct option_parser* options)
 {
 	struct jsonipc_request* request = NULL;
-	const char* method = argv[0];
 	json_t* params = json_object();
-	bool show_usage = false;
-	for (int i = 1; i < argc; ++i) {
-		char* key = argv[i];
-		char* value = NULL;
-		if (strcmp(key, "--help") == 0 || strcmp(key, "-h") == 0) {
-			show_usage = true;
+	struct cmd_info* info = ctl_command_by_type(*cmd);
+	if (option_parser_get_value(options, "help")) {
+		json_object_set_new(params, "command", json_string(info->name));
+		*cmd = CMD_HELP;
+		info = ctl_command_by_type(*cmd);
+		goto out;
+	}
+	for (int i = 0; info->params[i].name != NULL; ++i) {
+		const char* key = info->params[i].name;
+		const char* value = option_parser_get_value(options, key);
+		if (!value)
 			continue;
-		}
-		if (key[0] == '-' && key[1] == '-')
-			key += 2;
-		char* delim = strchr(key, '=');
-		if (delim) {
-			*delim = '\0';
-			value = delim + 1;
-		} else if (++i < argc) {
-			value = argv[i];
-		} else {
-			WARN("Argument must be of the format --key=value or --key value");
-			goto failure;
-		}
 		json_object_set_new(params, key, json_string(value));
 	}
-	if (show_usage) {
-		// Special case for "foo --help"; convert into "help --command=foo"
-		json_object_clear(params);
-		json_object_set_new(params, "command", json_string(method));
-		method = "help";
-	}
-	request = jsonipc_request_new(method, params);
-
-failure:
+out:
+	request = jsonipc_request_new(info->name, params);
 	json_decref(params);
 	return request;
 }
@@ -660,31 +645,18 @@ void ctl_client_print_event_list(FILE* stream)
 	printf("\nRun 'wayvncctl help --event=event-name' for event-specific details.\n");
 }
 
-static void print_cmd_info_params(const struct cmd_info* info)
+static int print_command_usage(const char* cmd_name,
+		struct option_parser* cmd_options,
+		struct option_parser* parent_options)
 {
-	if (info->params[0].name != NULL) {
-		printf("\nParameters:");
-		for (int i = 0; info->params[i].name != NULL; ++i)
-			printf("\n  --%s=...\n    %s\n", info->params[i].name,
-					info->params[i].description);
-	}
-}
-
-static int print_command_usage(const char* cmd_name)
-{
-	enum cmd_type type = ctl_command_parse_name(cmd_name);
-	struct cmd_info* info = ctl_command_by_type(type);
-	if (!info) {
-		WARN("No such command \"%s\"\n", cmd_name);
-		return 1;
-	}
-	bool params = info->params[0].name != NULL;
-	printf("Usage: wayvncctl [options] %s%s\n\n%s\n", info->name,
-			params ? " [params]" : "",
+	struct cmd_info* info = ctl_command_by_name(cmd_name);
+	printf("Usage: wayvncctl [options] %s [parameters]\n\n%s\n\n", cmd_name,
 			info->description);
-	print_cmd_info_params(info);
-	printf("\nRun 'wayvncctl --help' for allowed options\n");
-	if (type == CMD_EVENT_RECEIVE) {
+	option_parser_print_options(cmd_options, stdout);
+	printf("\n");
+	option_parser_print_options(parent_options, stdout);
+	enum cmd_type cmd = ctl_command_parse_name(cmd_name);
+	if (cmd == CMD_EVENT_RECEIVE) {
 		printf("\n");
 		ctl_client_print_event_list(stdout);
 	}
@@ -700,12 +672,19 @@ static int print_event_details(const char* evt_name)
 	}
 	printf("Event: %s\n\n%s\n", info->name,
 			info->description);
-	print_cmd_info_params(info);
+	if (info->params[0].name != NULL) {
+		printf("\nData fields:");
+		for (int i = 0; info->params[i].name != NULL; ++i)
+			printf("\n  %s=...\n    %s\n", info->params[i].name,
+					info->params[i].description);
+	}
 	return 0;
 }
 
 static int ctl_client_print_help(struct ctl_client* self,
-		struct jsonipc_request* request)
+		struct jsonipc_request* request,
+		struct option_parser* cmd_options,
+		struct option_parser* parent_options)
 {
 	if (self->flags & CTL_CLIENT_PRINT_JSON) {
 		WARN("JSON output is not supported for the \"help\" command");
@@ -720,7 +699,8 @@ static int ctl_client_print_help(struct ctl_client* self,
 				"event", &evt_name);
 
 	if (cmd_name)
-		return print_command_usage(cmd_name);
+		return print_command_usage(cmd_name, cmd_options,
+				parent_options);
 	if (evt_name)
 		return print_event_details(evt_name);
 
@@ -731,17 +711,68 @@ static int ctl_client_print_help(struct ctl_client* self,
 	return 0;
 }
 
+int ctl_client_init_cmd_parser(struct option_parser* parser, enum cmd_type cmd)
+{
+	struct cmd_info* info = ctl_command_by_type(cmd);
+	if (!info) {
+		printf("Invalid command");
+		return -1;
+	}
+
+	size_t param_count = 0;
+	while (info->params[param_count].name != NULL)
+		param_count++;
+
+	// Add 2: one for --help and one to null-terminate the list
+	struct wv_option* options = calloc(param_count + 2,
+			sizeof(struct wv_option));
+	size_t i;
+	for (i = 0; i < param_count; ++i) {
+		struct wv_option* option = &options[i];
+		option->long_opt = info->params[i].name;
+		option->help = info->params[i].description;
+		option->schema = "<value>";
+	}
+	options[i].long_opt = "help";
+	options[i].short_opt = 'h';
+	options[i].help = "Display this help text";
+	option_parser_init(parser, options);
+	parser->name = "Parameters";
+	return 0;
+}
+
+static void ctl_client_destroy_cmd_parser(struct option_parser* parser)
+{
+	// const in the struct, but we allocated it above
+	free((void*)parser->options);
+}
+
 int ctl_client_run_command(struct ctl_client* self,
-		int argc, char* argv[], unsigned flags)
+		struct option_parser* parent_options, unsigned flags)
 {
 	self->flags = flags;
 	int result = 1;
-	struct jsonipc_request*	request = ctl_client_parse_args(self, argc,
-			argv);
+
+	const char* method = option_parser_get_value(parent_options, "command");
+	enum cmd_type cmd = ctl_command_parse_name(method);
+	if (cmd == CMD_UNKNOWN) {
+		WARN("No such command \"%s\"\n", method);
+		return 1;
+	}
+
+	struct option_parser cmd_options = { };
+	if (ctl_client_init_cmd_parser(&cmd_options, cmd) != 0)
+		return 1;
+
+	if (option_parser_parse(&cmd_options, parent_options->remaining_argc,
+				parent_options->remaining_argv) != 0)
+		goto parse_failure;
+
+	struct jsonipc_request*	request = ctl_client_parse_args(self, &cmd,
+			&cmd_options);
 	if (!request)
 		goto parse_failure;
 
-	enum cmd_type cmd = ctl_command_parse_name(request->method);
 	if (cmd != CMD_HELP) {
 		int timeout = (flags & CTL_CLIENT_SOCKET_WAIT) ? -1 : 0;
 		result = ctl_client_connect(self, timeout);
@@ -751,7 +782,8 @@ int ctl_client_run_command(struct ctl_client* self,
 
 	switch (cmd) {
 	case CMD_HELP:
-		result = ctl_client_print_help(self, request);
+		result = ctl_client_print_help(self, request, &cmd_options,
+				parent_options);
 		break;
 	case CMD_EVENT_RECEIVE:
 		result = ctl_client_event_loop(self, request);
@@ -763,5 +795,6 @@ int ctl_client_run_command(struct ctl_client* self,
 
 	jsonipc_request_destroy(request);
 parse_failure:
+	ctl_client_destroy_cmd_parser(&cmd_options);
 	return result;
 }

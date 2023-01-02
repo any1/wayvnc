@@ -20,6 +20,7 @@
 #include <stdbool.h>
 
 struct ctl_client;
+struct option_parser;
 
 void ctl_client_debug_log(bool enable);
 
@@ -32,7 +33,7 @@ void* ctl_client_userdata(struct ctl_client*);
 #define CTL_CLIENT_RECONNECT   (1 << 2)
 
 int ctl_client_run_command(struct ctl_client* self,
-		int argc, char* argv[], unsigned flags);
+		struct option_parser* parent_options, unsigned flags);
 
 void ctl_client_print_command_list(FILE* stream);
 void ctl_client_print_event_list(FILE* stream);

@@ -35,6 +35,7 @@ struct wv_option_value {
 };
 
 struct option_parser {
+	const char* name;
 	const struct wv_option* options;
 	int n_opts;
 
@@ -42,7 +43,8 @@ struct option_parser {
 	int n_values;
 	int position;
 
-	int endpos;
+	size_t remaining_argc;
+	const char* const* remaining_argv;
 };
 
 void option_parser_init(struct option_parser* self,
