@@ -2,7 +2,7 @@ name: Build check
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "master", "ci-test" ]
   pull_request:
     branches: [ "master" ]
 
