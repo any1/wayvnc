@@ -103,6 +103,11 @@ meson build
 ninja -C build
 ```
 
+To run the unit tests:
+```
+meson test -C build
+```
+
 ## Running
 Wayvnc can be run from the build directory like so:
 ```

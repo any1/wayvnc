@@ -29,6 +29,13 @@ as far as coding style is concererned, with the following exceptions:
    a lot of code that uses aligned argument lists in the project, but I have
    come to the conclusion that these alignments are not very nice to maintain.
 
+## Unit Tests
+
+wayvnc has a small but growing set of unit tests, which are run on every GitHub PR. To run them locally, do the following:
+```bash
+meson test -C build
+```
+
 ## No Brown M&Ms
 
 All pull requests must contain the following sentence in the description:
