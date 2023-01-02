@@ -114,16 +114,13 @@ int main(int argc, char* argv[])
 	if (!option_parser_get_value(&option_parser, "command"))
 		return 0;
 
-	argc -= option_parser.endpos;
-	argv += option_parser.endpos;
-
 	ctl_client_debug_log(verbose);
 
 	self.ctl = ctl_client_new(socket_path, &self);
 	if (!self.ctl)
 		goto ctl_client_failure;
 
-	int result = ctl_client_run_command(self.ctl, argc, argv, flags);
+	int result = ctl_client_run_command(self.ctl, &option_parser, flags);
 
 	ctl_client_destroy(self.ctl);
 

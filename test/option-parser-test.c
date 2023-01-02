@@ -36,10 +36,40 @@ static int test_simple(void)
 	ASSERT_TRUE(option_parser_get_value(&parser, "a"));
 	ASSERT_TRUE(option_parser_get_value(&parser, "option-b"));
 	ASSERT_FALSE(option_parser_get_value(&parser, "value-option"));
+	ASSERT_INT_EQ(0, parser.remaining_argc);
+	ASSERT_FALSE(parser.remaining_argv);
 
 	return 0;
 }
 
+static int test_extra_positional_args(void)
+{
+	struct option_parser parser;
+	option_parser_init(&parser, options);
+
+	const char* argv[] = {
+		"executable",
+		"pos 1",
+		"pos 2",
+		"-a",
+		"pos 3",
+		"-b",
+		"pos 4",
+	};
+
+	ASSERT_INT_EQ(0, option_parser_parse(&parser, ARRAY_SIZE(argv), argv));
+
+	ASSERT_STR_EQ("pos 1", option_parser_get_value(&parser, "first"));
+	ASSERT_STR_EQ("pos 2", option_parser_get_value(&parser, "second"));
+	ASSERT_STR_EQ("pos 3", option_parser_get_value(&parser, "third"));
+	ASSERT_TRUE(option_parser_get_value(&parser, "a"));
+	ASSERT_TRUE(option_parser_get_value(&parser, "option-b"));
+	ASSERT_FALSE(option_parser_get_value(&parser, "value-option"));
+	ASSERT_INT_EQ(1, parser.remaining_argc);
+	ASSERT_STR_EQ("pos 4", parser.remaining_argv[0]);
+
+	return 0;
+}
 static int test_short_value_option_with_space(void)
 {
 	struct option_parser parser;
@@ -129,6 +159,8 @@ static int test_stop(void)
 
 	ASSERT_TRUE(option_parser_get_value(&parser, "a"));
 	ASSERT_FALSE(option_parser_get_value(&parser, "b"));
+	ASSERT_INT_EQ(1, parser.remaining_argc);
+	ASSERT_STR_EQ("-b", parser.remaining_argv[0]);
 	return 0;
 }
 
@@ -175,8 +207,9 @@ static int test_subcommand_without_arguments(void)
 	const char* argv[] = { "executable", "-ab", "first", "second", "third",
 		"do-stuff" };
 	ASSERT_INT_EQ(0, option_parser_parse(&parser, ARRAY_SIZE(argv), argv));
-	ASSERT_INT_EQ(5, parser.endpos);
 	ASSERT_STR_EQ("do-stuff", option_parser_get_value(&parser, "command"));
+	ASSERT_INT_EQ(1, parser.remaining_argc);
+	ASSERT_STR_EQ("do-stuff", parser.remaining_argv[0]);
 	return 0;
 }
 
@@ -187,8 +220,10 @@ static int test_subcommand_with_arguments(void)
 	const char* argv[] = { "executable", "-ab", "first", "second", "third",
 		"do-stuff", "--some-option", "another-argument"};
 	ASSERT_INT_EQ(0, option_parser_parse(&parser, ARRAY_SIZE(argv), argv));
-	ASSERT_INT_EQ(5, parser.endpos);
 	ASSERT_STR_EQ("do-stuff", option_parser_get_value(&parser, "command"));
+	ASSERT_INT_EQ(3, parser.remaining_argc);
+	ASSERT_STR_EQ("do-stuff", parser.remaining_argv[0]);
+	ASSERT_STR_EQ("another-argument", parser.remaining_argv[2]);
 	return 0;
 }
 
@@ -196,6 +231,7 @@ int main()
 {
 	int r = 0;
 	RUN_TEST(test_simple);
+	RUN_TEST(test_extra_positional_args);
 	RUN_TEST(test_short_value_option_with_space);
 	RUN_TEST(test_short_value_option_without_space);
 	RUN_TEST(test_short_value_option_with_eq);

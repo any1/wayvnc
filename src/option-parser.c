@@ -39,6 +39,7 @@ void option_parser_init(struct option_parser* self,
 
 	self->options = options;
 	self->n_opts = count_options(options);
+	self->name = "Options";
 }
 
 static int get_left_col_width(const struct wv_option* opts, int n)
@@ -141,7 +142,7 @@ static void format_option(const struct wv_option* opt, int left_col_width,
 
 void option_parser_print_options(struct option_parser* self, FILE* stream)
 {
-	fprintf(stream, "Options:\n");
+	fprintf(stream, "%s:\n", self->name);
 	int left_col_width = get_left_col_width(self->options, self->n_opts);
 
 	for (int i = 0; i < self->n_opts; ++i) {
@@ -306,8 +307,10 @@ int option_parser_parse(struct option_parser* self, int argc,
 	while (i < argc) {
 		if (argv[i][0] == '-') {
 			if (argv[i][1] == '-') {
-				if (argv[i][2] == '\0')
-					return 0;
+				if (argv[i][2] == '\0') {
+					i++;
+					break;
+				}
 
 				int rc = parse_long_arg(self, argc, argv, i);
 				if (rc < 0)
@@ -328,7 +331,9 @@ int option_parser_parse(struct option_parser* self, int argc,
 			i += rc;
 		}
 	}
-	self->endpos = i;
+	self->remaining_argc = argc - i;
+	if (self->remaining_argc)
+		self->remaining_argv = argv + i;
 	return 0;
 }
 
