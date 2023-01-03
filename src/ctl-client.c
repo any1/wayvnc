@@ -650,6 +650,10 @@ static int print_command_usage(const char* cmd_name,
 		struct option_parser* parent_options)
 {
 	struct cmd_info* info = ctl_command_by_name(cmd_name);
+	if (!info) {
+		WARN("No such command \"%s\"\n", cmd_name);
+		return 1;
+	}
 	printf("Usage: wayvncctl [options] %s [parameters]\n\n%s\n\n", cmd_name,
 			info->description);
 	option_parser_print_options(cmd_options, stdout);
