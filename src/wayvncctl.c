@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Jim Ramsay
+ * Copyright (c) 2022-2023 Jim Ramsay
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -44,7 +44,7 @@ struct wayvncctl {
 static int wayvncctl_usage(FILE* stream, struct option_parser* options, int rc)
 {
 	static const char* usage =
-"Usage: wayvncctl [options] [command [--param1=value1 ...]]\n"
+"Usage: wayvncctl [options] <command> [parameters]\n"
 "\n"
 "Connects to and interacts with a running wayvnc instance.";
 	fprintf(stream, "%s\n\n", usage);
@@ -112,7 +112,7 @@ int main(int argc, char* argv[])
 
 	// No command; nothing to do...
 	if (!option_parser_get_value(&option_parser, "command"))
-		return 0;
+		return wayvncctl_usage(stdout, &option_parser, 1);
 
 	ctl_client_debug_log(verbose);
 
