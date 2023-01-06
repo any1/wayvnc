@@ -99,6 +99,7 @@ sources = [
 	'src/ctl-server.c',
 	'src/ctl-commands.c',
 	'src/option-parser.c',
+        'src/table-printer.c',
 ]
 
 dependencies = [
@@ -123,6 +124,7 @@ ctlsources = [
 	'src/ctl-commands.c',
 	'src/strlcpy.c',
 	'src/option-parser.c',
+        'src/table-printer.c',
 ]
 
 ctldependencies = [
