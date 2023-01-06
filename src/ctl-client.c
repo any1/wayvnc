@@ -47,8 +47,19 @@ static bool do_debug = false;
 	if (do_debug) \
 	LOG("DEBUG", fmt, ##__VA_ARGS__)
 
-const char* EVT_LOCAL_SHUTDOWN = "wayvnc-shutdown";
-const char* EVT_LOCAL_STARTUP = "wayvnc-startup";
+static struct cmd_info internal_events[] = {
+	{ .name = "wayvnc-startup",
+		.description = "Sent when a successful wayvnc control connection is established and event registration has succeeded, both upon initial startup and on subsequent registrations with --reconnect.",
+		.params = {{}},
+	},
+	{ .name = "wayvnc-shutdown",
+		.description = "Sent when the wayvnc control connection is dropped, usually due to wayvnc exiting.",
+		.params = {{}},
+	},
+};
+#define EVT_LOCAL_STARTUP internal_events[0].name
+#define EVT_LOCAL_SHUTDOWN internal_events[1].name
+#define INTERNAL_EVT_LEN 2
 
 struct ctl_client {
 	void* userdata;
@@ -640,13 +651,8 @@ void ctl_client_print_command_list(FILE* stream)
 	fprintf(stream, "\nRun 'wayvncctl command-name --help' for command-specific details.\n");
 }
 
-static int print_event_details(const char* evt_name)
+static void print_event_info(const struct cmd_info* info)
 {
-	struct cmd_info* info = ctl_event_by_name(evt_name);
-	if (!info) {
-		WARN("No such event \"%s\"\n", evt_name);
-		return 1;
-	}
 	printf("Event: %s\n\n%s\n", info->name,
 			info->description);
 	if (info->params[0].name != NULL) {
@@ -655,7 +661,23 @@ static int print_event_details(const char* evt_name)
 			printf("\n  %s=...\n    %s\n", info->params[i].name,
 					info->params[i].description);
 	}
-	return 0;
+}
+
+static int print_event_details(const char* evt_name)
+{
+	struct cmd_info* info = ctl_event_by_name(evt_name);
+	if (info) {
+		print_event_info(info);
+		return 0;
+	}
+	for (size_t i = 0; i < INTERNAL_EVT_LEN; ++i) {
+		if (strcmp(evt_name, internal_events[i].name) == 0) {
+			print_event_info(&internal_events[i]);
+			return 0;
+		}
+	}
+	WARN("No such event \"%s\"\n", evt_name);
+	return 1;
 }
 
 void ctl_client_print_event_list(FILE* stream)
@@ -663,6 +685,8 @@ void ctl_client_print_event_list(FILE* stream)
 	printf("Events:\n");
 	for (size_t i = 0; i < EVT_LIST_LEN; ++i)
 		printf("    %s\n", ctl_event_list[i].name);
+	for (size_t i = 0; i < INTERNAL_EVT_LEN; ++i)
+		printf("    %s\n", internal_events[i].name);
 }
 
 static int print_command_usage(struct ctl_client* self,
