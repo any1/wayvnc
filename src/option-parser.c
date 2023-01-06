@@ -16,6 +16,7 @@
 
 #include "option-parser.h"
 #include "strlcpy.h"
+#include "table-printer.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -72,82 +73,35 @@ static int get_left_col_width(const struct wv_option* opts, int n)
 	return max_width;
 }
 
-static void reflow_text(char* dst, const char* src, int width)
-{
-	int line_len = 0;
-	int last_space_pos = 0;
-	
-	int dst_len = 0;
-	int i = 0; 
-
-	while (src[i]) {
-		char c = src[i];
-
-		if (line_len > width) {
-			assert(last_space_pos > 0);
-
-			dst_len -= i - last_space_pos;
-			dst[dst_len++] = '\n';
-			i = last_space_pos + 1;
-			line_len = 0;
-			continue;
-		}
-
-		if (c == ' ')
-			last_space_pos = i;
-
-		dst[dst_len++] = c;
-		++i;
-		++line_len;
-	}
-
-	dst[dst_len] = '\0';
-}
-
-static void format_option(const struct wv_option* opt, int left_col_width,
-		FILE* stream)
+static void format_option(struct table_printer* printer, const struct wv_option* opt)
 {
 	if (!opt->help)
 		return;
 
-	int n_chars = fprintf(stream, "    ");
+	int n_chars = 0;
+	char buf[64];
 	if (opt->short_opt)
-		n_chars += fprintf(stream, "-%c", opt->short_opt);
+		n_chars += snprintf(buf + n_chars, sizeof(buf) - n_chars,
+				"-%c", opt->short_opt);
 	if (opt->long_opt)
-		n_chars += fprintf(stream, "%s--%s",
-				opt->short_opt ? "," : "", opt->long_opt);
+		n_chars += snprintf(buf + n_chars, sizeof(buf) - n_chars,
+				"%s--%s", opt->short_opt ? "," : "",
+				opt->long_opt);
 	if (opt->schema)
-		n_chars += fprintf(stream, "%s%s",
-				opt->long_opt ? "=" : "", opt->schema);
+		n_chars += snprintf(buf + n_chars, sizeof(buf) - n_chars,
+				"%s%s", opt->long_opt ? "=" : "", opt->schema);
 
-	n_chars += fprintf(stream, "%*s", left_col_width - n_chars + 8, "");
-
-	int right_col_width = 80 - 8 - left_col_width;
-	assert(right_col_width >= 0);
-
-	char help[256];
-	reflow_text(help, opt->help, right_col_width);
-
-	char* line = strtok(help, "\n");
-	fprintf(stream, "%s\n", line);
-
-	while (true) {
-		line = strtok(NULL, "\n");
-		if (!line)
-			break;
-
-		fprintf(stream, "%*s%s\n", left_col_width + 8, "", line);
-	}
+	table_printer_print_line(printer, buf, opt->help);
 }
 
 void option_parser_print_options(struct option_parser* self, FILE* stream)
 {
 	fprintf(stream, "%s:\n", self->name);
 	int left_col_width = get_left_col_width(self->options, self->n_opts);
-
-	for (int i = 0; i < self->n_opts; ++i) {
-		format_option(&self->options[i], left_col_width, stream);
-	}
+	struct table_printer printer;
+	table_printer_init(&printer, stream, left_col_width);
+	for (int i = 0; i < self->n_opts; ++i)
+		format_option(&printer, &self->options[i]);
 }
 
 static const struct wv_option* find_long_option(
