@@ -382,6 +382,7 @@ static void pretty_print(json_t* data,
 		break;
 	case CMD_CLIENT_DISCONNECT:
 	case CMD_OUTPUT_SET:
+	case CMD_OUTPUT_CYCLE:
 	case CMD_WAYVNC_EXIT:
 		printf("Ok\n");
 		break;

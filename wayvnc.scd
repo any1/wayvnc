@@ -203,18 +203,20 @@ _OUTPUT-LIST_
 The *output-list* command retrieves a list of all outputs known to wayvnc and
 whether or not each one is currently being captured.
 
+_OUTPUT-CYCLE_
+
+For multi-output wayland displays, the *output-cycle* command switches which
+output is actively captured by wayvnc. Running this once will switch to the next
+available output. If no more outputs are available, it cycles back to the first
+again.
+
 _OUTPUT-SET_
 
 For multi-output wayland displays, the *output-set* command switches which
-output is actively captured by wayvnc. This operates in 2 different modes,
-depending on which one of these parameters is supplied:
+output is actively captured by wayvnc by name.
 
-*cycle=next|prev*
-	Cycle to the next/prev output in the output list, wrapping back to the
-	first/last if the end of the list is reached.
-
-*switch-to=output-name*
-	Switch to a specific output by name.
+*output-name=name*
+	Required: The name of the output to capture next.
 
 _VERSION_
 

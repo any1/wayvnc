@@ -116,7 +116,7 @@ Usage: wayvncctl [options] output-set [params]
 Cycle to the next active output:
 
 ```
-$ wayvncctl output-set --cycle=next
+$ wayvncctl output-cycle
 ```
 
 Get json-formatted version information:

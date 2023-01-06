@@ -137,34 +137,13 @@ static struct cmd_set_output* cmd_set_output_new(json_t* args,
 		struct jsonipc_error* err)
 {
 	const char* target = NULL;
-	const char* cycle = NULL;
-	if (json_unpack(args, "{s?s,s?s}",
-			"switch-to", &target,
-			"cycle", &cycle) == -1) {
+	if (json_unpack(args, "{s:s}", "output-name", &target) == -1) {
 		jsonipc_error_printf(err, EINVAL,
-				"expecting \"switch-to\" or \"cycle\"");
-		return NULL;
-	}
-	if ((!target && !cycle) || (target && cycle)) {
-		jsonipc_error_printf(err, EINVAL,
-				"expecting exactly one of \"switch-to\" or \"cycle\"");
+				"required: \"output-name\"");
 		return NULL;
 	}
 	struct cmd_set_output* cmd = calloc(1, sizeof(*cmd));
-	if (target) {
-		strlcpy(cmd->target, target, sizeof(cmd->target));
-	} else if (cycle) {
-		if (strncmp(cycle, "prev", 4) == 0)
-			cmd->cycle = OUTPUT_CYCLE_REVERSE;
-		else if (strcmp(cycle, "next") == 0)
-			cmd->cycle = OUTPUT_CYCLE_FORWARD;
-		else {
-			jsonipc_error_printf(err, EINVAL,
-				"cycle must either be \"next\" or \"prev\"");
-			free(cmd);
-			return NULL;
-		}
-	}
+	strlcpy(cmd->target, target, sizeof(cmd->target));
 	return cmd;
 }
 
@@ -172,8 +151,7 @@ static struct cmd_disconnect_client* cmd_disconnect_client_new(json_t* args,
 		struct jsonipc_error* err)
 {
 	const char* id = NULL;
-	if (json_unpack(args, "{s:s}",
-			"id", &id) == -1) {
+	if (json_unpack(args, "{s:s}", "id", &id) == -1) {
 		jsonipc_error_printf(err, EINVAL,
 				"required: \"id\"");
 		return NULL;
@@ -222,6 +200,7 @@ static struct cmd* parse_command(struct jsonipc_request* ipc,
 	case CMD_EVENT_RECEIVE:
 	case CMD_CLIENT_LIST:
 	case CMD_OUTPUT_LIST:
+	case CMD_OUTPUT_CYCLE:
 	case CMD_WAYVNC_EXIT:
 		cmd = calloc(1, sizeof(*cmd));
 		break;
@@ -406,10 +385,7 @@ static struct cmd_response* ctl_server_dispatch_cmd(struct ctl* self,
 		}
 	case CMD_OUTPUT_SET: {
 		struct cmd_set_output* c = (struct cmd_set_output*)cmd;
-		if (c->target[0] != '\0')
-			response = self->actions.on_output_switch(self, c->target);
-		else
-			response = self->actions.on_output_cycle(self, c->cycle);
+		response = self->actions.on_output_switch(self, c->target);
 		break;
 		}
 	case CMD_CLIENT_DISCONNECT: {
@@ -433,6 +409,9 @@ static struct cmd_response* ctl_server_dispatch_cmd(struct ctl* self,
 		break;
 	case CMD_OUTPUT_LIST:
 		response = generate_output_list(self);
+		break;
+	case CMD_OUTPUT_CYCLE:
+		response = self->actions.on_output_cycle(self, OUTPUT_CYCLE_FORWARD);
 		break;
 	case CMD_UNKNOWN:
 		break;
