@@ -41,7 +41,7 @@ restore_outputs() {
         local firstOutput=${OUTPUTS_TO_RECONNECT[0]}
         echo "Switching wayvnc back to physical output $firstOutput"
         wait_for_output_matching "$firstOutput" >/dev/null
-        $WAYVNCCTL output-set --output-name="$firstOutput"
+        $WAYVNCCTL output-set "$firstOutput"
         echo "Removing virtual output $HEADLESS"
         $SWAYMSG output "$HEADLESS" unplug
     fi
@@ -55,14 +55,14 @@ collapse_outputs() {
         local preexisting="$(find_output_matching 'HEADLESS-\\d+')"
         if [[ $preexisting ]]; then
             echo "Switching to preexisting virtual output $preexisting"
-            $WAYVNCCTL output-set --output-name="$preexisting"
+            $WAYVNCCTL output-set "$preexisting"
         else
             echo "Creating a virtual display"
             $SWAYMSG create_output
             echo "Waiting for virtusl output to be created..."
             HEADLESS=$(wait_for_output_matching 'HEADLESS-\\d+')
             echo "Switching to virtual output $HEADLESS"
-            $WAYVNCCTL output-set --output-name="$HEADLESS"
+            $WAYVNCCTL output-set "$HEADLESS"
         fi
     fi
     for output in $($WAYVNCCTL -j output-list | jq -r '.[] | select(.captured==false).name'); do

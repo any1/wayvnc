@@ -733,7 +733,11 @@ static int print_command_usage(struct ctl_client* self,
 		WARN("No such command");
 		return 1;
 	}
-	printf("Usage: wayvncctl [options] %s [parameters]\n\n", info->name);
+	printf("Usage: wayvncctl [options] %s ", info->name);
+	for (int i = 0; i < cmd_options->n_opts; ++i)
+		if (cmd_options->options[i].positional)
+			printf("<%s> ", cmd_options->options[i].positional);
+	printf("[parameters]\n\n");
 	table_printer_indent_and_reflow_text(stdout, info->description, 80, 0, 0);
 	printf("\n");
 	option_parser_print_options(cmd_options, stdout);
@@ -764,12 +768,18 @@ int ctl_client_init_cmd_parser(struct option_parser* parser, enum cmd_type cmd)
 		alloc_count++;
 	struct wv_option* options = calloc(alloc_count,
 			sizeof(struct wv_option));
-	size_t i;
-	for (i = 0; i < param_count; ++i) {
-		struct wv_option* option = &options[i];
-		option->long_opt = info->params[i].name;
-		option->help = info->params[i].description;
-		option->schema = "<value>";
+	size_t i = 0;
+	if (param_count == 1) {
+		// Represent a single parameter as a positional argument
+		options[0].positional = info->params[0].name;
+		i++;
+	} else {
+		for (; i < param_count; ++i) {
+			struct wv_option* option = &options[i];
+			option->long_opt = info->params[i].name;
+			option->help = info->params[i].description;
+			option->schema = "<value>";
+		}
 	}
 	if (cmd == CMD_EVENT_RECEIVE) {
 		options[i].long_opt = "show";
