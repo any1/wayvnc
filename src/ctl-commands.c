@@ -37,26 +37,26 @@ struct cmd_info ctl_command_list[] = {
 		// TODO: Event type filtering?
 		{{NULL, NULL}}
 	},
-	[CMD_SET_OUTPUT] = { "set-output",
+	[CMD_CLIENT_LIST] = { "client-list",
+		"Return a list of all currently connected VNC sessions",
+		{{NULL, NULL}}
+	},
+	[CMD_CLIENT_DISCONNECT] = { "client-disconnect",
+		"Disconnect a VNC session",
+		{
+			{"id", "The ID of the client to disconnect"},
+			{NULL, NULL},
+		}
+	},
+	[CMD_OUTPUT_LIST] = { "output-list",
+		"Return a list of all currently detected Wayland outputs",
+		{{NULL, NULL}}
+	},
+	[CMD_OUTPUT_SET] = { "output-set",
 		"Switch the actively captured output",
 		{
 			{"switch-to", "The specific output name to capture"},
 			{"cycle", "Either \"next\" or \"prev\""},
-			{NULL, NULL},
-		}
-	},
-	[CMD_GET_CLIENTS] = { "get-clients",
-		"Return a list of all currently connected  VNC sessions",
-		{{NULL, NULL}}
-	},
-	[CMD_GET_OUTPUTS] = { "get-outputs",
-		"Return a list of all currently detected Wayland outputs",
-		{{NULL, NULL}}
-	},
-	[CMD_DISCONNECT_CLIENT] = { "disconnect-client",
-		"Disconnect a VNC session",
-		{
-			{"id", "The ID of the client to disconnect"},
 			{NULL, NULL},
 		}
 	},
@@ -74,6 +74,13 @@ struct cmd_info ctl_command_list[] = {
 	{NULL, NULL},
 
 struct cmd_info ctl_event_list[] = {
+	[EVT_CAPTURE_CHANGED] = {"capture-changed",
+		"Sent by wayvnc when the catured output is changed",
+		{
+			{"output", "The name of the output now being captured"},
+			{NULL, NULL},
+		},
+	},
 	[EVT_CLIENT_CONNECTED] = {"client-connected",
 		"Sent by wayvnc when a new vnc client connects",
 		{ CLIENT_EVENT_PARAMS("including") }
@@ -82,14 +89,6 @@ struct cmd_info ctl_event_list[] = {
 		"Sent by waynvc when a vnc client disconnects",
 		{ CLIENT_EVENT_PARAMS("not including") }
 	},
-	[EVT_CAPTURE_CHANGED] = {"capture-changed",
-		"Sent by wayvnc when the catured output is changed",
-		{
-			{"output", "The name of the output now being captured"},
-			{NULL, NULL},
-		},
-	},
-
 };
 
 enum cmd_type ctl_command_parse_name(const char* name)

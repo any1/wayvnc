@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Jim Ramsay
+ * Copyright (c) 2022-2023 Jim Ramsay
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -212,16 +212,16 @@ static struct cmd* parse_command(struct jsonipc_request* ipc,
 	case CMD_HELP:
 		cmd = (struct cmd*)cmd_help_new(ipc->params, err);
 		break;
-	case CMD_SET_OUTPUT:
+	case CMD_OUTPUT_SET:
 		cmd = (struct cmd*)cmd_set_output_new(ipc->params, err);
 		break;
-	case CMD_DISCONNECT_CLIENT:
+	case CMD_CLIENT_DISCONNECT:
 		cmd = (struct cmd*)cmd_disconnect_client_new(ipc->params, err);
 		break;
 	case CMD_VERSION:
 	case CMD_EVENT_RECEIVE:
-	case CMD_GET_CLIENTS:
-	case CMD_GET_OUTPUTS:
+	case CMD_CLIENT_LIST:
+	case CMD_OUTPUT_LIST:
 	case CMD_WAYVNC_EXIT:
 		cmd = calloc(1, sizeof(*cmd));
 		break;
@@ -404,7 +404,7 @@ static struct cmd_response* ctl_server_dispatch_cmd(struct ctl* self,
 		response = generate_help_object(c->id, c->id_is_command);
 		break;
 		}
-	case CMD_SET_OUTPUT: {
+	case CMD_OUTPUT_SET: {
 		struct cmd_set_output* c = (struct cmd_set_output*)cmd;
 		if (c->target[0] != '\0')
 			response = self->actions.on_output_switch(self, c->target);
@@ -412,7 +412,7 @@ static struct cmd_response* ctl_server_dispatch_cmd(struct ctl* self,
 			response = self->actions.on_output_cycle(self, c->cycle);
 		break;
 		}
-	case CMD_DISCONNECT_CLIENT: {
+	case CMD_CLIENT_DISCONNECT: {
 		struct cmd_disconnect_client* c =
 			(struct cmd_disconnect_client*)cmd;
 		response = self->actions.on_disconnect_client(self, c->id);
@@ -428,10 +428,10 @@ static struct cmd_response* ctl_server_dispatch_cmd(struct ctl* self,
 		client->accept_events = true;
 		response = cmd_ok();
 		break;
-	case CMD_GET_CLIENTS:
+	case CMD_CLIENT_LIST:
 		response = generate_vnc_client_list(self);
 		break;
-	case CMD_GET_OUTPUTS:
+	case CMD_OUTPUT_LIST:
 		response = generate_output_list(self);
 		break;
 	case CMD_UNKNOWN:

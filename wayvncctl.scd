@@ -105,18 +105,18 @@ generate 2 additional events not documented in *wayvnc(1)*:
 
 # EXAMPLES
 
-Get help on the "set-output" IPC command:
+Get help on the "output-set" IPC command:
 
 ```
-$ wayvncctl set-output --help
-Usage: wayvncctl [options] set-output [params]
+$ wayvncctl output-set --help
+Usage: wayvncctl [options] output-set [params]
 ...
 ```
 
 Cycle to the next active output:
 
 ```
-$ wayvncctl set-output --cycle=next
+$ wayvncctl output-set --cycle=next
 ```
 
 Get json-formatted version information:
