@@ -25,7 +25,7 @@ struct cmd_info ctl_command_list[] = {
 		{
 			{"command", "The command to show (optional)"},
 			{"event", "The event to show (optional)"},
-			{NULL, NULL},
+			{ },
 		}
 	},
 	[CMD_VERSION] = { "version",
@@ -35,7 +35,7 @@ struct cmd_info ctl_command_list[] = {
 	[CMD_EVENT_RECEIVE] = { "event-receive",
 		"Register to begin receiving asynchronous events from wayvnc",
 		// TODO: Event type filtering?
-		{{NULL, NULL}}
+		{{ }}
 	},
 	[CMD_CLIENT_LIST] = { "client-list",
 		"Return a list of all currently connected VNC sessions",
@@ -45,24 +45,27 @@ struct cmd_info ctl_command_list[] = {
 		"Disconnect a VNC session",
 		{
 			{"id", "The ID of the client to disconnect"},
-			{NULL, NULL},
+			{ },
 		}
 	},
 	[CMD_OUTPUT_LIST] = { "output-list",
 		"Return a list of all currently detected Wayland outputs",
 		{{NULL, NULL}}
 	},
+	[CMD_OUTPUT_CYCLE] = { "output-cycle",
+		"Cycle the actively captured output to the next available output, wrapping through all outputs.",
+		{{ }}
+	},
 	[CMD_OUTPUT_SET] = { "output-set",
 		"Switch the actively captured output",
 		{
-			{"switch-to", "The specific output name to capture"},
-			{"cycle", "Either \"next\" or \"prev\""},
-			{NULL, NULL},
+			{"output-name", "The specific output name to capture"},
+			{ },
 		}
 	},
 	[CMD_WAYVNC_EXIT] = { "wayvnc-exit",
 		"Disconnect all clients and shut down wayvnc",
-		{{NULL,NULL}},
+		{{ }},
 	},
 };
 
