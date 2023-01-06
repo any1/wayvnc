@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Jim Ramsay
+ * Copyright (c) 2022-2023 Jim Ramsay
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -75,15 +75,15 @@ struct cmd_info ctl_command_list[] = {
 
 struct cmd_info ctl_event_list[] = {
 	[EVT_CLIENT_CONNECTED] = {"client-connected",
-		"Sent when a new vnc client connects to wayvnc",
+		"Sent by wayvnc when a new vnc client connects",
 		{ CLIENT_EVENT_PARAMS("including") }
 	},
 	[EVT_CLIENT_DISCONNECTED] = {"client-disconnected",
-		"Sent when a vnc client disconnects from wayvnc",
+		"Sent by waynvc when a vnc client disconnects",
 		{ CLIENT_EVENT_PARAMS("not including") }
 	},
 	[EVT_CAPTURE_CHANGED] = {"capture-changed",
-		"Sent when wayvnc changes which output is captured",
+		"Sent by wayvnc when the catured output is changed",
 		{
 			{"output", "The name of the output now being captured"},
 			{NULL, NULL},

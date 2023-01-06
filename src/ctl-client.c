@@ -25,6 +25,7 @@
 #include <signal.h>
 #include <assert.h>
 #include <jansson.h>
+#include <sys/param.h>
 
 #include "json-ipc.h"
 #include "ctl-client.h"
@@ -33,6 +34,7 @@
 #include "strlcpy.h"
 #include "util.h"
 #include "option-parser.h"
+#include "table-printer.h"
 
 #define LOG(level, fmt, ...) \
 	fprintf(stderr, "[%s:%d] <" level "> " fmt "\n", __FILE__, __LINE__, \
@@ -49,11 +51,11 @@ static bool do_debug = false;
 
 static struct cmd_info internal_events[] = {
 	{ .name = "wayvnc-startup",
-		.description = "Sent when a successful wayvnc control connection is established and event registration has succeeded, both upon initial startup and on subsequent registrations with --reconnect.",
+		.description = "Sent by wayvncctl when a successful wayvnc control connection is established and event registration has succeeded, both upon initial startup and on subsequent registrations with --reconnect.",
 		.params = {{}},
 	},
 	{ .name = "wayvnc-shutdown",
-		.description = "Sent when the wayvnc control connection is dropped, usually due to wayvnc exiting.",
+		.description = "Sent by wayvncctl when the wayvnc control connection is dropped, usually due to wayvnc exiting.",
 		.params = {{}},
 	},
 };
@@ -643,23 +645,39 @@ static int ctl_client_print_single_command(struct ctl_client* self,
 void ctl_client_print_command_list(FILE* stream)
 {
 	fprintf(stream, "Commands:\n");
+	size_t max_namelen = 0;
 	for (size_t i = 0; i < CMD_LIST_LEN; ++i) {
 		if (i == CMD_HELP) // hidden
 			continue;
-		fprintf(stream, "    %s\n", ctl_command_list[i].name);
+		max_namelen = MAX(max_namelen, strlen(ctl_command_list[i].name));
+	}
+	struct table_printer printer;
+	table_printer_init(&printer, stdout, max_namelen);
+	for (size_t i = 0; i < CMD_LIST_LEN; ++i) {
+		if (i == CMD_HELP) // hidden
+			continue;
+		table_printer_print_line(&printer, ctl_command_list[i].name,
+				ctl_command_list[i].description);
 	}
 	fprintf(stream, "\nRun 'wayvncctl command-name --help' for command-specific details.\n");
 }
 
 static void print_event_info(const struct cmd_info* info)
 {
-	printf("Event: %s\n\n%s\n", info->name,
-			info->description);
+	printf("%s\n\n", info->name);
+	table_printer_indent_and_reflow_text(stdout, info->description, 80, 0, 0);
 	if (info->params[0].name != NULL) {
-		printf("\nData fields:");
+		printf("\nData fields:\n");
+		size_t max_namelen = 0;
 		for (int i = 0; info->params[i].name != NULL; ++i)
-			printf("\n  %s=...\n    %s\n", info->params[i].name,
-					info->params[i].description);
+			max_namelen = MAX(max_namelen, strlen(info->params[i].name));
+
+		struct table_printer printer;
+		table_printer_init(&printer, stdout, max_namelen);
+		for (int i = 0; info->params[i].name != NULL; ++i)
+			table_printer_print_fmtline(&printer,
+					info->params[i].description,
+					"%s=...", info->params[i].name);
 	}
 }
 
@@ -683,10 +701,21 @@ static int print_event_details(const char* evt_name)
 void ctl_client_print_event_list(FILE* stream)
 {
 	printf("Events:\n");
+	size_t max_namelen = 0;
 	for (size_t i = 0; i < EVT_LIST_LEN; ++i)
-		printf("    %s\n", ctl_event_list[i].name);
+		max_namelen = MAX(max_namelen, strlen(ctl_event_list[i].name));
+
 	for (size_t i = 0; i < INTERNAL_EVT_LEN; ++i)
-		printf("    %s\n", internal_events[i].name);
+		max_namelen = MAX(max_namelen, strlen(internal_events[i].name));
+
+	struct table_printer printer;
+	table_printer_init(&printer, stdout, max_namelen);
+	for (size_t i = 0; i < EVT_LIST_LEN; ++i)
+		table_printer_print_line(&printer, ctl_event_list[i].name,
+				ctl_event_list[i].description);
+	for (size_t i = 0; i < INTERNAL_EVT_LEN; ++i)
+		table_printer_print_line(&printer, internal_events[i].name,
+				internal_events[i].description);
 }
 
 static int print_command_usage(struct ctl_client* self,
@@ -695,7 +724,7 @@ static int print_command_usage(struct ctl_client* self,
 		struct option_parser* parent_options)
 {
 	if (self->flags & CTL_CLIENT_PRINT_JSON) {
-		WARN("JSON output is not supported for the \"help\" command");
+		WARN("JSON output is not supported for \"help\" output");
 		return 1;
 	}
 	struct cmd_info* info = ctl_command_by_type(cmd);
@@ -703,8 +732,9 @@ static int print_command_usage(struct ctl_client* self,
 		WARN("No such command");
 		return 1;
 	}
-	printf("Usage: wayvncctl [options] %s [parameters]\n\n%s\n\n", info->name,
-			info->description);
+	printf("Usage: wayvncctl [options] %s [parameters]\n\n", info->name);
+	table_printer_indent_and_reflow_text(stdout, info->description, 80, 0, 0);
+	printf("\n");
 	option_parser_print_options(cmd_options, stdout);
 	printf("\n");
 	option_parser_print_options(parent_options, stdout);
