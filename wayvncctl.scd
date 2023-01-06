@@ -109,7 +109,7 @@ Get help on the "output-set" IPC command:
 
 ```
 $ wayvncctl output-set --help
-Usage: wayvncctl [options] output-set [params]
+Usage: wayvncctl [options] output-set <output-name> [params]
 ...
 ```
 
