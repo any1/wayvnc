@@ -40,17 +40,15 @@ wayvncctl - A command line control client for wayvnc(1)
 *wayvnc(1)* allows runtime interaction via a unix socket json-ipc mechanism.
 This command line utility provides easy interaction with those commands.
 
-For a full list of currently supported commands, see
-*wayvnc(1)* section _IPC COMMANDS_, or run the
-*wayvncctl help* command.
+This command is largely self-documenting:
 
-Running *wayvncctl help* returns a list of the available commands and events.
-
-Running *wayvncctl command-name --help* returns a description of the server-side
-command and its available parameters.
-
-Running *wayvncctl help --event=event-name* returns a description of the
-server-side event and expected parameters.
+- Running *wayvncctl --help* lists all supported IPC commands.
+- Running *wayvncctl command-name --help* returns a description of the given
+  command and its available parameters.
+- Running *wayvncctl event-receive --help* includes a list of all supported event
+  names.
+- Running *wayvncctl event-receive --show=event-name* returns a
+  description of the given event and expected data fields.
 
 # ASYNCHRONOUS EVENTS
 
@@ -107,46 +105,12 @@ generate 2 additional events not documented in *wayvnc(1)*:
 
 # EXAMPLES
 
-Query the server for all available IPC command names:
-
-```
-$ wayvncctl help
-Commands:
-    - help
-    - version
-    - event-receive
-    - set-output
-    - get-clients
-    - get-outputs
-    - disconnect-client
-    - wayvnc-exit
-
-Run 'wayvncctl command-name --help' for command-specific details.
-
-Events:
-    - client-connected
-    - client-disconnected
-    - capture-changed
-
-Run 'wayvncctl help --event=event-name' for event-specific details.
-```
-
 Get help on the "set-output" IPC command:
 
 ```
 $ wayvncctl set-output --help
 Usage: wayvncctl [options] set-output [params]
-
-Switch the actively captured output
-
-Parameters:
-  --switch-to=...
-    The specific output name to capture
-
-  --cycle=...
-    Either "next" or "prev"
-
-Run 'wayvncctl --help' for allowed options
+...
 ```
 
 Cycle to the next active output:
