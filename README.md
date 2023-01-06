@@ -159,47 +159,6 @@ the running wayvnc instance.
 Use the `wayvncctl` utility to interact with this control socket from the
 command line.
 
-The `help` command can interactively query the available IPC commands:
-
-```
-$ wayvncctl help
-Commands:
-    - help
-    - version
-    - event-receive
-    - set-output
-    - get-clients
-    - get-outputs
-    - disconnect-client
-    - wayvnc-exit
-
-Run 'wayvncctl command-name --help' for command-specific details.
-
-Events:
-    - client-connected
-    - client-disconnected
-    - capture-changed
-
-Run 'wayvncctl help --event=event-name' for event-specific details.
-```
-
-And give descriptions and usage for specific commands:
-```
-$ wayvncctl set-output --help
-Usage: wayvncctl [options] set-output [params]
-
-Switch the actively captured output
-
-Parameters:
-  --switch-to=...
-    The specific output name to capture
-
-  --cycle=...
-    Either "next" or "prev"
-
-Run 'wayvncctl --help' for allowed options
-```
-
 See the `wayvnc(1)` manpage for an in-depth description of the IPC protocol and
 the available commands, and `wayvncctl(1)` for more on the command line
 interface.
