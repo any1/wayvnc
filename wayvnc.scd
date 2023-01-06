@@ -72,11 +72,11 @@ If the Wayland session consists of multiple outputs, only one will be captured.
 By default this will be the first one, but can be specified by the _-o_ command
 line argument. The argument accepts the short name such as _eDP-1_ or _DP-4_.
 Running wayvnc in verbose mode (_-v_) will display the names of all outputs on
-startup, or you can query them at runtime via the *wayvncctl get-outputs*
+startup, or you can query them at runtime via the *wayvncctl output-list*
 command.
 
 You can also change which output is being captured on the fly via the *wayvncctl
-set-output* command.
+output-set* command.
 
 # CONFIGURATION
 
@@ -173,13 +173,6 @@ available commands.
 If an optional *command* parameter refers to one of those commands by name, the
 response data will be a detailed description of that command and its parameters.
 
-_VERSION_
-
-The *version* command queries the running wayvnc instance for its version
-information. Much like the _-V_ option, the response data will contain the
-version numbers of wayvnc, as well as the versions of the neatvnc and aml
-components.
-
 _EVENT-RECEIVE_
 
 The *event-receive* command registers for asynchronous server events. See the
@@ -190,11 +183,31 @@ Event registration registers for all available server events and is scoped to
 the current connection only. If a client disconnects and reconnects, it must
 re-register for events.
 
-_SET-OUTPUT_
+_CLIENT-LIST_
 
-For multi-output wayland displays, this command switches which output is
-actively captured by wayvnc. This operates in 2 different modes, depending on
-which parameters are supplied:
+The *client-list* command retrieves a list of all VNC clients currently
+connected to wayvnc.
+
+_CLIENT-DISCONNECT_
+
+The *client-disconnect* command disconnects a single VNC client.
+
+Parameters:
+
+*id*
+	Required: The ID of the client to disconnect.  This ID can be found from the
+	_GET-CLIENTS_ command or receipt of a _CLIENT-CONNECTED_ event.
+
+_OUTPUT-LIST_
+
+The *output-list* command retrieves a list of all outputs known to wayvnc and
+whether or not each one is currently being captured.
+
+_OUTPUT-SET_
+
+For multi-output wayland displays, the *output-set* command switches which
+output is actively captured by wayvnc. This operates in 2 different modes,
+depending on which one of these parameters is supplied:
 
 *cycle=next|prev*
 	Cycle to the next/prev output in the output list, wrapping back to the
@@ -203,31 +216,28 @@ which parameters are supplied:
 *switch-to=output-name*
 	Switch to a specific output by name.
 
-_DISCONNECT_CLIENT_
+_VERSION_
 
-The *disconnect-client* command disconnects a single VNC client.
+The *version* command queries the running wayvnc instance for its version
+information. Much like the _-V_ option, the response data will contain the
+version numbers of wayvnc, as well as the versions of the neatvnc and aml
+components.
 
-Parameters:
-
-*id*
-	Required: The ID of the client to disconnect.  This ID can be found from the
-	_GET-CLIENTS_ command or receipt of a _CLIENT-CONNECTED_ event.
-
-_WAYVNC_EXIT_
+_WAYVNC-EXIT_
 
 The *wayvnc-exit* command disconnects all clients and shuts down wayvnc.
 
-_GET-CLIENTS_
-
-The *get-clients* command retrieves a list of all VNC clients currently
-connected to wayvnc.
-
-_GET-OUTPUTS_
-
-The *get-outputs* command retrieves a list of all outputs known to wayvnc and
-whether or not each one is currently being captured.
-
 ## IPC EVENTS
+
+_CAPTURE_CHANGED_
+
+The *capture-changed* event is sent when the currently captured output
+changes.
+
+Parameters:
+
+*output=...*
+	The name of the output now being captured.
 
 _CLIENT-CONNECTED_
 
@@ -265,16 +275,6 @@ Parameters:
 
 *username=...*
 	The username used to authenticate this client. May be null.
-
-_CAPTURE_CHANGED_
-
-The *capture-changed* event is sent when the currently captured output
-changes.
-
-Parameters:
-
-*output=...*
-	The name of the output now being captured.
 
 ## IPC MESSAGE FORMAT
 

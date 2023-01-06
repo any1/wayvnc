@@ -14,7 +14,7 @@ fi
 
 find_output_matching() {
     local pattern=$1
-    $WAYVNCCTL -j get-outputs | jq -r ".[].name | match(\"$pattern\").string"
+    $WAYVNCCTL -j output-list | jq -r ".[].name | match(\"$pattern\").string"
 }
 
 wait_for_output_matching() {
@@ -41,7 +41,7 @@ restore_outputs() {
         local firstOutput=${OUTPUTS_TO_RECONNECT[0]}
         echo "Switching wayvnc back to physical output $firstOutput"
         wait_for_output_matching "$firstOutput" >/dev/null
-        $WAYVNCCTL set-output --switch-to="$firstOutput"
+        $WAYVNCCTL output-set --switch-to="$firstOutput"
         echo "Removing virtual output $HEADLESS"
         $SWAYMSG output "$HEADLESS" unplug
     fi
@@ -55,17 +55,17 @@ collapse_outputs() {
         local preexisting="$(find_output_matching 'HEADLESS-\\d+')"
         if [[ $preexisting ]]; then
             echo "Switching to preexisting virtual output $preexisting"
-            $WAYVNCCTL set-output --switch-to="$preexisting"
+            $WAYVNCCTL output-set --switch-to="$preexisting"
         else
             echo "Creating a virtual display"
             $SWAYMSG create_output
             echo "Waiting for virtusl output to be created..."
             HEADLESS=$(wait_for_output_matching 'HEADLESS-\\d+')
             echo "Switching to virtual output $HEADLESS"
-            $WAYVNCCTL set-output --switch-to="$HEADLESS"
+            $WAYVNCCTL output-set --switch-to="$HEADLESS"
         fi
     fi
-    for output in $($WAYVNCCTL -j get-outputs | jq -r '.[] | select(.captured==false).name'); do
+    for output in $($WAYVNCCTL -j output-list | jq -r '.[] | select(.captured==false).name'); do
         echo "Disabling extra output $output"
         $SWAYMSG output "$output" disable
         OUTPUTS_TO_RECONNECT+=("$output")

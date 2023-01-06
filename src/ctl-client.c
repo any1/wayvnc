@@ -374,14 +374,14 @@ static void pretty_print(json_t* data,
 	case CMD_VERSION:
 		pretty_version(data);
 		break;
-	case CMD_GET_CLIENTS:
+	case CMD_CLIENT_LIST:
 		pretty_client_list(data);
 		break;
-	case CMD_GET_OUTPUTS:
+	case CMD_OUTPUT_LIST:
 		pretty_output_list(data);
 		break;
-	case CMD_DISCONNECT_CLIENT:
-	case CMD_SET_OUTPUT:
+	case CMD_CLIENT_DISCONNECT:
+	case CMD_OUTPUT_SET:
 	case CMD_WAYVNC_EXIT:
 		printf("Ok\n");
 		break;

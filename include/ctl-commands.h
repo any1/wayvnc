@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Jim Ramsay
+ * Copyright (c) 2022-2023 Jim Ramsay
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -18,21 +18,21 @@
 
 enum cmd_type {
 	CMD_HELP,
-	CMD_VERSION,
 	CMD_EVENT_RECEIVE,
-	CMD_SET_OUTPUT,
-	CMD_GET_CLIENTS,
-	CMD_GET_OUTPUTS,
-	CMD_DISCONNECT_CLIENT,
+	CMD_CLIENT_LIST,
+	CMD_CLIENT_DISCONNECT,
+	CMD_OUTPUT_LIST,
+	CMD_OUTPUT_SET,
+	CMD_VERSION,
 	CMD_WAYVNC_EXIT,
 	CMD_UNKNOWN,
 };
 #define CMD_LIST_LEN CMD_UNKNOWN
 
 enum event_type {
+	EVT_CAPTURE_CHANGED,
 	EVT_CLIENT_CONNECTED,
 	EVT_CLIENT_DISCONNECTED,
-	EVT_CAPTURE_CHANGED,
 	EVT_UNKNOWN,
 };
 #define EVT_LIST_LEN EVT_UNKNOWN
