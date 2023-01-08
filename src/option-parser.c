@@ -22,6 +22,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <assert.h>
+#include <sys/param.h>
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
@@ -75,7 +76,7 @@ static int get_left_col_width(const struct wv_option* opts, int n)
 
 static void format_option(struct table_printer* printer, const struct wv_option* opt)
 {
-	if (!opt->help)
+	if (!opt->help || opt->positional)
 		return;
 
 	int n_chars = 0;
@@ -102,6 +103,31 @@ void option_parser_print_options(struct option_parser* self, FILE* stream)
 	table_printer_init(&printer, stream, left_col_width);
 	for (int i = 0; i < self->n_opts; ++i)
 		format_option(&printer, &self->options[i]);
+}
+
+int option_parser_print_arguments(struct option_parser* self, FILE* stream)
+{
+	size_t max_arg = 0;
+	for (int i = 0; i < self->n_opts; ++i) {
+		const struct wv_option* opt = &self->options[i];
+		if (!opt->positional || !opt->help || opt->is_subcommand)
+			continue;
+		max_arg = MAX(max_arg, strlen(opt->positional));
+	}
+	if (!max_arg)
+		return 0;
+
+	fprintf(stream, "Arguments:\n");
+	struct table_printer printer;
+	table_printer_init(&printer, stream, max_arg);
+	int i;
+	for (i = 0; i < self->n_opts; ++i) {
+		const struct wv_option* opt = &self->options[i];
+		if (!opt->positional || !opt->help || opt->is_subcommand)
+			continue;
+		table_printer_print_line(&printer, opt->positional, opt->help);
+	}
+	return i;
 }
 
 static const struct wv_option* find_long_option(

@@ -737,9 +737,12 @@ static int print_command_usage(struct ctl_client* self,
 	for (int i = 0; i < cmd_options->n_opts; ++i)
 		if (cmd_options->options[i].positional)
 			printf("<%s> ", cmd_options->options[i].positional);
+
 	printf("[parameters]\n\n");
 	table_printer_indent_and_reflow_text(stdout, info->description, 80, 0, 0);
 	printf("\n");
+	if (option_parser_print_arguments(cmd_options, stdout))
+		printf("\n");
 	option_parser_print_options(cmd_options, stdout);
 	printf("\n");
 	option_parser_print_options(parent_options, stdout);
@@ -772,6 +775,7 @@ int ctl_client_init_cmd_parser(struct option_parser* parser, enum cmd_type cmd)
 	if (param_count == 1) {
 		// Represent a single parameter as a positional argument
 		options[0].positional = info->params[0].name;
+		options[0].help = info->params[0].description;
 		i++;
 	} else {
 		for (; i < param_count; ++i) {
