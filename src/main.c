@@ -907,7 +907,13 @@ void on_capture_done(struct screencopy* sc)
 
 int wayvnc_usage(struct option_parser* parser, FILE* stream, int rc)
 {
-	fprintf(stream, "Usage: wayvnc [options] [address [port]]\n\n");
+	static const char* usage =
+"Usage: wayvnc [options] [<address> [<port>]]\n"
+"\n"
+"Starts a VNC server for $WAYLAND_DISPLAY";
+	fprintf(stream, "%s\n\n", usage);
+	if (option_parser_print_arguments(parser, stream))
+		fprintf(stream, "\n");
 	option_parser_print_options(parser, stream);
 	fprintf(stream, "\n");
 	return rc;
@@ -1263,8 +1269,10 @@ int main(int argc, char* argv[])
 	int log_level = NVNC_LOG_WARNING;
 
 	static const struct wv_option opts[] = {
-		{ .positional = "address" },
-		{ .positional = "port" },
+		{ .positional = "address",
+		  .help = "The IP address or unix socket path to listen on. Default: 127.0.0.1" },
+		{ .positional = "port",
+		  .help = "The TCP port to listen on. Default: 5900" },
 		{ 'C', "config", "<path>",
 		  "Select a config file." },
 		{ 'g', "gpu", NULL,
