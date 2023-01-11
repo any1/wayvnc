@@ -663,6 +663,11 @@ void ctl_client_print_command_list(FILE* stream)
 	fprintf(stream, "\nRun 'wayvncctl command-name --help' for command-specific details.\n");
 }
 
+static size_t param_render_length(const struct cmd_param_info* param)
+{
+	return strlen(param->name) + strlen(param->schema) + 1;
+}
+
 static void print_event_info(const struct cmd_info* info)
 {
 	printf("%s\n\n", info->name);
@@ -671,14 +676,14 @@ static void print_event_info(const struct cmd_info* info)
 		printf("\nData fields:\n");
 		size_t max_namelen = 0;
 		for (int i = 0; info->params[i].name != NULL; ++i)
-			max_namelen = MAX(max_namelen, strlen(info->params[i].name));
+			max_namelen = MAX(max_namelen, param_render_length(&info->params[i]));
 
 		struct table_printer printer;
 		table_printer_init(&printer, stdout, max_namelen);
 		for (int i = 0; info->params[i].name != NULL; ++i)
 			table_printer_print_fmtline(&printer,
 					info->params[i].description,
-					"%s=...", info->params[i].name);
+					"%s=%s", info->params[i].name, info->params[i].schema);
 	}
 }
 
@@ -772,17 +777,16 @@ int ctl_client_init_cmd_parser(struct option_parser* parser, enum cmd_type cmd)
 	struct wv_option* options = calloc(alloc_count,
 			sizeof(struct wv_option));
 	size_t i = 0;
-	if (param_count == 1) {
-		// Represent a single parameter as a positional argument
-		options[0].positional = info->params[0].name;
-		options[0].help = info->params[0].description;
-		i++;
-	} else {
-		for (; i < param_count; ++i) {
-			struct wv_option* option = &options[i];
-			option->long_opt = info->params[i].name;
-			option->help = info->params[i].description;
-			option->schema = "<value>";
+	for (; i < param_count; ++i) {
+		struct wv_option* option = &options[i];
+		struct cmd_param_info* param = &info->params[i];
+		option->help = param->description;
+		if (param->positional) {
+			option->positional = param->name;
+			option->help = param->description;
+		} else {
+			option->long_opt = param->name;
+			option->schema = param->schema;
 		}
 	}
 	if (cmd == CMD_EVENT_RECEIVE) {
