@@ -23,65 +23,83 @@ struct cmd_info ctl_command_list[] = {
 	[CMD_HELP] = { "help",
 		"List all commands and events, or show usage of a specific command or event",
 		{
-			{"command", "The command to show (optional)"},
-			{"event", "The event to show (optional)"},
-			{ },
+			{ "command",
+				"The command to show (optional)",
+				"<name>" },
+			{ "event",
+				"The event to show (optional)",
+				"<name>" },
+			{},
 		}
 	},
 	[CMD_VERSION] = { "version",
 		"Query the version of the wayvnc process",
-		{{NULL, NULL}}
+		{{}}
 	},
 	[CMD_EVENT_RECEIVE] = { "event-receive",
 		"Register to begin receiving asynchronous events from wayvnc",
 		// TODO: Event type filtering?
-		{{ }}
+		{{}}
 	},
 	[CMD_CLIENT_LIST] = { "client-list",
 		"Return a list of all currently connected VNC sessions",
-		{{NULL, NULL}}
+		{{}}
 	},
 	[CMD_CLIENT_DISCONNECT] = { "client-disconnect",
 		"Disconnect a VNC session",
 		{
-			{"id", "The ID of the client to disconnect"},
-			{ },
+			{ "id",
+				"The ID of the client to disconnect",
+				"<id>", true },
+			{},
 		}
 	},
 	[CMD_OUTPUT_LIST] = { "output-list",
 		"Return a list of all currently detected Wayland outputs",
-		{{NULL, NULL}}
+		{{}}
 	},
 	[CMD_OUTPUT_CYCLE] = { "output-cycle",
 		"Cycle the actively captured output to the next available output, wrapping through all outputs.",
-		{{ }}
+		{{}}
 	},
 	[CMD_OUTPUT_SET] = { "output-set",
 		"Switch the actively captured output",
 		{
-			{"output-name", "The specific output name to capture"},
-			{ },
+			{ "output-name",
+				"The specific output name to capture",
+				"<name>", true },
+			{},
 		}
 	},
 	[CMD_WAYVNC_EXIT] = { "wayvnc-exit",
 		"Disconnect all clients and shut down wayvnc",
-		{{ }},
+		{{}},
 	},
 };
 
 #define CLIENT_EVENT_PARAMS(including) \
-	{"id", "A unique identifier for this client"}, \
-	{"connection_count", "The total number of connected VNC clients " including " this one."}, \
-	{"hostname", "The hostname or IP address of this client (may be null)"}, \
-	{"username", "The username used to authentice this client (may be null)."}, \
-	{NULL, NULL},
+	{ "id", \
+		"A unique identifier for this client", \
+		"<id>" }, \
+	{ "connection_count", \
+		"The total number of connected VNC clients " including " this one.", \
+		"<count>" }, \
+	{ "hostname", \
+		"The hostname or IP address of this client (may be null)", \
+		"<name|ip>" }, \
+	{ "username", \
+		"The username used to authentice this client (may be null).", \
+		"<name>" }, \
+	{},
 
 struct cmd_info ctl_event_list[] = {
 	[EVT_CAPTURE_CHANGED] = {"capture-changed",
 		"Sent by wayvnc when the catured output is changed",
 		{
-			{"output", "The name of the output now being captured"},
-			{NULL, NULL},
+			{ "output-name",
+				"The name of the output now being captured",
+				"<name>" },
+			{},
 		},
 	},
 	[EVT_CLIENT_CONNECTED] = {"client-connected",

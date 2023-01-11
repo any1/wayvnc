@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <stdbool.h>
+
 enum cmd_type {
 	CMD_HELP,
 	CMD_EVENT_RECEIVE,
@@ -41,6 +43,8 @@ enum event_type {
 struct cmd_param_info {
 	char* name;
 	char* description;
+        char* schema;
+        bool positional;
 };
 
 struct cmd_info {
