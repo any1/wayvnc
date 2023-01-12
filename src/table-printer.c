@@ -79,6 +79,9 @@ int table_printer_reflow_text(char* dst, int dst_size, const char* src,
 		assert(dst_len < dst_size);
 		++line_len;
 		++i;
+
+		if (c == '\n')
+			line_len = 0;
 	}
 
 	dst[dst_len] = '\0';

@@ -45,6 +45,38 @@ static int test_reflow_text(void)
 	return 0;
 }
 
+static int test_reflow_multiline(void)
+{
+	char buf[20];
+	const char* src = "one two\nthree four";
+
+	table_printer_reflow_text(buf, sizeof(buf), src, 20);
+	ASSERT_STR_EQ("one two\nthree four", buf);
+
+	table_printer_reflow_text(buf, sizeof(buf), src, 18);
+	ASSERT_STR_EQ("one two\nthree four", buf);
+
+	table_printer_reflow_text(buf, sizeof(buf), src, 17);
+	ASSERT_STR_EQ("one two\nthree four", buf);
+
+	table_printer_reflow_text(buf, sizeof(buf), src, 10);
+	ASSERT_STR_EQ("one two\nthree four", buf);
+
+	table_printer_reflow_text(buf, sizeof(buf), src, 9);
+	ASSERT_STR_EQ("one two\nthree\nfour", buf);
+
+	table_printer_reflow_text(buf, sizeof(buf), src, 7);
+	ASSERT_STR_EQ("one two\nthree\nfour", buf);
+
+	table_printer_reflow_text(buf, sizeof(buf), src, 6);
+	ASSERT_STR_EQ("one\ntwo\nthree\nfour", buf);
+
+	table_printer_reflow_text(buf, sizeof(buf), src, 5);
+	ASSERT_STR_EQ("one\ntwo\nthree\nfour", buf);
+
+	return 0;
+}
+
 static int test_indent_and_reflow(void)
 {
 	size_t len;
@@ -137,6 +169,7 @@ int main()
 {
 	int r = 0;
 	RUN_TEST(test_reflow_text);
+	RUN_TEST(test_reflow_multiline);
 	RUN_TEST(test_indent_and_reflow);
 	RUN_TEST(test_defaults);
 	RUN_TEST(test_print_line);
