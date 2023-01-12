@@ -670,10 +670,10 @@ static size_t param_render_length(const struct cmd_param_info* param)
 
 static void print_event_info(const struct cmd_info* info)
 {
-	printf("%s\n\n", info->name);
-	table_printer_indent_and_reflow_text(stdout, info->description, 80, 0, 0);
+	printf("%s\n", info->name);
+	option_parser_print_cmd_summary(info->description, stdout);
 	if (info->params[0].name != NULL) {
-		printf("\nData fields:\n");
+		printf("Data fields:\n");
 		size_t max_namelen = 0;
 		for (int i = 0; info->params[i].name != NULL; ++i)
 			max_namelen = MAX(max_namelen, param_render_length(&info->params[i]));
@@ -684,6 +684,7 @@ static void print_event_info(const struct cmd_info* info)
 			table_printer_print_fmtline(&printer,
 					info->params[i].description,
 					"%s=%s", info->params[i].name, info->params[i].schema);
+		printf("\n");
 	}
 }
 
@@ -740,17 +741,17 @@ static int print_command_usage(struct ctl_client* self,
 	}
 	printf("Usage: wayvncctl [options] %s", info->name);
 	option_parser_print_usage(cmd_options, stdout);
-	printf("\n\n");
-	table_printer_indent_and_reflow_text(stdout, info->description, 80, 0, 0);
 	printf("\n");
+	option_parser_print_cmd_summary(info->description, stdout);
 	if (option_parser_print_arguments(cmd_options, stdout))
 		printf("\n");
 	option_parser_print_options(cmd_options, stdout);
 	printf("\n");
 	option_parser_print_options(parent_options, stdout);
+	printf("\n");
 	if (cmd == CMD_EVENT_RECEIVE) {
-		printf("\n");
 		ctl_client_print_event_list(stdout);
+		printf("\n");
 	}
 	return 0;
 }

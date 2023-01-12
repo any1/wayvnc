@@ -424,3 +424,12 @@ const char* option_parser_get_value(const struct option_parser* self,
 
 	return NULL;
 }
+
+void option_parser_print_cmd_summary(const char* summary, FILE* stream)
+{
+	struct table_printer printer;
+	table_printer_init(&printer, stream, 0);
+	fprintf(stream, "\n");
+	table_printer_indent_and_reflow_text(stream, summary, printer.max_width, 0, 0);
+	fprintf(stream, "\n");
+}

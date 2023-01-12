@@ -63,3 +63,5 @@ const char* option_parser_get_value(const struct option_parser* self,
 		const char* name);
 const char* option_parser_get_value_no_default(const struct option_parser* self,
 		const char* name);
+
+void option_parser_print_cmd_summary(const char* summary, FILE* stream);
