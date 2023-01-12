@@ -75,6 +75,16 @@ static int get_left_col_width(const struct wv_option* opts, int n)
 	return max_width;
 }
 
+static const char* format_help(const struct wv_option* opt)
+{
+	if (!opt->default_)
+		return opt->help;
+
+	static char help_buf[256];
+	snprintf(help_buf, sizeof(help_buf), "%s\nDefault: %s", opt->help, opt->default_);
+	return help_buf;
+}
+
 static void format_option(struct table_printer* printer, const struct wv_option* opt)
 {
 	if (!opt->help || opt->positional)
@@ -93,7 +103,7 @@ static void format_option(struct table_printer* printer, const struct wv_option*
 		n_chars += snprintf(buf + n_chars, sizeof(buf) - n_chars,
 				"%s%s", opt->long_opt ? "=" : "", opt->schema);
 
-	table_printer_print_line(printer, buf, opt->help);
+	table_printer_print_line(printer, buf, format_help(opt));
 }
 
 void option_parser_print_options(struct option_parser* self, FILE* stream)
@@ -159,7 +169,7 @@ int option_parser_print_arguments(struct option_parser* self, FILE* stream)
 		const struct wv_option* opt = &self->options[i];
 		if (!opt->positional || !opt->help || opt->is_subcommand)
 			continue;
-		table_printer_print_line(&printer, opt->positional, opt->help);
+		table_printer_print_line(&printer, opt->positional, format_help(opt));
 	}
 	return i;
 }

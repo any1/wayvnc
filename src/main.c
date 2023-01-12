@@ -1292,7 +1292,7 @@ int main(int argc, char* argv[])
 		{ 'r', "render-cursor", NULL,
 		  "Enable overlay cursor rendering." },
 		{ 'f', "max-fps", "<fps>",
-		  "Set rate limit (default 30).",
+		  "Set rate limit.",
 		  .default_ = "30" },
 		{ 'p', "performance", NULL,
 		  "Show performance counters." },
