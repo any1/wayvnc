@@ -910,14 +910,15 @@ void on_capture_done(struct screencopy* sc)
 
 int wayvnc_usage(struct option_parser* parser, FILE* stream, int rc)
 {
-	fputs("Usage: wayvnc", stream);
+	fprintf(stream, "Usage: wayvnc");
 	option_parser_print_usage(parser, stream);
-	fputs("\n\n", stream);
-	fprintf(stream, "Starts a VNC server for $WAYLAND_DISPLAY\n\n");
+	fprintf(stream, "\n");
+	option_parser_print_cmd_summary("Starts a VNC server for $WAYLAND_DISPLAY",
+			stream);
 	if (option_parser_print_arguments(parser, stream))
-		fputc('\n', stream);
+		fprintf(stream, "\n");
 	option_parser_print_options(parser, stream);
-	fputc('\n', stream);
+	fprintf(stream, "\n");
 	return rc;
 }
 
