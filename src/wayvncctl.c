@@ -43,13 +43,12 @@ struct wayvncctl {
 
 static int wayvncctl_usage(FILE* stream, struct option_parser* options, int rc)
 {
-	static const char* usage =
-"Usage: wayvncctl [options] <command> [parameters]\n"
-"\n"
-"Connects to and interacts with a running wayvnc instance.";
-	fprintf(stream, "%s\n\n", usage);
+	fputs("Usage: wayvncctl", stream);
+	option_parser_print_usage(options, stream);
+	fputs(" [parameters]\n\n", stream);
+	fputs("Connects to and interacts with a running wayvnc instance.\n\n", stream);
 	option_parser_print_options(options, stream);
-	fprintf(stream, "\n");
+	fputc('\n', stream);
 	ctl_client_print_command_list(stream);
 	return rc;
 }

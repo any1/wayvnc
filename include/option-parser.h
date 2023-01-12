@@ -50,11 +50,16 @@ struct option_parser {
 void option_parser_init(struct option_parser* self,
 		const struct wv_option* options);
 
+void option_parser_print_usage(struct option_parser* self, FILE* stream);
+
 int option_parser_print_arguments(struct option_parser* self, FILE* stream);
 
 void option_parser_print_options(struct option_parser* self, FILE* stream);
 
 int option_parser_parse(struct option_parser* self, int argc,
 		const char* const* argv);
+
 const char* option_parser_get_value(const struct option_parser* self,
+		const char* name);
+const char* option_parser_get_value_no_default(const struct option_parser* self,
 		const char* name);

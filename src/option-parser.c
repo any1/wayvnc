@@ -23,6 +23,7 @@
 #include <stdbool.h>
 #include <assert.h>
 #include <sys/param.h>
+#include <ctype.h>
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
@@ -105,6 +106,39 @@ void option_parser_print_options(struct option_parser* self, FILE* stream)
 		format_option(&printer, &self->options[i]);
 }
 
+static void print_string_tolower(FILE* stream, const char *src)
+{
+	for (const char* c = src; *c != '\0'; c++)
+		fprintf(stream, "%c", tolower(*c));
+}
+
+void option_parser_print_usage(struct option_parser* self, FILE* stream)
+{
+	fprintf(stream, " [");
+	print_string_tolower(stream, self->name);
+	fprintf(stream, "]");
+	int optional_paren_count = 0;
+	for (int i = 0; i < self->n_opts; ++i) {
+		const struct wv_option* opt = &self->options[i];
+		if (!opt->positional)
+			continue;
+		const char* open = "<";
+		const char* close = ">";
+		if (opt->default_) {
+			open = "[";
+			close = ""; // Closed via optional_paren_count loop below
+			optional_paren_count++;
+		} else {
+			// Enforce there must be NO non-optional args after
+			// we've processed at least one optional arg
+			assert(optional_paren_count == 0);
+		}
+		fprintf(stream, " %s%s%s", open, opt->positional, close);
+	}
+	for (int i = 0; i < optional_paren_count; ++i)
+		fprintf(stream, "]");
+}
+
 int option_parser_print_arguments(struct option_parser* self, FILE* stream)
 {
 	size_t max_arg = 0;
@@ -164,6 +198,19 @@ static const struct wv_option* find_positional_option(
 			return &self->options[i];
 
 		current_pos += 1;
+	}
+	return NULL;
+}
+
+static const struct wv_option* find_positional_option_by_name(
+		const struct option_parser* self, const char*name)
+{
+	for (int i = 0; i < self->n_opts; ++i) {
+		const struct wv_option* opt = &self->options[i];
+		if (!opt->positional)
+			continue;
+		if (strcmp(opt->positional, name) == 0)
+			return opt;
 	}
 	return NULL;
 }
@@ -317,7 +364,7 @@ int option_parser_parse(struct option_parser* self, int argc,
 	return 0;
 }
 
-const char* option_parser_get_value(const struct option_parser* self,
+const char* option_parser_get_value_no_default(const struct option_parser* self,
 		const char* name)
 {
 	const struct wv_option* opt;
@@ -340,6 +387,18 @@ const char* option_parser_get_value(const struct option_parser* self,
 			return value->value;
 	}
 
+	return NULL;
+}
+
+const char* option_parser_get_value(const struct option_parser* self,
+		const char* name)
+{
+	const char* value = option_parser_get_value_no_default(self, name);
+	if (value)
+		return value;
+
+	bool is_short = name[0] && !name[1];
+	const struct wv_option* opt;
 	if (is_short) {
 		opt = find_short_option(self, name[0]);
 		if (opt)
@@ -348,9 +407,10 @@ const char* option_parser_get_value(const struct option_parser* self,
 		opt = find_long_option(self, name);
 		if (opt)
 			return opt->default_;
+		opt = find_positional_option_by_name(self, name);
+		if (opt)
+			return opt->default_;
 	}
-
-	// TODO: Add positional option?
 
 	return NULL;
 }

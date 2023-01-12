@@ -15,6 +15,13 @@ static const struct wv_option options[] = {
 	{ },
 };
 
+static const struct wv_option default_options[] = {
+	{ .positional = "first" },
+	{ .positional = "second", .default_ = "second_default" },
+	{ 'v', "value-option", "value", "Description of v", .default_ = "v_default" },
+	{ },
+};
+
 static int test_simple(void)
 {
 	struct option_parser parser;
@@ -227,6 +234,61 @@ static int test_subcommand_with_arguments(void)
 	return 0;
 }
 
+static int test_defaults_not_set(void)
+{
+	struct option_parser parser;
+	option_parser_init(&parser, default_options);
+	const char* argv[] = {
+		"executable",
+		"pos 1",
+	};
+
+	ASSERT_INT_EQ(0, option_parser_parse(&parser, ARRAY_SIZE(argv), argv));
+	ASSERT_STR_EQ("pos 1", option_parser_get_value(&parser, "first"));
+
+	ASSERT_STR_EQ("second_default", option_parser_get_value(&parser, "second"));
+	ASSERT_FALSE(option_parser_get_value_no_default(&parser, "second"));
+
+	ASSERT_STR_EQ("v_default", option_parser_get_value(&parser, "value-option"));
+	ASSERT_FALSE(option_parser_get_value_no_default(&parser, "value-option"));
+	ASSERT_STR_EQ("v_default", option_parser_get_value(&parser, "v"));
+	ASSERT_FALSE(option_parser_get_value_no_default(&parser, "v"));
+
+	ASSERT_INT_EQ(0, parser.remaining_argc);
+	ASSERT_FALSE(parser.remaining_argv);
+
+	return 0;
+}
+
+static int test_defaults_overridden(void)
+{
+	struct option_parser parser;
+	option_parser_init(&parser, default_options);
+	const char* argv[] = {
+		"executable",
+		"pos 1",
+		"pos 2",
+		"-v",
+		"v_set",
+	};
+
+	ASSERT_INT_EQ(0, option_parser_parse(&parser, ARRAY_SIZE(argv), argv));
+	ASSERT_STR_EQ("pos 1", option_parser_get_value(&parser, "first"));
+
+	ASSERT_STR_EQ("pos 2", option_parser_get_value(&parser, "second"));
+	ASSERT_STR_EQ("pos 2", option_parser_get_value_no_default(&parser, "second"));
+
+	ASSERT_STR_EQ("v_set", option_parser_get_value(&parser, "value-option"));
+	ASSERT_STR_EQ("v_set", option_parser_get_value_no_default(&parser, "value-option"));
+	ASSERT_STR_EQ("v_set", option_parser_get_value(&parser, "v"));
+	ASSERT_STR_EQ("v_set", option_parser_get_value_no_default(&parser, "v"));
+
+	ASSERT_INT_EQ(0, parser.remaining_argc);
+	ASSERT_FALSE(parser.remaining_argv);
+
+	return 0;
+}
+
 int main()
 {
 	int r = 0;
@@ -246,5 +308,7 @@ int main()
 	RUN_TEST(test_missing_long_value);
 	RUN_TEST(test_subcommand_without_arguments);
 	RUN_TEST(test_subcommand_with_arguments);
+	RUN_TEST(test_defaults_not_set);
+	RUN_TEST(test_defaults_overridden);
 	return r;
 }

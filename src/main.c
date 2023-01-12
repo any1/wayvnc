@@ -66,6 +66,9 @@
 #define DEFAULT_ADDRESS "127.0.0.1"
 #define DEFAULT_PORT 5900
 
+#define XSTR(x) STR(x)
+#define STR(x) #x
+
 #define MAYBE_UNUSED __attribute__((unused))
 
 struct wayvnc {
@@ -907,15 +910,14 @@ void on_capture_done(struct screencopy* sc)
 
 int wayvnc_usage(struct option_parser* parser, FILE* stream, int rc)
 {
-	static const char* usage =
-"Usage: wayvnc [options] [<address> [<port>]]\n"
-"\n"
-"Starts a VNC server for $WAYLAND_DISPLAY";
-	fprintf(stream, "%s\n\n", usage);
+	fputs("Usage: wayvnc", stream);
+	option_parser_print_usage(parser, stream);
+	fputs("\n\n", stream);
+	fprintf(stream, "Starts a VNC server for $WAYLAND_DISPLAY\n\n");
 	if (option_parser_print_arguments(parser, stream))
-		fprintf(stream, "\n");
+		fputc('\n', stream);
 	option_parser_print_options(parser, stream);
-	fprintf(stream, "\n");
+	fputc('\n', stream);
 	return rc;
 }
 
@@ -1270,9 +1272,11 @@ int main(int argc, char* argv[])
 
 	static const struct wv_option opts[] = {
 		{ .positional = "address",
-		  .help = "The IP address or unix socket path to listen on. Default: 127.0.0.1" },
+		  .help = "The IP address or unix socket path to listen on.",
+		  .default_ = DEFAULT_ADDRESS},
 		{ .positional = "port",
-		  .help = "The TCP port to listen on. Default: 5900" },
+		  .help = "The TCP port to listen on.",
+		  .default_ = XSTR(DEFAULT_PORT)},
 		{ 'C', "config", "<path>",
 		  "Select a config file." },
 		{ 'g', "gpu", NULL,
@@ -1305,7 +1309,7 @@ int main(int argc, char* argv[])
 		  .default_ = "warning" },
 		{ 'h', "help", NULL,
 		  "Get help (this text)." },
-		{ '\0', NULL, NULL, NULL }
+		{}
 	};
 
 	struct option_parser option_parser;
@@ -1344,8 +1348,10 @@ int main(int argc, char* argv[])
 
 	nvnc_set_log_level(log_level);
 
-	address = option_parser_get_value(&option_parser, "address");
-	const char* port_str = option_parser_get_value(&option_parser, "port");
+	// Only check for explicitly-set values here (defaults applied below)
+	address = option_parser_get_value_no_default(&option_parser, "address");
+	const char* port_str = option_parser_get_value_no_default(&option_parser,
+			"port");
 	if (port_str)
 		port = atoi(port_str);
 

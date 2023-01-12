@@ -738,12 +738,9 @@ static int print_command_usage(struct ctl_client* self,
 		WARN("No such command");
 		return 1;
 	}
-	printf("Usage: wayvncctl [options] %s ", info->name);
-	for (int i = 0; i < cmd_options->n_opts; ++i)
-		if (cmd_options->options[i].positional)
-			printf("<%s> ", cmd_options->options[i].positional);
-
-	printf("[parameters]\n\n");
+	printf("Usage: wayvncctl [options] %s", info->name);
+	option_parser_print_usage(cmd_options, stdout);
+	printf("\n\n");
 	table_printer_indent_and_reflow_text(stdout, info->description, 80, 0, 0);
 	printf("\n");
 	if (option_parser_print_arguments(cmd_options, stdout))
