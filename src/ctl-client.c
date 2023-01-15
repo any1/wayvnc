@@ -506,7 +506,7 @@ static bool json_has_content(json_t* root)
 	return false;
 }
 
-static void print_as_yaml(json_t* data, int level, bool needs_leading_newline)
+static void print_for_human(json_t* data, int level, bool needs_leading_newline)
 {
 	size_t i;
 	const char* key;
@@ -531,7 +531,7 @@ static void print_as_yaml(json_t* data, int level, bool needs_leading_newline)
 				needs_indent = true;
 
 			printf("%s: ", key);
-			print_as_yaml(value, level + 1, true);
+			print_for_human(value, level + 1, true);
 		}
 		break;
 	case JSON_ARRAY:
@@ -544,7 +544,7 @@ static void print_as_yaml(json_t* data, int level, bool needs_leading_newline)
 
 			print_indent(level);
 			printf("- ");
-			print_as_yaml(value, level + 1, json_is_array(value));
+			print_for_human(value, level + 1, json_is_array(value));
 		}
 		break;
 	case JSON_STRING:
@@ -572,7 +572,7 @@ static void print_event(struct jsonipc_request* event, unsigned flags)
 	} else {
 		printf("\n%s:", event->method);
 		if (event->params)
-			print_as_yaml(event->params, 1, true);
+			print_for_human(event->params, 1, true);
 		else
 			printf("<<null>\n");
 	}
