@@ -40,8 +40,8 @@
 	fprintf(stderr, level ": %s: %d: " fmt "\n", __FILE__, __LINE__, \
 		##__VA_ARGS__)
 
-#define WARN(fmt, ...) \
-	LOG("WARNING", fmt, ##__VA_ARGS__)
+#define ERROR(fmt, ...) \
+	LOG("ERROR", fmt, ##__VA_ARGS__)
 
 static bool do_debug = false;
 
@@ -91,7 +91,7 @@ struct ctl_client* ctl_client_new(const char* socket_path, void* userdata)
 
 	if (strlen(socket_path) >= sizeof(new->addr.sun_path)) {
 		errno = ENAMETOOLONG;
-		WARN("Failed to create unix socket: %m");
+		ERROR("Failed to create unix socket: %m");
 		goto socket_failure;
 	}
 	strcpy(new->addr.sun_path, socket_path);
@@ -110,7 +110,7 @@ static int wait_for_socket(const char* socket_path, int timeout)
 	struct stat sb;
 	while (stat(socket_path, &sb) != 0) {
 		if (timeout == 0) {
-			WARN("Failed to find socket path \"%s\": %m",
+			ERROR("Failed to find socket path \"%s\": %m",
 					socket_path);
 			return 1;
 		}
@@ -120,14 +120,14 @@ static int wait_for_socket(const char* socket_path, int timeout)
 					socket_path);
 		}
 		if (usleep(50000) == -1) {
-			WARN("Failed to wait for socket path: %m");
+			ERROR("Failed to wait for socket path: %m");
 			return -1;
 		}
 	}
 	if (S_ISSOCK(sb.st_mode)) {
 		DEBUG("Found socket \"%s\"", socket_path);
 	} else {
-		WARN("Path \"%s\" exists but is not a socket (0x%x)",
+		ERROR("Path \"%s\" exists but is not a socket (0x%x)",
 				socket_path, sb.st_mode);
 		return -1;
 	}
@@ -140,18 +140,18 @@ static int try_connect(struct ctl_client* self, int timeout)
 		close(self->fd);
 	self->fd = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (self->fd < 0) {
-		WARN("Failed to create unix socket: %m");
+		ERROR("Failed to create unix socket: %m");
 		return 1;
 	}
 	while (connect(self->fd, (struct sockaddr*)&self->addr,
 				sizeof(self->addr)) != 0) {
 		if (timeout == 0 || errno != ENOENT) {
-			WARN("Failed to connect to unix socket \"%s\": %m",
+			ERROR("Failed to connect to unix socket \"%s\": %m",
 					self->addr.sun_path);
 			return 1;
 		}
 		if (usleep(50000) == -1) {
-			WARN("Failed to wait for connect to succeed: %m");
+			ERROR("Failed to wait for connect to succeed: %m");
 			return 1;
 		}
 	}
@@ -221,14 +221,14 @@ static json_t* json_from_buffer(struct ctl_client* self)
 		advance_read_buffer(&self->read_buffer, &self->read_len, err.position);
 	} else if (json_error_code(&err) == json_error_premature_end_of_input) {
 		if (self->read_len == sizeof(self->read_buffer)) {
-			WARN("Response message is too long");
+			ERROR("Response message is too long");
 			errno = EMSGSIZE;
 		} else {
 			DEBUG("Awaiting more data");
 			errno = ENODATA;
 		}
 	} else {
-		WARN("Json parsing failed: %s", err.text);
+		ERROR("Json parsing failed: %s", err.text);
 		errno = EINVAL;
 	}
 	return root;
@@ -251,20 +251,20 @@ static json_t* read_one_object(struct ctl_client* self, int timeout_ms)
 		if (n == -1) {
 			if (errno == EINTR && self->wait_for_events)
 				continue;
-			WARN("Error waiting for a response: %m");
+			ERROR("Error waiting for a response: %m");
 			break;
 		} else if (n == 0) {
-			WARN("Timeout waiting for a response");
+			ERROR("Timeout waiting for a response");
 			break;
 		}
 		char* readptr = self->read_buffer + self->read_len;
 		size_t remainder = sizeof(self->read_buffer) - self->read_len;
 		n = recv(self->fd, readptr, remainder, 0);
 		if (n == -1) {
-			WARN("Read failed: %m");
+			ERROR("Read failed: %m");
 			break;
 		} else if (n == 0) {
-			WARN("Disconnected");
+			ERROR("Disconnected");
 			errno = ECONNRESET;
 			break;
 		}
@@ -289,7 +289,7 @@ static struct jsonipc_response* ctl_client_wait_for_response(struct ctl_client* 
 			&jipc_err);
 	if (!response) {
 		char* msg = json_dumps(jipc_err.data, JSON_EMBED);
-		WARN("Could not parse json: %s", msg);
+		ERROR("Could not parse json: %s", msg);
 		free(msg);
 	}
 	json_decref(root);
@@ -559,7 +559,7 @@ static ssize_t ctl_client_send_request(struct ctl_client* self,
 	json_error_t err;
 	json_t* packed = jsonipc_request_pack(request, &err);
 	if (!packed) {
-		WARN("Could not encode json: %s", err.text);
+		ERROR("Could not encode json: %s", err.text);
 		return -1;
 	}
 	char buffer[512];
@@ -701,7 +701,7 @@ static int print_event_details(const char* evt_name)
 			return 0;
 		}
 	}
-	WARN("No such event \"%s\"\n", evt_name);
+	ERROR("No such event \"%s\"\n", evt_name);
 	return 1;
 }
 
@@ -731,12 +731,12 @@ static int print_command_usage(struct ctl_client* self,
 		struct option_parser* parent_options)
 {
 	if (self->flags & CTL_CLIENT_PRINT_JSON) {
-		WARN("JSON output is not supported for \"help\" output");
+		ERROR("JSON output is not supported for \"help\" output");
 		return 1;
 	}
 	struct cmd_info* info = ctl_command_by_type(cmd);
 	if (!info) {
-		WARN("No such command");
+		ERROR("No such command");
 		return 1;
 	}
 	printf("Usage: wayvncctl [options] %s", info->name);
@@ -816,7 +816,7 @@ int ctl_client_run_command(struct ctl_client* self,
 	const char* method = option_parser_get_value(parent_options, "command");
 	enum cmd_type cmd = ctl_command_parse_name(method);
 	if (cmd == CMD_UNKNOWN || cmd == CMD_HELP) {
-		WARN("No such command \"%s\"\n", method);
+		ERROR("No such command \"%s\"\n", method);
 		return 1;
 	}
 
