@@ -1428,7 +1428,7 @@ int main(int argc, char* argv[])
 	self.screencopy.enable_linux_dmabuf = enable_gpu_features;
 
 #ifdef ENABLE_SCREENCOPY_DMABUF
-	if (init_render_node(&drm_fd) < 0) {
+	if (enable_gpu_features && init_render_node(&drm_fd) < 0) {
 		nvnc_log(NVNC_LOG_ERROR, "Failed to initialise DRM render node. No GPU acceleration will be available.");
 	}
 #endif
