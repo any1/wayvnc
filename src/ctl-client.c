@@ -85,6 +85,7 @@ struct ctl_client* ctl_client_new(const char* socket_path, void* userdata)
 {
 	if (!socket_path)
 		socket_path = default_ctl_socket_path();
+
 	struct ctl_client* new = calloc(1, sizeof(*new));
 	new->userdata = userdata;
 	new->fd = -1;
@@ -108,6 +109,7 @@ static int wait_for_socket(const char* socket_path, int timeout)
 {
 	bool needs_log = true;
 	struct stat sb;
+
 	while (stat(socket_path, &sb) != 0) {
 		if (timeout == 0) {
 			ERROR("Failed to find socket path \"%s\": %m",
@@ -124,6 +126,7 @@ static int wait_for_socket(const char* socket_path, int timeout)
 			return -1;
 		}
 	}
+
 	if (S_ISSOCK(sb.st_mode)) {
 		DEBUG("Found socket \"%s\"", socket_path);
 	} else {
@@ -131,6 +134,7 @@ static int wait_for_socket(const char* socket_path, int timeout)
 				socket_path, sb.st_mode);
 		return -1;
 	}
+
 	return 0;
 }
 
@@ -138,11 +142,13 @@ static int try_connect(struct ctl_client* self, int timeout)
 {
 	if (self->fd != -1)
 		close(self->fd);
+
 	self->fd = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (self->fd < 0) {
 		ERROR("Failed to create unix socket: %m");
 		return 1;
 	}
+
 	while (connect(self->fd, (struct sockaddr*)&self->addr,
 				sizeof(self->addr)) != 0) {
 		if (timeout == 0 || errno != ENOENT) {
@@ -150,11 +156,13 @@ static int try_connect(struct ctl_client* self, int timeout)
 					self->addr.sun_path);
 			return 1;
 		}
+
 		if (usleep(50000) == -1) {
 			ERROR("Failed to wait for connect to succeed: %m");
 			return 1;
 		}
 	}
+
 	return 0;
 }
 
@@ -189,12 +197,14 @@ static struct jsonipc_request* ctl_client_parse_args(struct ctl_client* self,
 	struct jsonipc_request* request = NULL;
 	json_t* params = json_object();
 	struct cmd_info* info = ctl_command_by_type(*cmd);
+
 	if (option_parser_get_value(options, "help")) {
 		json_object_set_new(params, "command", json_string(info->name));
 		*cmd = CMD_HELP;
 		info = ctl_command_by_type(*cmd);
 		goto out;
 	}
+
 	for (int i = 0; info->params[i].name != NULL; ++i) {
 		const char* key = info->params[i].name;
 		const char* value = option_parser_get_value(options, key);
@@ -202,6 +212,7 @@ static struct jsonipc_request* ctl_client_parse_args(struct ctl_client* self,
 			continue;
 		json_object_set_new(params, key, json_string(value));
 	}
+
 out:
 	request = jsonipc_request_new(info->name, params);
 	json_decref(params);
@@ -215,10 +226,12 @@ static json_t* json_from_buffer(struct ctl_client* self)
 		errno = ENODATA;
 		return NULL;
 	}
+
 	json_error_t err;
 	json_t* root = json_loadb(self->read_buffer, self->read_len, 0, &err);
 	if (root) {
-		advance_read_buffer(&self->read_buffer, &self->read_len, err.position);
+		advance_read_buffer(&self->read_buffer, &self->read_len,
+				err.position);
 	} else if (json_error_code(&err) == json_error_premature_end_of_input) {
 		if (self->read_len == sizeof(self->read_buffer)) {
 			ERROR("Response message is too long");
@@ -241,12 +254,14 @@ static json_t* read_one_object(struct ctl_client* self, int timeout_ms)
 		return root;
 	if (errno != ENODATA)
 		return NULL;
+
 	struct pollfd pfd = {
 		.fd = self->fd,
 		.events = POLLIN,
 		.revents = 0
 	};
-	while (root == NULL) {
+
+	while (!root) {
 		int n = poll(&pfd, 1, timeout_ms);
 		if (n == -1) {
 			if (errno == EINTR && self->wait_for_events)
@@ -257,8 +272,10 @@ static json_t* read_one_object(struct ctl_client* self, int timeout_ms)
 			ERROR("Timeout waiting for a response");
 			break;
 		}
+
 		char* readptr = self->read_buffer + self->read_len;
 		size_t remainder = sizeof(self->read_buffer) - self->read_len;
+
 		n = recv(self->fd, readptr, remainder, 0);
 		if (n == -1) {
 			ERROR("Read failed: %m");
@@ -268,9 +285,12 @@ static json_t* read_one_object(struct ctl_client* self, int timeout_ms)
 			errno = ECONNRESET;
 			break;
 		}
+
 		DEBUG("Read %d bytes", n);
 		DEBUG("<< %.*s", n, readptr);
+
 		self->read_len += n;
+
 		root = json_from_buffer(self);
 		if (!root && errno != ENODATA)
 			break;
@@ -284,7 +304,9 @@ static struct jsonipc_response* ctl_client_wait_for_response(struct ctl_client* 
 	json_t* root = read_one_object(self, 1000);
 	if (!root)
 		return NULL;
+
 	struct jsonipc_error jipc_err = JSONIPC_ERR_INIT;
+
 	struct jsonipc_response* response = jsonipc_response_parse_new(root,
 			&jipc_err);
 	if (!response) {
@@ -292,6 +314,7 @@ static struct jsonipc_response* ctl_client_wait_for_response(struct ctl_client* 
 		ERROR("Could not parse json: %s", msg);
 		free(msg);
 	}
+
 	json_decref(root);
 	jsonipc_error_cleanup(&jipc_err);
 	return response;
@@ -302,6 +325,7 @@ static void print_error(struct jsonipc_response* response, const char* method)
 	printf("Error (%d)", response->code);
 	if (!response->data)
 		goto out;
+
 	json_t* data = response->data;
 	if (json_is_string(data))
 		printf(": %s", json_string_value(data));
@@ -310,6 +334,7 @@ static void print_error(struct jsonipc_response* response, const char* method)
 		printf(": %s", json_string_value(json_object_get(data, "error")));
 	else
 		json_dumpf(response->data, stdout, JSON_INDENT(2));
+
 out:
 	printf("\n");
 }
@@ -326,19 +351,24 @@ static void pretty_version(json_t* data)
 static void pretty_client_list(json_t* data)
 {
 	int n = json_array_size(data);
+
 	printf("There %s %d VNC client%s connected%s\n", (n == 1) ? "is" : "are",
 			n, (n == 1) ? "" : "s", (n > 0) ? ":" : ".");
+
 	size_t i;
 	json_t* value;
 	json_array_foreach(data, i, value) {
 		char* id = NULL;
 		char* hostname = NULL;
 		char* username = NULL;
+
 		json_unpack(value, "{s:s, s?s, s?s}", "id", &id, "hostname",
 				&hostname, "username", &username);
 		printf("  client[%s]: ", id);
+
 		if (username)
 			printf("%s@", username);
+
 		printf("%s\n", hostname ? hostname : "<unknown>");
 	}
 }
@@ -348,6 +378,7 @@ static void pretty_output_list(json_t* data)
 	int n = json_array_size(data);
 	printf("There %s %d output%s%s\n", (n == 1) ? "is" : "are",
 			n, (n == 1) ? "" : "s", (n > 0) ? ":" : ".");
+
 	size_t i;
 	json_t* value;
 	json_array_foreach(data, i, value) {
@@ -356,6 +387,7 @@ static void pretty_output_list(json_t* data)
 		int height = -1;
 		int width = -1;
 		int captured = false;
+
 		json_unpack(value, "{s:s, s:s, s:i, s:i, s:b}", "name", &name, 
 				"description", &description,
 				"height", &height,
@@ -366,6 +398,7 @@ static void pretty_output_list(json_t* data)
 				height);
 	}
 }
+
 static void pretty_print(json_t* data,
 		struct jsonipc_request* request)
 {
@@ -405,6 +438,7 @@ static int ctl_client_print_response(struct ctl_client* self,
 		struct jsonipc_response* response)
 {
 	DEBUG("Response code: %d", response->code);
+
 	if (response->data) {
 		if (self->flags & CTL_CLIENT_PRINT_JSON)
 			print_compact_json(response->data);
@@ -413,10 +447,12 @@ static int ctl_client_print_response(struct ctl_client* self,
 		else
 			print_error(response, request->method);
 	}
+
 	return response->code;
 }
 
 static struct ctl_client* sig_target = NULL;
+
 static void stop_loop(int signal)
 {
 	sig_target->wait_for_events = false;
@@ -441,9 +477,11 @@ static bool json_has_content(json_t* root)
 {
 	if (!root)
 		return false;
+
 	size_t i;
 	const char* key;
 	json_t* value;
+
 	switch (json_typeof(root)) {
 	case JSON_NULL:
 		return false;
@@ -474,6 +512,7 @@ static void print_as_yaml(json_t* data, int level, bool needs_leading_newline)
 	const char* key;
 	json_t* value;
 	bool needs_indent = needs_leading_newline;
+
 	switch(json_typeof(data)) {
 	case JSON_NULL:
 		printf("<null>\n");
@@ -481,13 +520,16 @@ static void print_as_yaml(json_t* data, int level, bool needs_leading_newline)
 	case JSON_OBJECT:
 		if (json_object_size(data) > 0 && needs_leading_newline)
 				printf("\n");
+
 		json_object_foreach(data, key, value) {
 			if (!json_has_content(value))
 				continue;
+
 			if (needs_indent)
 				print_indent(level);
 			else
 				needs_indent = true;
+
 			printf("%s: ", key);
 			print_as_yaml(value, level + 1, true);
 		}
@@ -495,9 +537,11 @@ static void print_as_yaml(json_t* data, int level, bool needs_leading_newline)
 	case JSON_ARRAY:
 		if (json_array_size(data) > 0 && needs_leading_newline)
 			printf("\n");
+
 		json_array_foreach(data, i, value) {
 			if (!json_has_content(value))
 				continue;
+
 			print_indent(level);
 			printf("- ");
 			print_as_yaml(value, level + 1, json_is_array(value));
@@ -562,10 +606,12 @@ static ssize_t ctl_client_send_request(struct ctl_client* self,
 		ERROR("Could not encode json: %s", err.text);
 		return -1;
 	}
+
 	char buffer[512];
 	int len = json_dumpb(packed, buffer, sizeof(buffer), JSON_COMPACT);
 	json_decref(packed);
 	DEBUG(">> %.*s", len, buffer);
+
 	return send(self->fd, buffer, len, MSG_NOSIGNAL);
 }
 
@@ -589,6 +635,7 @@ static int ctl_client_register_for_events(struct ctl_client* self,
 	jsonipc_response_destroy(response);
 	if (result == 0)
 		send_startup_event(self);
+
 	return result;
 }
 
@@ -597,6 +644,7 @@ static int ctl_client_reconnect_event_loop(struct ctl_client* self,
 {
 	if (ctl_client_connect(self, timeout) != 0)
 		return -1;
+
 	return ctl_client_register_for_events(self, request);
 }
 
@@ -628,6 +676,7 @@ static int ctl_client_event_loop(struct ctl_client* self,
 		print_event(event, self->flags);
 		jsonipc_request_destroy(event);
 	}
+
 	return 0;
 }
 
@@ -638,6 +687,7 @@ static int ctl_client_print_single_command(struct ctl_client* self,
 			request);
 	if (!response)
 		return 1;
+
 	int result = ctl_client_print_response(self, request, response);
 	jsonipc_response_destroy(response);
 	return result;
@@ -652,6 +702,7 @@ void ctl_client_print_command_list(FILE* stream)
 			continue;
 		max_namelen = MAX(max_namelen, strlen(ctl_command_list[i].name));
 	}
+
 	struct table_printer printer;
 	table_printer_init(&printer, stdout, max_namelen);
 	for (size_t i = 0; i < CMD_LIST_LEN; ++i) {
@@ -660,6 +711,7 @@ void ctl_client_print_command_list(FILE* stream)
 		table_printer_print_line(&printer, ctl_command_list[i].name,
 				ctl_command_list[i].description);
 	}
+
 	fprintf(stream, "\nRun 'wayvncctl command-name --help' for command-specific details.\n");
 }
 
@@ -695,12 +747,14 @@ static int print_event_details(const char* evt_name)
 		print_event_info(info);
 		return 0;
 	}
+
 	for (size_t i = 0; i < INTERNAL_EVT_LEN; ++i) {
 		if (strcmp(evt_name, internal_events[i].name) == 0) {
 			print_event_info(&internal_events[i]);
 			return 0;
 		}
 	}
+
 	ERROR("No such event \"%s\"\n", evt_name);
 	return 1;
 }
@@ -720,6 +774,7 @@ void ctl_client_print_event_list(FILE* stream)
 	for (size_t i = 0; i < EVT_LIST_LEN; ++i)
 		table_printer_print_line(&printer, ctl_event_list[i].name,
 				ctl_event_list[i].description);
+
 	for (size_t i = 0; i < INTERNAL_EVT_LEN; ++i)
 		table_printer_print_line(&printer, internal_events[i].name,
 				internal_events[i].description);
@@ -734,17 +789,20 @@ static int print_command_usage(struct ctl_client* self,
 		ERROR("JSON output is not supported for \"help\" output");
 		return 1;
 	}
+
 	struct cmd_info* info = ctl_command_by_type(cmd);
 	if (!info) {
 		ERROR("No such command");
 		return 1;
 	}
+
 	printf("Usage: wayvncctl [options] %s", info->name);
 	option_parser_print_usage(cmd_options, stdout);
 	printf("\n");
 	option_parser_print_cmd_summary(info->description, stdout);
 	if (option_parser_print_arguments(cmd_options, stdout))
 		printf("\n");
+
 	option_parser_print_options(cmd_options, stdout);
 	printf("\n");
 	option_parser_print_options(parent_options, stdout);
@@ -753,6 +811,7 @@ static int print_command_usage(struct ctl_client* self,
 		ctl_client_print_event_list(stdout);
 		printf("\n");
 	}
+
 	return 0;
 }
 
@@ -772,8 +831,9 @@ int ctl_client_init_cmd_parser(struct option_parser* parser, enum cmd_type cmd)
 	size_t alloc_count = param_count + 2;
 	if (cmd == CMD_EVENT_RECEIVE)
 		alloc_count++;
-	struct wv_option* options = calloc(alloc_count,
-			sizeof(struct wv_option));
+
+	struct wv_option* options = calloc(alloc_count, sizeof(*options));
+
 	size_t i = 0;
 	for (; i < param_count; ++i) {
 		struct wv_option* option = &options[i];
@@ -787,17 +847,20 @@ int ctl_client_init_cmd_parser(struct option_parser* parser, enum cmd_type cmd)
 			option->schema = param->schema;
 		}
 	}
+
 	if (cmd == CMD_EVENT_RECEIVE) {
 		options[i].long_opt = "show";
 		options[i].schema = "<event-name>";
 		options[i].help = "Display details about the given event";
 		i++;
 	}
+
 	options[i].long_opt = "help";
 	options[i].short_opt = 'h';
 	options[i].help = "Display this help text";
 	option_parser_init(parser, options);
 	parser->name = "Parameters";
+
 	return 0;
 }
 
@@ -833,6 +896,7 @@ int ctl_client_run_command(struct ctl_client* self,
 				&cmd_options, parent_options);
 		goto help_printed;
 	}
+
 	if (cmd == CMD_EVENT_RECEIVE && option_parser_get_value(&cmd_options, "show")) {
 		result = print_event_details(option_parser_get_value(&cmd_options, "show"));
 		goto help_printed;
