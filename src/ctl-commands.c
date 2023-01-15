@@ -103,11 +103,11 @@ struct cmd_info ctl_event_list[] = {
 		},
 	},
 	[EVT_CLIENT_CONNECTED] = {"client-connected",
-		"Sent by wayvnc when a new vnc client connects",
+		"Sent by wayvnc when a new VNC client connects",
 		{ CLIENT_EVENT_PARAMS("including") }
 	},
 	[EVT_CLIENT_DISCONNECTED] = {"client-disconnected",
-		"Sent by waynvc when a vnc client disconnects",
+		"Sent by waynvc when a VNC client disconnects",
 		{ CLIENT_EVENT_PARAMS("not including") }
 	},
 };
