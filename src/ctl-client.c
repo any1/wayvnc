@@ -359,7 +359,7 @@ static void pretty_client_list(json_t* data)
 
 		json_unpack(value, "{s:s, s?s, s?s}", "id", &id, "hostname",
 				&hostname, "username", &username);
-		printf("  client[%s]: ", id);
+		printf("  %s: ", id);
 
 		if (username)
 			printf("%s@", username);
@@ -384,7 +384,7 @@ static void pretty_output_list(json_t* data)
 				"height", &height,
 				"width", &width,
 				"captured", &captured);
-		printf("%s output[%s]: %s (%dx%d)\n",
+		printf("%s %s: \"%s\" (%dx%d)\n",
 				captured ? "*" : " ", name, description, width,
 				height);
 	}
