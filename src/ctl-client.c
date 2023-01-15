@@ -565,7 +565,7 @@ static void print_event(struct jsonipc_request* event, unsigned flags)
 		if (event->params)
 			print_for_human(event->params, 1, true);
 		else
-			printf("<<null>\n");
+			printf("\n");
 	}
 	fflush(stdout);
 }
