@@ -37,7 +37,7 @@
 #include "table-printer.h"
 
 #define LOG(level, fmt, ...) \
-	fprintf(stderr, "[%s:%d] <" level "> " fmt "\n", __FILE__, __LINE__, \
+	fprintf(stderr, level ": %s: %d: " fmt "\n", __FILE__, __LINE__, \
 		##__VA_ARGS__)
 
 #define WARN(fmt, ...) \
@@ -47,7 +47,7 @@ static bool do_debug = false;
 
 #define DEBUG(fmt, ...) \
 	if (do_debug) \
-	LOG("DEBUG", fmt, ##__VA_ARGS__)
+		LOG("DEBUG", fmt, ##__VA_ARGS__)
 
 static struct cmd_info internal_events[] = {
 	{ .name = "wayvnc-startup",
