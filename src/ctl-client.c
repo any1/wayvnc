@@ -322,7 +322,7 @@ static struct jsonipc_response* ctl_client_wait_for_response(struct ctl_client* 
 
 static void print_error(struct jsonipc_response* response, const char* method)
 {
-	printf("Error (%d)", response->code);
+	printf("ERROR: Failed to execute command: %s", method);
 	if (!response->data)
 		goto out;
 
