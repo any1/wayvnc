@@ -497,45 +497,34 @@ static bool json_has_content(json_t* root)
 	return false;
 }
 
-static void print_for_human(json_t* data, int level, bool needs_leading_newline)
+static void print_for_human(json_t* data, int level)
 {
 	size_t i;
 	const char* key;
 	json_t* value;
-	bool needs_indent = needs_leading_newline;
 
 	switch(json_typeof(data)) {
 	case JSON_NULL:
 		printf("<null>\n");
 		break;
 	case JSON_OBJECT:
-		if (json_object_size(data) > 0 && needs_leading_newline)
-				printf("\n");
-
 		json_object_foreach(data, key, value) {
 			if (!json_has_content(value))
 				continue;
 
-			if (needs_indent)
-				print_indent(level);
-			else
-				needs_indent = true;
-
+			print_indent(level);
 			printf("%s: ", key);
-			print_for_human(value, level + 1, true);
+			print_for_human(value, level + 1);
 		}
 		break;
 	case JSON_ARRAY:
-		if (json_array_size(data) > 0 && needs_leading_newline)
-			printf("\n");
-
 		json_array_foreach(data, i, value) {
 			if (!json_has_content(value))
 				continue;
 
 			print_indent(level);
 			printf("- ");
-			print_for_human(value, level + 1, json_is_array(value));
+			print_for_human(value, level + 1);
 		}
 		break;
 	case JSON_STRING:
@@ -561,11 +550,10 @@ static void print_event(struct jsonipc_request* event, unsigned flags)
 	if (flags & CTL_CLIENT_PRINT_JSON) {
 		print_compact_json(event->json);
 	} else {
-		printf("\n%s:", event->method);
+		printf("%s:\n", event->method);
 		if (event->params)
-			print_for_human(event->params, 1, true);
-		else
-			printf("\n");
+			print_for_human(event->params, 1);
+		printf("\n");
 	}
 	fflush(stdout);
 }
