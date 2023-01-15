@@ -350,11 +350,6 @@ static void pretty_version(json_t* data)
 
 static void pretty_client_list(json_t* data)
 {
-	int n = json_array_size(data);
-
-	printf("There %s %d VNC client%s connected%s\n", (n == 1) ? "is" : "are",
-			n, (n == 1) ? "" : "s", (n > 0) ? ":" : ".");
-
 	size_t i;
 	json_t* value;
 	json_array_foreach(data, i, value) {
@@ -375,10 +370,6 @@ static void pretty_client_list(json_t* data)
 
 static void pretty_output_list(json_t* data)
 {
-	int n = json_array_size(data);
-	printf("There %s %d output%s%s\n", (n == 1) ? "is" : "are",
-			n, (n == 1) ? "" : "s", (n > 0) ? ":" : ".");
-
 	size_t i;
 	json_t* value;
 	json_array_foreach(data, i, value) {
