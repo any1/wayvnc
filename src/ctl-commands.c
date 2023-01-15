@@ -50,7 +50,7 @@ struct cmd_info ctl_command_list[] = {
 		{
 			{ "id",
 				"The ID of the client to disconnect",
-				"<id>", true },
+				"<integer>", true },
 			{},
 		}
 	},
@@ -67,7 +67,7 @@ struct cmd_info ctl_command_list[] = {
 		{
 			{ "output-name",
 				"The specific output name to capture",
-				"<name>", true },
+				"<string>", true },
 			{},
 		}
 	},
@@ -80,16 +80,16 @@ struct cmd_info ctl_command_list[] = {
 #define CLIENT_EVENT_PARAMS(including) \
 	{ "id", \
 		"A unique identifier for this client", \
-		"<id>" }, \
+		"<integer>" }, \
 	{ "connection_count", \
 		"The total number of connected VNC clients " including " this one.", \
-		"<count>" }, \
+		"<integer>" }, \
 	{ "hostname", \
 		"The hostname or IP address of this client (may be null)", \
 		"<name|ip>" }, \
 	{ "username", \
 		"The username used to authentice this client (may be null).", \
-		"<name>" }, \
+		"<string>" }, \
 	{},
 
 struct cmd_info ctl_event_list[] = {
@@ -98,7 +98,7 @@ struct cmd_info ctl_event_list[] = {
 		{
 			{ "output-name",
 				"The name of the output now being captured",
-				"<name>" },
+				"<string>" },
 			{},
 		},
 	},
