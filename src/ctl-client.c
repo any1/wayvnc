@@ -714,7 +714,8 @@ static void print_event_info(const struct cmd_info* info)
 		for (int i = 0; info->params[i].name != NULL; ++i)
 			table_printer_print_fmtline(&printer,
 					info->params[i].description,
-					"%s=%s", info->params[i].name, info->params[i].schema);
+					"%s: %s", info->params[i].name,
+					info->params[i].schema);
 		printf("\n");
 	}
 }
