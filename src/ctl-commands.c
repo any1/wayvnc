@@ -94,7 +94,7 @@ struct cmd_info ctl_command_list[] = {
 
 struct cmd_info ctl_event_list[] = {
 	[EVT_CAPTURE_CHANGED] = {"capture-changed",
-		"Sent by wayvnc when the catured output is changed",
+		"Sent by wayvnc when the captured output is changed",
 		{
 			{ "output-name",
 				"The name of the output now being captured",
