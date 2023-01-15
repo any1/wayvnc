@@ -138,8 +138,7 @@ static struct cmd_set_output* cmd_set_output_new(json_t* args,
 {
 	const char* target = NULL;
 	if (json_unpack(args, "{s:s}", "output-name", &target) == -1) {
-		jsonipc_error_printf(err, EINVAL,
-				"required: \"output-name\"");
+		jsonipc_error_printf(err, EINVAL, "Missing output name");
 		return NULL;
 	}
 	struct cmd_set_output* cmd = calloc(1, sizeof(*cmd));
@@ -152,8 +151,7 @@ static struct cmd_disconnect_client* cmd_disconnect_client_new(json_t* args,
 {
 	const char* id = NULL;
 	if (json_unpack(args, "{s:s}", "id", &id) == -1) {
-		jsonipc_error_printf(err, EINVAL,
-				"required: \"id\"");
+		jsonipc_error_printf(err, EINVAL, "Missing client id");
 		return NULL;
 	}
 	struct cmd_disconnect_client* cmd = calloc(1, sizeof(*cmd));
