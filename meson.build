@@ -53,7 +53,8 @@ xkbcommon = dependency('xkbcommon', version: '>=1.0.0')
 wayland_client = dependency('wayland-client')
 jansson = dependency('jansson')
 
-neatvnc_version = '>=0.5.0'
+aml_version = ['>=0.3.0', '<0.4.0']
+neatvnc_version = ['>=0.6.0', '<0.7.0']
 
 neatvnc_project = subproject(
 	'neatvnc',
@@ -61,11 +62,11 @@ neatvnc_project = subproject(
 	version: neatvnc_version,
 )
 
-aml_project = subproject('aml', required: false)
+aml_project = subproject('aml', required: false, version: aml_version)
 if aml_project.found()
 	aml = aml_project.get_variable('aml_dep')
 else
-	aml = dependency('aml')
+	aml = dependency('aml', version: aml_version)
 endif
 
 if neatvnc_project.found()
