@@ -223,7 +223,7 @@ static json_t* json_from_buffer(struct ctl_client* self)
 {
 	if (self->read_len == 0) {
 		DEBUG("Read buffer is empty");
-		errno = ENODATA;
+		errno = EAGAIN;
 		return NULL;
 	}
 
@@ -238,7 +238,7 @@ static json_t* json_from_buffer(struct ctl_client* self)
 			errno = EMSGSIZE;
 		} else {
 			DEBUG("Awaiting more data");
-			errno = ENODATA;
+			errno = EAGAIN;
 		}
 	} else {
 		ERROR("Json parsing failed: %s", err.text);
@@ -252,7 +252,7 @@ static json_t* read_one_object(struct ctl_client* self, int timeout_ms)
 	json_t* root = json_from_buffer(self);
 	if (root)
 		return root;
-	if (errno != ENODATA)
+	if (errno != EAGAIN)
 		return NULL;
 
 	struct pollfd pfd = {
@@ -292,7 +292,7 @@ static json_t* read_one_object(struct ctl_client* self, int timeout_ms)
 		self->read_len += n;
 
 		root = json_from_buffer(self);
-		if (!root && errno != ENODATA)
+		if (!root && errno != EAGAIN)
 			break;
 	}
 	return root;
