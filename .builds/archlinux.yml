@@ -1,0 +1,36 @@
+image: archlinux
+
+packages:
+  - base-devel
+  - libglvnd
+  - libxkbcommon
+  - pixman
+  - gnutls
+  - jansson
+  - wayland
+  - wayland-protocols
+  - meson
+
+sources:
+  - http://github.com/any1/wayvnc
+  - http://github.com/any1/neatvnc
+  - http://github.com/any1/aml
+
+tasks:
+  - aml: |
+      cd aml
+      meson --prefix=/usr build
+      ninja -C build
+      sudo ninja -C build install
+  - neatvnc: |
+      cd neatvnc
+      meson --prefix=/usr build
+      ninja -C build
+      sudo ninja -C build install
+  - build: |
+      cd wayvnc
+      meson --prefix=/usr build
+      ninja -C build
+  - test: |
+      cd wayvnc
+      ninja -C build test

@@ -1,0 +1,39 @@
+image: freebsd/latest
+
+packages:
+  - devel/meson
+  - devel/pkgconf
+  - devel/jansson
+  - devel/evdev-proto
+  - graphics/wayland
+  - graphics/libdrm
+  - graphics/libjpeg-turbo
+  - graphics/mesa-libs
+  - x11/pixman
+  - x11/libxkbcommon
+  - multimedia/ffmpeg
+  - security/gnutls
+
+sources:
+  - http://github.com/any1/wayvnc
+  - http://github.com/any1/neatvnc
+  - http://github.com/any1/aml
+
+tasks:
+  - aml: |
+      cd aml
+      meson --prefix=/usr build
+      ninja -C build
+      sudo ninja -C build install
+  - neatvnc: |
+      cd neatvnc
+      meson --prefix=/usr build
+      ninja -C build
+      sudo ninja -C build install
+  - build: |
+      cd wayvnc
+      meson --prefix=/usr build
+      ninja -C build
+  - test: |
+      cd wayvnc
+      ninja -C build test
