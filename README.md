@@ -1,5 +1,8 @@
 # wayvnc
 
+[![Build and Unit Test](https://github.com/any1/wayvnc/actions/workflows/build.yml/badge.svg)](https://github.com/any1/wayvnc/actions/workflows/build.yml)
+[![builds.sr.ht status](https://builds.sr.ht/~andri/wayvnc/commits/master.svg)](https://builds.sr.ht/~andri/wayvnc/commits/master?)
+
 ## Introduction
 This is a VNC server for wlroots-based Wayland compositors (:no_entry: Gnome,
 KDE and Weston are **not** supported). It attaches to a running Wayland session,
