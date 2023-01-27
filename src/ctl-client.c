@@ -30,7 +30,6 @@
 #include "json-ipc.h"
 #include "ctl-client.h"
 #include "ctl-commands.h"
-#include "ctl-server.h"
 #include "strlcpy.h"
 #include "util.h"
 #include "option-parser.h"
