@@ -200,6 +200,7 @@ static struct cmd* parse_command(struct jsonipc_request* ipc,
 	case CMD_OUTPUT_LIST:
 	case CMD_OUTPUT_CYCLE:
 	case CMD_WAYVNC_EXIT:
+		cmd = calloc(1, sizeof(*cmd));
 		break;
 	case CMD_UNKNOWN:
 		jsonipc_error_set_new(err, ENOENT,
