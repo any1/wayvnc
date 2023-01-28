@@ -10,6 +10,10 @@ packages:
   - wayland
   - wayland-protocols
   - meson
+  # runtime deps for integration testing:
+  - sway
+  - jq
+  - lsof
 
 sources:
   - http://github.com/any1/wayvnc
@@ -34,3 +38,6 @@ tasks:
   - test: |
       cd wayvnc
       ninja -C build test
+  - integration: |
+      cd wayvnc
+      ./test/integration/integration.sh
