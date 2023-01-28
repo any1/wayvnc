@@ -25,9 +25,13 @@ jobs:
       run: |
           sudo apt-get update
           sudo apt-get install -y meson libdrm-dev libxkbcommon-dev libwlroots-dev libjansson-dev libpam0g-dev libgnutls28-dev libavfilter-dev libavcodec-dev libavutil-dev libturbojpeg0-dev scdoc
+          # runtime deps for integration testing:
+          sudo apt-get install -y sway jq lsof
     - name: configure
       run: meson build -D tests=true
     - name: compile
       run: meson compile -C build
     - name: unit tests
       run: meson test --verbose -C build
+    - name: integration tests
+      run: ./test/integration/integration.sh

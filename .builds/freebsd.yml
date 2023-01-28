@@ -13,6 +13,11 @@ packages:
   - x11/libxkbcommon
   - multimedia/ffmpeg
   - security/gnutls
+  # runtime deps for integration testing:
+  - x11-wm/sway
+  - textproc/jq
+  - sysutils/lsof
+  - shells/bash
 
 sources:
   - http://github.com/any1/wayvnc
@@ -37,3 +42,6 @@ tasks:
   - test: |
       cd wayvnc
       ninja -C build test
+  - integration: |
+      cd wayvnc
+      ./test/integration/integration.sh
