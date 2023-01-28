@@ -1,0 +1,2 @@
+xwayland disable
+exec bash -c "env > $XDG_RUNTIME_DIR/sway.env"
