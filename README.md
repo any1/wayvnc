@@ -2,6 +2,7 @@
 
 [![Build and Unit Test](https://github.com/any1/wayvnc/actions/workflows/build.yml/badge.svg)](https://github.com/any1/wayvnc/actions/workflows/build.yml)
 [![builds.sr.ht status](https://builds.sr.ht/~andri/wayvnc/commits/master.svg)](https://builds.sr.ht/~andri/wayvnc/commits/master?)
+[![Packaging status](https://repology.org/badge/tiny-repos/wayvnc.svg)](https://repology.org/project/wayvnc/versions)
 
 ## Introduction
 This is a VNC server for wlroots-based Wayland compositors (:no_entry: Gnome,
