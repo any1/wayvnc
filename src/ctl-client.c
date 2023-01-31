@@ -671,12 +671,16 @@ static int ctl_client_event_loop(struct ctl_client* self,
 }
 
 static int ctl_client_print_single_command(struct ctl_client* self,
-		struct jsonipc_request* request)
+		enum cmd_type cmd, struct jsonipc_request* request)
 {
 	struct jsonipc_response* response = ctl_client_run_single_command(self,
 			request);
-	if (!response)
+	if (!response) {
+		if (errno == ECONNRESET && cmd == CMD_WAYVNC_EXIT)
+			return 0;
+
 		return 1;
+	}
 
 	int result = ctl_client_print_response(self, request, response);
 	jsonipc_response_destroy(response);
@@ -908,7 +912,7 @@ int ctl_client_run_command(struct ctl_client* self,
 		result = ctl_client_event_loop(self, request);
 		break;
 	default:
-		result = ctl_client_print_single_command(self, request);
+		result = ctl_client_print_single_command(self, cmd, request);
 		break;
 	}
 
