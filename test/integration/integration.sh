@@ -239,9 +239,7 @@ test_output_list_ipc() {
 
 test_exit_ipc() {
 	echo "Checking wayvnc-exit command"
-	# Ignore errors because killing the socket races vs receiving
-	# a return message: https://github.com/any1/wayvnc/issues/233
-	$WAYVNCCTL wayvnc-exit &>/dev/null || true
+	$WAYVNCCTL wayvnc-exit &>/dev/null
 	wait_while kill -0 $WAYVNC_PID >/dev/null
 	echo "  wayvnc is shutdown"
 	unset WAYVNC_PID
