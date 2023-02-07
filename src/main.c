@@ -1335,7 +1335,7 @@ int main(int argc, char* argv[])
 	socket_path = option_parser_get_value(&option_parser, "socket");
 	overlay_cursor = !!option_parser_get_value(&option_parser, "render-cursor");
 	show_performance = !!option_parser_get_value(&option_parser, "performance");
-	use_unix_socket = !!option_parser_get_value(&option_parser, "unix");
+	use_unix_socket = !!option_parser_get_value(&option_parser, "unix-socket");
 	disable_input = !!option_parser_get_value(&option_parser, "disable-input");
 	log_level = option_parser_get_value(&option_parser, "verbose")
 		? NVNC_LOG_INFO : NVNC_LOG_WARNING;
