@@ -59,13 +59,15 @@ xbps-install wayvnc
 pacman -S base-devel libglvnd libxkbcommon pixman gnutls jansson
 ```
 
-#### For Fedora 31
+#### For Fedora 37
 ```
 dnf install -y meson gcc ninja-build pkg-config egl-wayland egl-wayland-devel \
 	mesa-libEGL-devel mesa-libEGL libwayland-egl libglvnd-devel \
 	libglvnd-core-devel libglvnd mesa-libGLES-devel mesa-libGLES \
-	libxkbcommon-devel libxkbcommon libwayland-client libwayland \
-	wayland-devel gnutls-devel jansson-devel
+	libxkbcommon-devel libxkbcommon libwayland-client \
+	pam-devel pixman-devel libgbm-devel libdrm-devel scdoc \
+	libavcodec-free-devel libavfilter-free-devel libavutil-free-devel \
+	turbojpeg-devel	wayland-devel gnutls-devel jansson-devel
 ```
 
 #### For Debian (unstable / testing)
