@@ -3,7 +3,8 @@
 ## Commit Messages
 
 Please, try to write good commit messages. Do your best to follow these 7 rules,
-borrowed from [Chris Beams](https://chris.beams.io/posts/git-commit/):
+borrowed from [Chris Beams](https://chris.beams.io/posts/git-commit/), plus 1
+extra rule:
 
  1. Separate subject from body with a blank line
  2. Limit the subject line to 50 characters
@@ -12,9 +13,30 @@ borrowed from [Chris Beams](https://chris.beams.io/posts/git-commit/):
  5. Use the imperative mood in the subject line
  6. Wrap the body at 72 characters
  7. Use the body to explain what and why vs. how
+ 8. (Extra) Prefix the subject line with the component that's modified
 
 If you wish to know why we follow these rules, please read Chris Beams' blog
 entry, linked above.
+
+Rule number 8 allows us to quickly gauge if a given commit is relevant to what
+we're looking for when skimming the log. It adds consistency and simplifies the
+message. For example
+```
+ctl-client: Print trailing newline for events
+```
+is better than
+```
+Print trailing newline for events in ctl-client
+```
+
+**Example:**
+
+```
+ctl-client: Print trailing newline for events
+
+If someone wants to parse this instead of using jq, a trailing
+newline delimits the end of the event.
+```
 
 ## Style
 
