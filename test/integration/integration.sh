@@ -152,12 +152,48 @@ stop_wayvnc() {
 	unset WAYVNC_PID
 }
 
+WAYVNCCTL_PID=
+WAYVNCCTL_LOG=$XDG_RUNTIME_DIR/wayvncctl.log
+WAYVNCCTL_EVENTS=$XDG_RUNTIME_DIR/wayvncctl.events
+start_wayvncctl_events() {
+	$WAYVNCCTL --verbose --wait --reconnect --json event-receive >"$WAYVNCCTL_EVENTS" 2>"$WAYVNCCTL_LOG" &
+	WAYVNCCTL_PID=$!
+}
+
+stop_wayvncctl_events() {
+	[[ -z $WAYVNCCTL_PID ]] && return 0
+	echo "Stopping wayvncctl event recorder ($WAYVNCCTL_PID)"
+	kill "$WAYVNCCTL_PID"
+	unset WAYVNCCTL_PID
+}
+
+verify_events() {
+	local expected=("$@")
+	echo "Verifying recorded events"
+	local name i=0
+	while IFS= read -r EVT; do
+		name=$(jq -r '.method' <<<"$EVT")
+		ex=${expected[$((i++))]}
+		echo "  Event: $name=~$ex"
+		[[ $name == "$ex" ]] || return 1
+	done <"$WAYVNCCTL_EVENTS"
+	if [[ $i -lt ${#expected[@]} ]]; then
+		while [[ $i -lt ${#expected[@]} ]]; do
+			echo "  Missing: ${expected[$((i++))]}"
+		done
+		return 1
+	fi
+	echo "Ok"
+}
+
 cleanup() {
 	result=$?
 	set +e
 	stop_wayvnc
 	stop_sway
+	stop_wayvncctl_events
 	if [[ $result != 0 ]]; then
+		echo
 		echo SWAY LOG
 		echo --------
 		cat "$SWAY_LOG"
@@ -165,6 +201,10 @@ cleanup() {
 		echo WAYVNC_LOG
 		echo ----------
 		cat "$WAYVNC_LOG"
+		echo
+		echo WAYVNCCTL_LOG
+		echo ----------
+		cat "$WAYVNCCTL_LOG"
 		echo
 		echo VNCDO_LOG
 		echo ----------
@@ -223,11 +263,24 @@ test_client_connect() {
 
 smoke_test() {
 	start_sway
+	start_wayvncctl_events
 	start_wayvnc
 	test_version_ipc
+	wait_until verify_events \
+		wayvnc-startup
 	test_output_list_ipc
 	test_client_connect
+	wait_until verify_events \
+		wayvnc-startup \
+		client-connected \
+		client-disconnected
 	test_exit_ipc
+	wait_until verify_events \
+		wayvnc-startup \
+		client-connected \
+		client-disconnected \
+		wayvnc-shutdown
+	stop_wayvncctl_events
 	stop_sway
 }
 
