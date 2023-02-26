@@ -227,7 +227,7 @@ static json_t* json_from_buffer(struct ctl_client* self)
 	}
 
 	json_error_t err;
-	json_t* root = json_loadb(self->read_buffer, self->read_len, 0, &err);
+	json_t* root = json_loadb(self->read_buffer, self->read_len, JSON_DISABLE_EOF_CHECK, &err);
 	if (root) {
 		advance_read_buffer(&self->read_buffer, &self->read_len,
 				err.position);
