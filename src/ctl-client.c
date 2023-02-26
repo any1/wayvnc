@@ -618,12 +618,24 @@ static int ctl_client_register_for_events(struct ctl_client* self,
 }
 
 static int ctl_client_reconnect_event_loop(struct ctl_client* self,
-		struct jsonipc_request* request, int timeout)
+		struct jsonipc_request* request)
 {
-	if (ctl_client_connect(self, timeout) != 0)
+	if (ctl_client_connect(self, -1) != 0)
 		return -1;
 
 	return ctl_client_register_for_events(self, request);
+}
+
+static int block_until_reconnect(struct ctl_client* self,
+		struct jsonipc_request* request)
+{
+	while (ctl_client_reconnect_event_loop(self, request) != 0)
+		if (usleep(50000) == -1) {
+			DEBUG("Interrupted waiting for the IPC socket");
+			return -1;
+		}
+
+	return 0;
 }
 
 static int ctl_client_event_loop(struct ctl_client* self,
@@ -642,8 +654,8 @@ static int ctl_client_event_loop(struct ctl_client* self,
 			if (errno == ECONNRESET) {
 				send_shutdown_event(self);
 				if (self->flags & CTL_CLIENT_RECONNECT &&
-						ctl_client_reconnect_event_loop(
-							self, request, -1) == 0)
+						block_until_reconnect(
+							self, request) == 0)
 					continue;
 			}
 			break;
