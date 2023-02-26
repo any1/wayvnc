@@ -1,2 +1,3 @@
 xwayland disable
+bindsym Ctrl+t exec bash -c "echo OK > $XDG_RUNTIME_DIR/test.txt"
 exec bash -c "env > $XDG_RUNTIME_DIR/sway.env"

@@ -36,6 +36,8 @@
 #   - Override by setting $SWAY and $SWAYMSG
 # - jq for parsing json output is in the $PATH
 # - lsof for TCP port checking is in the $PATH
+# - vncdo for client testing is in the $PATH
+#   (pip install vncdotool)
 
 set -e
 
@@ -53,6 +55,8 @@ SWAYMSG=${SWAYMSG:-$(which swaymsg)}
 echo "Found: $WAYVNC $WAYVNCCTL $SWAY $SWAYMSG"
 $WAYVNC --version
 $SWAY --version
+VNCDO=${VNCDO:-$(which vncdo)}
+$VNCDO --version 2>/dev/null
 
 export XDG_CONFIG_HOME=$INTEGRATION_ROOT/xdg_config
 export XDG_RUNTIME_DIR=/tmp/wayvnc-integration-$$
@@ -113,12 +117,12 @@ stop_sway() {
 }
 
 WAYVNC_PID=
-WAYVNC_ADDRESS=localhost
+WAYVNC_ADDRESS=127.0.0.1
 WAYVNC_PORT=5999
 start_wayvnc() {
 	echo "Starting wayvnc..."
 	WAYVNC_LOG=$XDG_RUNTIME_DIR/wayvnc.log
-	$WAYVNC "$WAYVNC_ADDRESS" "$WAYVNC_PORT" &>$WAYVNC_LOG &
+	$WAYVNC -L debug "$WAYVNC_ADDRESS" "$WAYVNC_PORT" &>$WAYVNC_LOG &
 	WAYVNC_PID=$!
 	# Wait for the VNC listening port
 	echo "  Started $WAYVNC_PID"
@@ -145,11 +149,15 @@ cleanup() {
 	if [[ $result != 0 ]]; then
 		echo SWAY LOG
 		echo --------
-		cat $SWAY_LOG
+		cat "$SWAY_LOG"
 		echo
 		echo WAYVNC_LOG
 		echo ----------
-		cat $WAYVNC_LOG
+		cat "$WAYVNC_LOG"
+		echo
+		echo VNCDO_LOG
+		echo ----------
+		cat "$VNCDO_LOG"
 		exit
 	fi
 	rm -rf $XDG_RUNTIME_DIR
@@ -179,7 +187,7 @@ test_output_list_ipc() {
 }
 
 test_exit_ipc() {
-	echo "Cbecking wayvnc-exit command"
+	echo "Checking wayvnc-exit command"
 	# Ignore errors because killing the socket races vs receiving
 	# a return message: https://github.com/any1/wayvnc/issues/233
 	$WAYVNCCTL wayvnc-exit &>/dev/null || true
@@ -189,11 +197,25 @@ test_exit_ipc() {
 	echo "ok"
 }
 
+client() {
+	VNCDO_LOG=$XDG_RUNTIME_DIR/vncdo.log
+	$VNCDO -v --server=$WAYVNC_ADDRESS::$WAYVNC_PORT "$@" &>>$VNCDO_LOG
+}
+
+test_client_connect() {
+	echo "Connecting to send ctrl+t"
+	client key ctrl-t
+	echo "  Looking for the result..."
+	[[ -f $XDG_RUNTIME_DIR/test.txt ]]
+	echo "Ok"
+}
+
 smoke_test() {
 	start_sway
 	start_wayvnc
 	test_version_ipc
 	test_output_list_ipc
+	test_client_connect
 	test_exit_ipc
 	stop_sway
 }

@@ -18,6 +18,7 @@ packages:
   - textproc/jq
   - sysutils/lsof
   - shells/bash
+  - devel/py-pip
 
 sources:
   - http://github.com/any1/wayvnc
@@ -25,6 +26,8 @@ sources:
   - http://github.com/any1/aml
 
 tasks:
+  - pip-vncdotool: |
+      sudo pip install vncdotool
   - aml: |
       cd aml
       meson --prefix=/usr build

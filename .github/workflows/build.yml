@@ -27,6 +27,7 @@ jobs:
           sudo apt-get install -y meson libdrm-dev libxkbcommon-dev libwlroots-dev libjansson-dev libpam0g-dev libgnutls28-dev libavfilter-dev libavcodec-dev libavutil-dev libturbojpeg0-dev scdoc
           # runtime deps for integration testing:
           sudo apt-get install -y sway jq lsof
+          pip install vncdotool
     - name: configure
       run: meson build -D tests=true
     - name: compile
