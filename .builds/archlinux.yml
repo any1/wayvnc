@@ -14,6 +14,7 @@ packages:
   - sway
   - jq
   - lsof
+  - vncdotool
 
 sources:
   - http://github.com/any1/wayvnc
