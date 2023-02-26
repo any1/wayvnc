@@ -73,7 +73,6 @@ timeout_init() {
 
 timeout_check() {
 	if [[ $(( TIMEOUT_COUNTER++ )) -gt $TIMEOUT_MAXCOUNT ]]; then
-		echo "Timeout"
 		return 1
 	fi
 	sleep "$TIMEOUT_DELAY"
@@ -81,16 +80,28 @@ timeout_check() {
 
 wait_until() {
 	timeout_init 10
-	until "$@" &>/dev/null; do
-		timeout_check
+	local last
+	until last=$("$@" 2>&1); do
+		if ! timeout_check; then
+			echo "Timeout waiting for $*" >&2
+			printf "%s\n" "$last" >&2
+			return 1
+		fi
 	done
+	printf "%s\n" "$last"
 }
 
 wait_while() {
 	timeout_init 10
-	while "$@" &>/dev/null; do
-		timeout_check
+	local last
+	while last=$("$@" 2>&1); do
+		if ! timeout_check; then
+			echo "Timeout waiting for $*" >&2
+			printf "%s\n" "$last" >&2
+			return 1
+		fi
 	done
+	printf "%s\n" "$last"
 }
 
 SWAY_ENV=$XDG_RUNTIME_DIR/sway.env
@@ -102,7 +113,7 @@ start_sway() {
 	WLR_LIBINPUT_NO_DEVICES=1 \
 	$SWAY &>"$SWAY_LOG" &
 	SWAY_PID=$!
-	wait_until [ -f "$SWAY_ENV" ]
+	wait_until [ -f "$SWAY_ENV" ] >/dev/null
 	WAYLAND_DISPLAY=$(grep ^WAYLAND_DISPLAY= "$SWAY_ENV" | cut -d= -f2-)
 	SWAYSOCK=$(grep ^SWAYSOCK= "$SWAY_ENV" | cut -d= -f2-)
 	export WAYLAND_DISPLAY SWAYSOCK
@@ -127,10 +138,10 @@ start_wayvnc() {
 	# Wait for the VNC listening port
 	echo "  Started $WAYVNC_PID"
 	wait_until lsof -a -p$WAYVNC_PID -iTCP@$WAYVNC_ADDRESS:$WAYVNC_PORT \
-		-sTCP:LISTEN
+		-sTCP:LISTEN >/dev/null
 	echo "  Listening on $WAYVNC_ADDRESS:$WAYVNC_PORT"
 	# Wait for the control socket
-	wait_until [ -S "$XDG_RUNTIME_DIR/wayvncctl" ]
+	wait_until [ -S "$XDG_RUNTIME_DIR/wayvncctl" ] >/dev/null
 	echo "  Control socket ready"
 }
 
@@ -191,7 +202,7 @@ test_exit_ipc() {
 	# Ignore errors because killing the socket races vs receiving
 	# a return message: https://github.com/any1/wayvnc/issues/233
 	$WAYVNCCTL wayvnc-exit &>/dev/null || true
-	wait_while kill -0 $WAYVNC_PID
+	wait_while kill -0 $WAYVNC_PID >/dev/null
 	echo "  wayvnc is shutdown"
 	unset WAYVNC_PID
 	echo "ok"
