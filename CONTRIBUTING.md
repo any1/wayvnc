@@ -42,7 +42,7 @@ newline delimits the end of the event.
 
 This project follows the the
 [Linux kernel's style guide](https://www.kernel.org/doc/html/latest/process/coding-style.html#codingstyle)
-as far as coding style is concererned, with the following exceptions:
+as far as coding style is concerned, with the following exceptions:
 
  * When declaring pointer variables, the asterisk (`*`) is placed on the left
    with the type rather than the variable name. Declaring multiple variables in
@@ -51,9 +51,99 @@ as far as coding style is concererned, with the following exceptions:
    a lot of code that uses aligned argument lists in the project, but I have
    come to the conclusion that these alignments are not very nice to maintain.
 
+### Summary & Examples:
+
+In case you aren't familiar with Linux's coding style, here is a short summary
+and some examples of acceptable formatting:
+
+ * Use tabs for indenting.
+ * We do not align code (mostly), but when we do, we use spaces rather than
+   tabs. This rule is not according to the Linux style guide.
+ * The preferred limit on the length of a single line is 80 columns.
+ * User-visible string such as log messages must not be split up.
+ * Use space after the following keywords: `if`, `switch`, `case`, `for`, `do`,
+   `while`.
+ * Do **not** use space after others such as: `sizeof`, `typeof`, `alignof`
+   or `__attribute__`.
+ * Do **not** use typedefs.
+ * It is allowed to use typedefs for function pointers. This rule is not
+   according to the Linux style guide.
+
+#### Functions
+
+```
+static int do_something(int number, const char* text)
+{
+	body of function
+}
+```
+
+#### `if`
+
+```
+	// Single statement
+	if (condition)
+		do_this();
+
+	// Multiple statements
+	if (condition) {
+		do_this(2, "41");
+		do_that();
+	}
+
+	// Single statement if/else
+	if (condition)
+		do_this();
+	else
+		do_that();
+
+	// Multi-statement if/else
+	if (condition) {
+		do_this();
+		do_that();
+	} else {
+		otherwise();
+	}
+```
+
+#### `switch`
+
+```
+	switch (value) {
+	case 3:
+		printf("three!\n");
+		break;
+	case 5:
+		printf("five!\n");
+		break;
+	case 42:
+		printf("the answer to life, the universe and everything: ");
+		// fallthrough
+	default:
+		printf("%d\n", value);
+		break;
+	}
+```
+
+#### Arithmetic
+
+```
+	int a = b * c + 5;
+```
+
+#### Pointers
+
+```
+	char* some_text = "some text";
+	char* just_text = text + 5;
+	char t = *just_text;
+	char e = just_text[1];
+```
+
 ## Unit Tests
 
-wayvnc has a small but growing set of unit tests, which are run on every GitHub PR. To run them locally, do the following:
+wayvnc has a small but growing set of unit tests, which are run on every GitHub
+PR. To run them locally, do the following:
 ```bash
 meson test -C build
 ```
@@ -61,4 +151,4 @@ meson test -C build
 ## No Brown M&Ms
 
 All pull requests must contain the following sentence in the description:
-I have read and understood CONTRIBUTING.md and its associated documents.
+I have read and understood CONTRIBUTING.md.
