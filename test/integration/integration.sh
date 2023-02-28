@@ -47,7 +47,7 @@ WAYVNC_BUILD_DIR=${WAYVNC_BUILD_DIR:-$(realpath "$REPO_ROOT/build")}
 if [[ -d $WAYVNC_BUILD_DIR ]]; then
 	export PATH=$WAYVNC_BUILD_DIR:$PATH
 fi
-echo "Looking for required binaries..." 
+echo "Looking for required binaries..."
 WAYVNC=${WAYVNC:-$(which wayvnc)}
 WAYVNCCTL=${WAYVNCCTL:-$(which wayvncctl)}
 SWAY=${SWAY:-$(which sway)}
@@ -60,7 +60,14 @@ $VNCDO --version 2>/dev/null
 
 export XDG_CONFIG_HOME=$INTEGRATION_ROOT/xdg_config
 export XDG_RUNTIME_DIR=/tmp/wayvnc-integration-$$
-mkdir -p "$XDG_RUNTIME_DIR"
+
+test_setup() {
+	[[ -d "$XDG_RUNTIME_DIR" ]] && rm -rf "$XDG_RUNTIME_DIR"
+	mkdir -p "$XDG_RUNTIME_DIR"
+	echo "=============================================="
+	echo "$*"
+	echo "=============================================="
+}
 
 TIMEOUT_COUNTER=0
 TIMEOUT_MAXCOUNT=1
@@ -81,27 +88,14 @@ timeout_check() {
 wait_until() {
 	timeout_init 10
 	local last
-	until last=$("$@" 2>&1); do
+	until last=$(eval "$*" 2>&1); do
 		if ! timeout_check; then
 			echo "Timeout waiting for $*" >&2
 			printf "%s\n" "$last" >&2
 			return 1
 		fi
 	done
-	printf "%s\n" "$last"
-}
-
-wait_while() {
-	timeout_init 10
-	local last
-	while last=$("$@" 2>&1); do
-		if ! timeout_check; then
-			echo "Timeout waiting for $*" >&2
-			printf "%s\n" "$last" >&2
-			return 1
-		fi
-	done
-	printf "%s\n" "$last"
+	[[ -z $last ]] || printf "%s\n" "$last"
 }
 
 SWAY_ENV=$XDG_RUNTIME_DIR/sway.env
@@ -113,7 +107,7 @@ start_sway() {
 	WLR_LIBINPUT_NO_DEVICES=1 \
 	$SWAY &>"$SWAY_LOG" &
 	SWAY_PID=$!
-	wait_until [ -f "$SWAY_ENV" ] >/dev/null
+	wait_until [[ -f "$SWAY_ENV" ]] >/dev/null
 	WAYLAND_DISPLAY=$(grep ^WAYLAND_DISPLAY= "$SWAY_ENV" | cut -d= -f2-)
 	SWAYSOCK=$(grep ^SWAYSOCK= "$SWAY_ENV" | cut -d= -f2-)
 	export WAYLAND_DISPLAY SWAYSOCK
@@ -125,6 +119,7 @@ stop_sway() {
 	echo "Stopping sway ($SWAY_PID)"
 	kill "$SWAY_PID"
 	unset SWAY_PID WAYLAND_DISPLAY SWAYSOCK
+	rm -f "$SWAY_ENV" || true
 }
 
 WAYVNC_PID=
@@ -133,7 +128,7 @@ WAYVNC_PORT=5999
 start_wayvnc() {
 	echo "Starting wayvnc..."
 	WAYVNC_LOG=$XDG_RUNTIME_DIR/wayvnc.log
-	$WAYVNC -L debug "$WAYVNC_ADDRESS" "$WAYVNC_PORT" &>$WAYVNC_LOG &
+	$WAYVNC "$@" -L debug "$WAYVNC_ADDRESS" "$WAYVNC_PORT" &>$WAYVNC_LOG &
 	WAYVNC_PID=$!
 	# Wait for the VNC listening port
 	echo "  Started $WAYVNC_PID"
@@ -141,7 +136,7 @@ start_wayvnc() {
 		-sTCP:LISTEN >/dev/null
 	echo "  Listening on $WAYVNC_ADDRESS:$WAYVNC_PORT"
 	# Wait for the control socket
-	wait_until [ -S "$XDG_RUNTIME_DIR/wayvncctl" ] >/dev/null
+	wait_until [[ -S "$XDG_RUNTIME_DIR/wayvncctl" ]] >/dev/null
 	echo "  Control socket ready"
 }
 
@@ -164,6 +159,7 @@ stop_wayvncctl_events() {
 	[[ -z $WAYVNCCTL_PID ]] && return 0
 	echo "Stopping wayvncctl event recorder ($WAYVNCCTL_PID)"
 	kill "$WAYVNCCTL_PID"
+	rm -f "$WAYVNCCTL_EVENTS" || true
 	unset WAYVNCCTL_PID
 }
 
@@ -211,7 +207,7 @@ cleanup() {
 		cat "$VNCDO_LOG"
 		exit
 	fi
-	rm -rf $XDG_RUNTIME_DIR
+	[[ -d "$XDG_RUNTIME_DIR" ]] && rm -rf "$XDG_RUNTIME_DIR"
 }
 trap cleanup EXIT
 
@@ -237,12 +233,16 @@ test_output_list_ipc() {
 	echo "ok"
 }
 
+verify_wayvnc_exited() {
+	wait_until ! kill -0 $WAYVNC_PID >/dev/null
+	unset WAYVNC_PID
+}
+
 test_exit_ipc() {
 	echo "Checking wayvnc-exit command"
 	$WAYVNCCTL wayvnc-exit &>/dev/null
-	wait_while kill -0 $WAYVNC_PID >/dev/null
+	verify_wayvnc_exited
 	echo "  wayvnc is shutdown"
-	unset WAYVNC_PID
 	echo "ok"
 }
 
@@ -260,6 +260,7 @@ test_client_connect() {
 }
 
 smoke_test() {
+	test_setup "smoke test"
 	start_sway
 	start_wayvncctl_events
 	start_wayvnc
