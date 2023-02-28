@@ -55,6 +55,7 @@ SWAYMSG=${SWAYMSG:-$(which swaymsg)}
 echo "Found: $WAYVNC $WAYVNCCTL $SWAY $SWAYMSG"
 $WAYVNC --version
 $SWAY --version
+IFS=" .-" read -r _ _ SWAYMAJOR SWAYMINOR _ < <($SWAY --version)
 VNCDO=${VNCDO:-$(which vncdo)}
 $VNCDO --version 2>/dev/null
 
@@ -220,16 +221,24 @@ test_version_ipc() {
 	echo "ok"
 }
 
+sway_active_outputs() {
+	$SWAYMSG -t get_outputs | jq 'map(select(.active == true))'
+}
+
 test_output_list_ipc() {
+	local expected_capture=${1:-HEADLESS-1}
 	echo "Checking output-list command"
 	local sway_json wayvnc_json
-	sway_json=$($SWAYMSG -t get_outputs)
+	sway_json=$(sway_active_outputs)
 	wayvnc_json=$($WAYVNCCTL --json output-list)
 	local sway_list wayvnc_list
 	sway_list=$(jq -r '.[].name' <<<"$sway_json" | sort -u)
 	wayvnc_list=$(jq -r '.[].name' <<<"$wayvnc_json" | sort -u)
 	[[ "$sway_list" == "$wayvnc_list" ]]
 	echo "  output-list IPC matches \`swaymsg -t get_outputs\`"
+	wayvnc_capturing=$(jq -r '.[] | select(.captured == true).name' <<<"$wayvnc_json")
+	echo "  Capturing: $wayvnc_capturing=~$expected_capture"
+	[[ $wayvnc_capturing == "$expected_capture" ]]
 	echo "ok"
 }
 
@@ -259,6 +268,34 @@ test_client_connect() {
 	echo "Ok"
 }
 
+output_count() {
+	sway_active_outputs | jq 'length'
+}
+
+sway_output_create() {
+	local initial_count
+	initial_count=$(output_count)
+	echo "Creating new output"
+	$SWAYMSG create_output &>/dev/null
+	# shellcheck disable=SC2016
+	wait_until [[ '$(output_count)' -gt "$initial_count" ]]
+	echo "  $(sway_active_outputs | jq -r '.[-1].name')"
+	echo "Ok"
+}
+
+sway_output_is_gone() {
+	local output=$1
+	$SWAYMSG -t get_outputs | jq -e "all(.name != \"$output\")"
+}
+
+sway_output_destroy() {
+	local output=$1
+	echo "Removing output $output"
+	$SWAYMSG output "$output" unplug >/dev/null
+	wait_until sway_output_is_gone "$output" >/dev/null
+	echo "Ok"
+}
+
 smoke_test() {
 	test_setup "smoke test"
 	start_sway
@@ -283,4 +320,61 @@ smoke_test() {
 	stop_sway
 }
 
+multioutput_test() {
+	test_setup "multioutput test"
+	start_sway
+	sway_output_create
+	start_wayvncctl_events
+
+	# Ensure outout selection commandline works
+	start_wayvnc -o HEADLESS-1
+	wait_until verify_events \
+		wayvnc-startup
+	test_output_list_ipc HEADLESS-1
+
+	# Test outout-cycle
+	$WAYVNCCTL output-cycle
+	wait_until verify_events \
+		wayvnc-startup \
+		capture-changed
+	test_output_list_ipc HEADLESS-2
+
+	# Test outout-cycle wraps
+	$WAYVNCCTL output-cycle
+	wait_until verify_events \
+		wayvnc-startup \
+		capture-changed \
+		capture-changed
+	test_output_list_ipc HEADLESS-1
+
+	# Add a new output, then switch to it
+	sway_output_create
+	wait_until test_output_list_ipc HEADLESS-1
+	$WAYVNCCTL output-set HEADLESS-3
+	wait_until verify_events \
+		wayvnc-startup \
+		capture-changed \
+		capture-changed \
+		capture-changed
+	test_output_list_ipc HEADLESS-3
+
+	if [[ $SWAYMAJOR -le 1 && $SWAYMINOR -lt 8 ]]; then
+		echo "Warning: sway-1.8 or later is needed for complete testing"
+		return 0
+	fi
+	# Remove the output, and make sure we fallback properly
+	sway_output_destroy HEADLESS-3
+	wait_until verify_events \
+		wayvnc-startup \
+		capture-changed \
+		capture-changed \
+		capture-changed \
+		capture-changed
+	wait_until test_output_list_ipc HEADLESS-1
+	stop_sway
+	verify_wayvnc_exited
+	stop_wayvncctl_events
+}
+
 smoke_test
+multioutput_test
