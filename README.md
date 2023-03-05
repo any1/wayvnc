@@ -114,11 +114,10 @@ To run the unit tests:
 meson test -C build
 ```
 
-To run the integration tests:
+To run the [integration tests](test/integration/README.md):
 ```
 ./test/integration/integration.sh
 ```
-The integration tests currently require that sway, lsof, jq, and bash are installed.
 
 ## Running
 Wayvnc can be run from the build directory like so:

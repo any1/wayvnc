@@ -140,13 +140,44 @@ static int do_something(int number, const char* text)
 	char e = just_text[1];
 ```
 
-## Unit Tests
+## Testing
+
+### Unit Tests
 
 wayvnc has a small but growing set of unit tests, which are run on every GitHub
 PR. To run them locally, do the following:
 ```bash
 meson test -C build
 ```
+
+### Integration Tests
+
+There are also a handful of integration tests which also run on every PR.  Read
+the [integration tests documentation](test/integration/README.md) for more
+details, but to run them locally:
+```
+./test/integration/integration.sh
+```
+
+### Valgrind
+
+There is a helper script in [util/valgrind.sh](util/valgrind.sh) to aid in
+memory profiling of wayvnc and wayvncctl. This can help find and eliminate
+memory leaks.
+
+### Automated Tests
+
+We run a set of tests on every PR, in three different environments.
+
+Each run ensures that the proposed code change:
+1. Builds successfully
+2. Passes all unit tests
+3. Passes all integration tests
+
+And does so in 3 different environments:
+- Ubuntu as a [github action](.github/workflows/build.yml)
+- Arch Linux as a [sourcehut build](.builds/archlinux.yml)
+- FreeBSD as a [sourcehut build](.builds/freebsd.yaml)
 
 ## No Brown M&Ms
 
