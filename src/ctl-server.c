@@ -328,26 +328,49 @@ static struct cmd_response* generate_version_object()
 	return response;
 }
 
+static struct ctl_server_client* ctl_server_client_first(struct ctl* self)
+{
+	return self->actions.client_next(self, NULL);
+}
+
+static struct ctl_server_client* ctl_server_client_next(struct ctl* self,
+		struct ctl_server_client* prev)
+{
+	return self->actions.client_next(self, prev);
+}
+
+static void ctl_server_client_get_info(struct ctl* self,
+		const struct ctl_server_client* client,
+		struct ctl_server_client_info* info)
+{
+	return self->actions.client_info(client, info);
+}
+
 static struct cmd_response* generate_vnc_client_list(struct ctl* self)
 {
-	struct ctl_server_vnc_client* clients;
-	size_t num_clients = self->actions.get_client_list(self, &clients);
 	struct cmd_response* response = cmd_ok();
-
 	response->data = json_array();
-	for (size_t i = 0; i < num_clients; ++i) {
-		json_t* packed = json_pack("{s:s}", "id", clients[i].id);
-		if (clients[i].hostname[0] != '\0')
+
+	struct ctl_server_client* client;
+	for (client = ctl_server_client_first(self); client;
+			client = ctl_server_client_next(self, client)) {
+		struct ctl_server_client_info info = {};
+		ctl_server_client_get_info(self, client, &info);
+
+		json_t* packed = json_pack("{s:s}", "id", info.id);
+
+		if (info.hostname[0] != '\0')
 			json_object_set_new(packed, "hostname",
-					json_string(clients[i].hostname));
-		if (clients[i].username[0] != '\0')
+					json_string(info.hostname));
+
+		if (info.username[0] != '\0')
 			json_object_set_new(packed, "username",
-					json_string(clients[i].username));
-		json_object_set_new(packed, "seat",
-				json_string(clients[i].seat));
+					json_string(info.username));
+
+		json_object_set_new(packed, "seat", json_string(info.seat));
 		json_array_append_new(response->data, packed);
 	}
-	free(clients);
+
 	return response;
 }
 
