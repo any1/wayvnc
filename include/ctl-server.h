@@ -24,10 +24,10 @@ struct cmd_response;
 struct ctl_server_client;
 
 struct ctl_server_client_info {
-	char id[64];
-	char hostname[256];
-	char username[256];
-	char seat[256];
+	int id;
+	const char *hostname;
+	const char *username;
+	const char *seat;
 };
 
 struct ctl_server_output {

@@ -357,13 +357,15 @@ static struct cmd_response* generate_vnc_client_list(struct ctl* self)
 		struct ctl_server_client_info info = {};
 		ctl_server_client_get_info(self, client, &info);
 
-		json_t* packed = json_pack("{s:s}", "id", info.id);
+		char id_str[64];
+		snprintf(id_str, sizeof(id_str), "%d", info.id);
+		json_t* packed = json_pack("{s:s}", "id", id_str);
 
-		if (info.hostname[0] != '\0')
+		if (info.hostname)
 			json_object_set_new(packed, "hostname",
 					json_string(info.hostname));
 
-		if (info.username[0] != '\0')
+		if (info.username)
 			json_object_set_new(packed, "username",
 					json_string(info.username));
 
