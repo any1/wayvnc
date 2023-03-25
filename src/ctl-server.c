@@ -343,6 +343,8 @@ static struct cmd_response* generate_vnc_client_list(struct ctl* self)
 		if (clients[i].username[0] != '\0')
 			json_object_set_new(packed, "username",
 					json_string(clients[i].username));
+		json_object_set_new(packed, "seat",
+				json_string(clients[i].seat));
 		json_array_append_new(response->data, packed);
 	}
 	free(clients);
