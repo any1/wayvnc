@@ -25,6 +25,7 @@ struct ctl_server_vnc_client {
 	char id[64];
 	char hostname[256];
 	char username[256];
+	char seat[256];
 };
 
 struct ctl_server_output {
