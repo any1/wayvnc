@@ -21,7 +21,9 @@
 struct ctl;
 struct cmd_response;
 
-struct ctl_server_vnc_client {
+struct ctl_server_client;
+
+struct ctl_server_client_info {
 	char id[64];
 	char hostname[256];
 	char username[256];
@@ -47,11 +49,10 @@ struct ctl_server_actions {
 			const char* id);
 	struct cmd_response* (*on_wayvnc_exit)(struct ctl*);
 
-	// Return number of elements created
-	// Allocate 'clients' array or set ton ULL if none
-	// Receiver will free(clients) when done.
-	int (*get_client_list)(struct ctl*,
-			struct ctl_server_vnc_client** clients);
+	struct ctl_server_client *(*client_next)(struct ctl*,
+			struct ctl_server_client* prev);
+	void (*client_info)(const struct ctl_server_client*,
+			struct ctl_server_client_info* info);
 
 	// Return number of elements created
 	// Allocate 'outputs' array or set to NULL if none
