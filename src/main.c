@@ -119,7 +119,7 @@ struct wayvnc_client {
 	struct wayvnc* server;
 	struct nvnc_client* nvnc_client;
 
-	struct wl_seat* seat;
+	struct seat* seat;
 	struct ext_transient_seat_v1* transient_seat;
 
 	unsigned id;
@@ -1130,10 +1130,10 @@ static void client_init_pointer(struct wayvnc_client* self)
 
 	self->pointer.pointer = pointer_manager_version >= 2
 		? zwlr_virtual_pointer_manager_v1_create_virtual_pointer_with_output(
-			wayvnc->pointer_manager, self->seat,
+			wayvnc->pointer_manager, self->seat->wl_seat,
 			wayvnc->selected_output->wl_output)
 		: zwlr_virtual_pointer_manager_v1_create_virtual_pointer(
-			wayvnc->pointer_manager, self->seat);
+			wayvnc->pointer_manager, self->seat->wl_seat);
 
 	if (pointer_init(&self->pointer) < 0) {
 		nvnc_log(NVNC_LOG_ERROR, "Failed to initialise pointer");
@@ -1152,7 +1152,7 @@ static void handle_transient_seat_ready(void* data,
 	struct seat* seat = seat_find_by_id(&wayvnc->seats, global_name);
 	assert(seat);
 
-	client->seat = seat->wl_seat;
+	client->seat = seat;
 }
 
 static void handle_transient_seat_denied(void* data,
@@ -1166,7 +1166,7 @@ static void handle_transient_seat_denied(void* data,
 	// TODO: Should this perhaps be fatal?
 	nvnc_log(NVNC_LOG_WARNING, "Transient seat denied");
 
-	client->seat = wayvnc->selected_seat->wl_seat;
+	client->seat = wayvnc->selected_seat;
 }
 
 static void client_init_seat(struct wayvnc_client* self)
@@ -1193,7 +1193,7 @@ static void client_init_seat(struct wayvnc_client* self)
 
 		assert(self->seat);
 	} else {
-		self->seat = wayvnc->selected_seat->wl_seat;
+		self->seat = wayvnc->selected_seat;
 	}
 }
 
@@ -1206,7 +1206,7 @@ static void client_init_keyboard(struct wayvnc_client* self)
 
 	self->keyboard.virtual_keyboard =
 		zwp_virtual_keyboard_manager_v1_create_virtual_keyboard(
-			wayvnc->keyboard_manager, self->seat);
+			wayvnc->keyboard_manager, self->seat->wl_seat);
 
 	struct xkb_rule_names rule_names = {
 		.rules = wayvnc->cfg.xkb_rules,
@@ -1242,7 +1242,7 @@ static void client_init_data_control(struct wayvnc_client* self)
 
 	self->data_control.manager = wayvnc->data_control_manager;
 	data_control_init(&self->data_control, wayvnc->display, wayvnc->nvnc,
-			self->seat);
+			self->seat->wl_seat);
 }
 
 void log_selected_output(struct wayvnc* self)
