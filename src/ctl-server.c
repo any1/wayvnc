@@ -856,15 +856,18 @@ struct cmd_response* cmd_failed(const char* fmt, ...)
 }
 
 json_t* pack_connection_event_params(
-		const char* client_id,
-		const char* client_hostname,
-		const char* client_username,
+		const struct ctl_server_client_info *info,
 		int new_connection_count)
 {
-	return json_pack("{s:s, s:s?, s:s?, s:i}",
-			"id", client_id,
-			"hostname", client_hostname,
-			"username", client_username,
+	// TODO: Why is the id a string?
+	char id_str[64];
+	snprintf(id_str, sizeof(id_str), "%d", info->id);
+
+	return json_pack("{s:s, s:s?, s:s?, s:s?, s:i}",
+			"id", id_str,
+			"hostname", info->hostname,
+			"username", info->username,
+			"seat", info->seat,
 			"connection_count", new_connection_count);
 }
 
@@ -906,34 +909,28 @@ int ctl_server_enqueue_event(struct ctl* self, enum event_type evt_type,
 
 static void ctl_server_event_connect(struct ctl* self,
 		enum event_type evt_type,
-		const char* client_id,
-		const char* client_hostname,
-		const char* client_username,
+		const struct ctl_server_client_info *info,
 		int new_connection_count)
 {
-	json_t* params = pack_connection_event_params(client_id, client_hostname,
-			client_username, new_connection_count);
+	json_t* params =
+		pack_connection_event_params(info, new_connection_count);
 	ctl_server_enqueue_event(self, evt_type, params);
 }
 
 void ctl_server_event_connected(struct ctl* self,
-		const char* client_id,
-		const char* client_hostname,
-		const char* client_username,
+		const struct ctl_server_client_info *info,
 		int new_connection_count)
 {
-	ctl_server_event_connect(self, EVT_CLIENT_CONNECTED, client_id,
-			client_hostname, client_username, new_connection_count);
+	ctl_server_event_connect(self, EVT_CLIENT_CONNECTED, info,
+			new_connection_count);
 }
 
 void ctl_server_event_disconnected(struct ctl* self,
-		const char* client_id,
-		const char* client_hostname,
-		const char* client_username,
+		const struct ctl_server_client_info *info,
 		int new_connection_count)
 {
-	ctl_server_event_connect(self, EVT_CLIENT_DISCONNECTED, client_id,
-			client_hostname, client_username, new_connection_count);
+	ctl_server_event_connect(self, EVT_CLIENT_DISCONNECTED, info,
+			new_connection_count);
 }
 
 void ctl_server_event_capture_changed(struct ctl* self,
