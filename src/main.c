@@ -509,17 +509,10 @@ static void client_info(const struct ctl_server_client* client_handle,
 		(const struct nvnc_client*)client_handle;
 	const struct wayvnc_client *client = nvnc_get_userdata(vnc_client);
 
-	snprintf(info->id, sizeof(info->id), "%u", client->id);
-
-	const char* hostname = nvnc_client_get_hostname(vnc_client);
-	if (hostname)
-		strlcpy(info->hostname, hostname, sizeof(info->hostname));
-
-	const char* username = nvnc_client_get_auth_username(vnc_client);
-	if (username)
-		strlcpy(info->username, username, sizeof(info->username));
-
-	strlcpy(info->seat, client->seat->name, sizeof(info->seat));
+	info->id = client->id;
+	info->hostname = nvnc_client_get_hostname(vnc_client);
+	info->username = nvnc_client_get_auth_username(vnc_client);
+	info->seat = client->seat->name;
 }
 
 static int get_output_list(struct ctl* ctl,
