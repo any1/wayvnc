@@ -1053,12 +1053,14 @@ static void on_nvnc_client_cleanup(struct nvnc_client* client)
 	nvnc_log(NVNC_LOG_DEBUG, "Client disconnected, new client count: %d",
 			self->nr_clients);
 
-	char id[64];
-	snprintf(id, sizeof(id), "%u", wayvnc_client->id);
-	ctl_server_event_disconnected(self->ctl, id,
-			nvnc_client_get_hostname(client),
-			nvnc_client_get_auth_username(client),
-			self->nr_clients);
+	struct ctl_server_client_info info = {
+		.id = wayvnc_client->id,
+		.hostname = nvnc_client_get_hostname(client),
+		.username = nvnc_client_get_auth_username(client),
+		.seat = wayvnc_client->seat->name,
+	};
+
+	ctl_server_event_disconnected(self->ctl, &info, self->nr_clients);
 
 	if (self->nr_clients == 0) {
 		nvnc_log(NVNC_LOG_INFO, "Stopping screen capture");
@@ -1086,12 +1088,14 @@ static void on_nvnc_client_new(struct nvnc_client* client)
 	nvnc_log(NVNC_LOG_DEBUG, "Client connected, new client count: %d",
 			self->nr_clients);
 
-	char id[64];
-	snprintf(id, sizeof(id), "%u", wayvnc_client->id);
-	ctl_server_event_connected(self->ctl, id,
-			nvnc_client_get_hostname(client),
-			nvnc_client_get_auth_username(client),
-			self->nr_clients);
+	struct ctl_server_client_info info = {
+		.id = wayvnc_client->id,
+		.hostname = nvnc_client_get_hostname(client),
+		.username = nvnc_client_get_auth_username(client),
+		.seat = wayvnc_client->seat->name,
+	};
+
+	ctl_server_event_connected(self->ctl, &info, self->nr_clients);
 }
 
 void parse_keyboard_option(struct wayvnc* self, const char* arg)
