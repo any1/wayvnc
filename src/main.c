@@ -71,6 +71,12 @@
 
 #define MAYBE_UNUSED __attribute__((unused))
 
+enum socket_type {
+	SOCKET_TYPE_TCP = 0,
+	SOCKET_TYPE_UNIX,
+	SOCKET_TYPE_WEBSOCKET,
+};
+
 struct wayvnc {
 	bool do_exit;
 
@@ -699,14 +705,27 @@ static int blank_screen(struct wayvnc* self)
 	return 0;
 }
 
-int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port, bool is_unix)
+int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port,
+		enum socket_type socket_type)
 {
-	self->nvnc = is_unix ? nvnc_open_unix(addr) : nvnc_open(addr, port);
+	switch (socket_type) {
+		case SOCKET_TYPE_TCP:
+			self->nvnc = nvnc_open(addr, port);
+			break;
+		case SOCKET_TYPE_UNIX:
+			self->nvnc = nvnc_open_unix(addr);
+			break;
+		case SOCKET_TYPE_WEBSOCKET:
+			self->nvnc = nvnc_open_websocket(addr, port);
+			break;
+		default:
+			abort();
+	}
 	if (!self->nvnc) {
 		nvnc_log(NVNC_LOG_ERROR, "Failed to bind to address. Add -Ldebug to the argument list for more info.");
 		return -1;
 	}
-	if (is_unix)
+	if (socket_type == SOCKET_TYPE_UNIX)
 		nvnc_log(NVNC_LOG_INFO, "Listening for connections on %s", addr);
 	else
 		nvnc_log(NVNC_LOG_INFO, "Listening for connections on %s:%d", addr, port);
@@ -1289,6 +1308,7 @@ int main(int argc, char* argv[])
 	const char* address = NULL;
 	int port = 0;
 	bool use_unix_socket = false;
+	bool use_websocket = false;
 
 	const char* output_name = NULL;
 	const char* seat_name = NULL;
@@ -1338,6 +1358,8 @@ int main(int argc, char* argv[])
 		  "Show version info." },
 		{ 'v', "verbose", NULL,
 		  "Be more verbose. Same as setting --log-level=info" },
+		{ 'w', "websocket", NULL,
+		  "Create a websocket." },
 		{ 'L', "log-level", "<level>",
 		  "Set log level. The levels are: error, warning, info, debug trace and quiet.",
 		  .default_ = "warning" },
@@ -1369,6 +1391,7 @@ int main(int argc, char* argv[])
 	overlay_cursor = !!option_parser_get_value(&option_parser, "render-cursor");
 	show_performance = !!option_parser_get_value(&option_parser, "performance");
 	use_unix_socket = !!option_parser_get_value(&option_parser, "unix-socket");
+	use_websocket = !!option_parser_get_value(&option_parser, "websocket");
 	disable_input = !!option_parser_get_value(&option_parser, "disable-input");
 	log_level = option_parser_get_value(&option_parser, "verbose")
 		? NVNC_LOG_INFO : NVNC_LOG_WARNING;
@@ -1391,6 +1414,11 @@ int main(int argc, char* argv[])
 
 	if (seat_name && disable_input) {
 		nvnc_log(NVNC_LOG_ERROR, "seat and disable-input are conflicting options");
+		return 1;
+	}
+
+	if (use_unix_socket && use_websocket) {
+		nvnc_log(NVNC_LOG_ERROR, "websocket and unix-socket are conflicting options");
 		return 1;
 	}
 
@@ -1472,7 +1500,13 @@ int main(int argc, char* argv[])
 	if (init_main_loop(&self) < 0)
 		goto main_loop_failure;
 
-	if (init_nvnc(&self, address, port, use_unix_socket) < 0)
+	enum socket_type socket_type = SOCKET_TYPE_TCP;
+	if (use_unix_socket)
+		socket_type = SOCKET_TYPE_UNIX;
+	else if (use_websocket)
+		socket_type = SOCKET_TYPE_WEBSOCKET;
+
+	if (init_nvnc(&self, address, port, socket_type) < 0)
 		goto nvnc_failure;
 
 	if (self.screencopy.manager)
