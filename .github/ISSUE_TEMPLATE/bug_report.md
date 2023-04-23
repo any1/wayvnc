@@ -6,10 +6,11 @@ labels: 'bug'
 ---
 
 ### Useful information:
-Please, try to gather as much of useful information as possible.
+Please, try to gather as much of useful information as possible and follow
+these instructions:
 
 - **Version:**
-  - `wayvnc -V`
+  - Run this command: `wayvnc -V`
 
 - Try to reproduce while capturing a **trace log:**
   - `wayvnc -Ltrace | tee wayvnc-crash.log`
