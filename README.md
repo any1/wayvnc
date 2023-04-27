@@ -35,6 +35,9 @@ zypper install wayvnc
 
 # Void Linux
 xbps-install wayvnc
+
+# Gentoo
+emerge gui-apps/wayvnc
 ```
 
 ## Building
