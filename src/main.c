@@ -255,6 +255,20 @@ static void registry_add(void* data, struct wl_registry* registry,
 		return;
 }
 
+static void disconnect_seat_clients(struct wayvnc* self, struct seat* seat)
+{
+	struct nvnc_client* nvnc_client;
+	for (nvnc_client = nvnc_client_first(self->nvnc); nvnc_client;
+			nvnc_client = nvnc_client_next(nvnc_client)) {
+		struct wayvnc_client* client = nvnc_get_userdata(nvnc_client);
+		assert(client);
+
+		if (client->seat == seat) {
+			nvnc_client_close(nvnc_client);
+		}
+	}
+}
+
 static void registry_remove(void* data, struct wl_registry* registry,
 			    uint32_t id)
 {
@@ -283,14 +297,9 @@ static void registry_remove(void* data, struct wl_registry* registry,
 	struct seat* seat = seat_find_by_id(&self->seats, id);
 	if (seat) {
 		nvnc_log(NVNC_LOG_INFO, "Seat %s went away", seat->name);
+		disconnect_seat_clients(self, seat);
 		wl_list_remove(&seat->link);
 		seat_destroy(seat);
-
-		if (seat == self->selected_seat) {
-			nvnc_log(NVNC_LOG_ERROR, "Selected seat went away. Exiting...");
-			wayvnc_exit(self);
-		}
-
 		return;
 	}
 }
@@ -1030,6 +1039,9 @@ static void on_nvnc_client_cleanup(struct nvnc_client* client)
 	struct nvnc* nvnc = nvnc_client_get_server(client);
 	struct wayvnc* self = nvnc_get_userdata(nvnc);
 
+	if (wayvnc_client->seat)
+		wayvnc_client->seat->occupancy--;
+
 	self->nr_clients--;
 	nvnc_log(NVNC_LOG_DEBUG, "Client disconnected, new client count: %d",
 			self->nr_clients);
@@ -1126,7 +1138,17 @@ static void client_init_seat(struct wayvnc_client* self)
 	if (wayvnc->disable_input)
 		return;
 
-	self->seat = wayvnc->selected_seat;
+	if (wayvnc->selected_seat) {
+		self->seat = wayvnc->selected_seat;
+	} else {
+		self->seat = seat_find_unoccupied(&wayvnc->seats);
+		if (!self->seat) {
+			self->seat = seat_first(&wayvnc->seats);
+		}
+	}
+
+	if (self->seat)
+		self->seat->occupancy++;
 }
 
 static void client_init_keyboard(struct wayvnc_client* self)
@@ -1424,12 +1446,6 @@ int main(int argc, char* argv[])
 		seat = seat_find_by_name(&self.seats, seat_name);
 		if (!seat) {
 			nvnc_log(NVNC_LOG_ERROR, "No such seat");
-			goto failure;
-		}
-	} else if (!self.disable_input) {
-		seat = seat_first(&self.seats);
-		if (!seat) {
-			nvnc_log(NVNC_LOG_ERROR, "No seat found");
 			goto failure;
 		}
 	}
