@@ -26,6 +26,8 @@ struct seat {
 	uint32_t id;
 	uint32_t capabilities;
 	char name[256];
+
+	uint32_t occupancy;
 };
 
 struct seat* seat_new(struct wl_seat* wl_seat, uint32_t id);
@@ -34,4 +36,5 @@ void seat_list_destroy(struct wl_list* list);
 
 struct seat* seat_find_by_name(struct wl_list* list, const char* name);
 struct seat* seat_find_by_id(struct wl_list* list, uint32_t id);
+struct seat* seat_find_unoccupied(struct wl_list* list);
 struct seat* seat_first(struct wl_list* list);

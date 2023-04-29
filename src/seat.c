@@ -97,6 +97,17 @@ struct seat* seat_find_by_id(struct wl_list* list, uint32_t id)
 	return NULL;
 }
 
+struct seat* seat_find_unoccupied(struct wl_list* list)
+{
+	struct seat* seat;
+
+	wl_list_for_each(seat, list, link)
+		if (seat->occupancy == 0)
+			return seat;
+
+	return NULL;
+}
+
 struct seat* seat_first(struct wl_list* list)
 {
 	struct seat* seat;
