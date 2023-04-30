@@ -21,6 +21,7 @@
 
 #define X_CFG_LIST \
 	X(bool, enable_auth) \
+	X(bool, enable_tls) \
 	X(string, private_key_file) \
 	X(string, certificate_file) \
 	X(string, username) \

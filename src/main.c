@@ -740,11 +740,19 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port,
 
 	nvnc_set_name(self->nvnc, "WayVNC");
 
-	if (self->cfg.enable_auth &&
-	    nvnc_enable_auth(self->nvnc, self->cfg.private_key_file,
+	if (self->cfg.enable_auth) {
+		if (nvnc_enable_auth(self->nvnc, self->cfg.private_key_file,
 	                     self->cfg.certificate_file, on_auth, self) < 0) {
-		nvnc_log(NVNC_LOG_ERROR, "Failed to enable authentication");
-		goto failure;
+			nvnc_log(NVNC_LOG_ERROR, "Failed to enable authentication");
+			goto failure;
+		}
+	} else if (self->cfg.enable_tls) {
+		if (nvnc_load_tls_credentials(self->nvnc,
+					self->cfg.private_key_file,
+					self->cfg.certificate_file) < 0) {
+			nvnc_log(NVNC_LOG_ERROR, "Failed to load TLS credentials");
+			goto failure;
+		}
 	}
 
 	if (self->pointer_manager)
