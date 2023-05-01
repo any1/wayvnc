@@ -16,27 +16,6 @@ support, join the #wayvnc IRC channel on libera.chat, or ask your questions on t
 GitHub [discussion forum](https://github.com/any1/wayvnc/discussions) for the
 project.
 
-## Installing
-```
-# Arch Linux
-pacman -S wayvnc
-
-# FreeBSD
-pkg install wayvnc
-
-# Fedora
-dnf install wayvnc
-
-# Debian (unstable / testing)
-apt install wayvnc
-
-# openSUSE Tumbleweed
-zypper install wayvnc
-
-# Void Linux
-xbps-install wayvnc
-```
-
 ## Building
 ### Runtime Dependencies
  * aml
