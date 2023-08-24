@@ -740,7 +740,9 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port,
 
 	nvnc_set_name(self->nvnc, "WayVNC");
 
-	if (self->cfg.enable_auth &&
+	if (self->cfg.enable_auth && self->cfg.private_key_file[0] == '\0') {
+		nvnc_enable_auth2(self->nvnc, on_auth, self);
+	} else if (self->cfg.enable_auth &&
 	    nvnc_enable_auth(self->nvnc, self->cfg.private_key_file,
 	                     self->cfg.certificate_file, on_auth, self) < 0) {
 		nvnc_log(NVNC_LOG_ERROR, "Failed to enable authentication");
