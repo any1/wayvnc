@@ -1036,6 +1036,30 @@ static struct wayvnc_client* client_create(struct wayvnc* wayvnc,
 static void client_destroy(void* obj)
 {
 	struct wayvnc_client* self = obj;
+	struct nvnc* nvnc = nvnc_client_get_server(self->nvnc_client);
+	struct wayvnc* wayvnc = nvnc_get_userdata(nvnc);
+
+	if (self->seat)
+		self->seat->occupancy--;
+
+	wayvnc->nr_clients--;
+	nvnc_log(NVNC_LOG_DEBUG, "Client disconnected, new client count: %d",
+			wayvnc->nr_clients);
+
+	struct ctl_server_client_info info = {
+		.id = self->id,
+		.hostname = nvnc_client_get_hostname(self->nvnc_client),
+		.username = nvnc_client_get_auth_username(self->nvnc_client),
+		.seat = self->seat->name,
+	};
+
+	ctl_server_event_disconnected(wayvnc->ctl, &info, wayvnc->nr_clients);
+
+	if (wayvnc->nr_clients == 0) {
+		nvnc_log(NVNC_LOG_INFO, "Stopping screen capture");
+		screencopy_stop(&wayvnc->screencopy);
+		stop_performance_ticker(wayvnc);
+	}
 
 	if (self->keyboard.virtual_keyboard) {
 		zwp_virtual_keyboard_v1_destroy(
@@ -1050,35 +1074,6 @@ static void client_destroy(void* obj)
 		data_control_destroy(&self->data_control);
 
 	free(self);
-}
-
-static void on_nvnc_client_cleanup(struct nvnc_client* client)
-{
-	struct wayvnc_client* wayvnc_client = nvnc_get_userdata(client);
-	struct nvnc* nvnc = nvnc_client_get_server(client);
-	struct wayvnc* self = nvnc_get_userdata(nvnc);
-
-	if (wayvnc_client->seat)
-		wayvnc_client->seat->occupancy--;
-
-	self->nr_clients--;
-	nvnc_log(NVNC_LOG_DEBUG, "Client disconnected, new client count: %d",
-			self->nr_clients);
-
-	struct ctl_server_client_info info = {
-		.id = wayvnc_client->id,
-		.hostname = nvnc_client_get_hostname(client),
-		.username = nvnc_client_get_auth_username(client),
-		.seat = wayvnc_client->seat->name,
-	};
-
-	ctl_server_event_disconnected(self->ctl, &info, self->nr_clients);
-
-	if (self->nr_clients == 0) {
-		nvnc_log(NVNC_LOG_INFO, "Stopping screen capture");
-		screencopy_stop(&self->screencopy);
-		stop_performance_ticker(self);
-	}
 }
 
 static void on_nvnc_client_new(struct nvnc_client* client)
@@ -1096,7 +1091,6 @@ static void on_nvnc_client_new(struct nvnc_client* client)
 		wayvnc_start_capture_immediate(self);
 	}
 	self->nr_clients++;
-	nvnc_set_client_cleanup_fn(client, on_nvnc_client_cleanup);
 	nvnc_log(NVNC_LOG_DEBUG, "Client connected, new client count: %d",
 			self->nr_clients);
 
