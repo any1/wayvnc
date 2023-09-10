@@ -740,13 +740,27 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port,
 
 	nvnc_set_name(self->nvnc, "WayVNC");
 
-	if (self->cfg.enable_auth && self->cfg.private_key_file[0] == '\0') {
-		nvnc_enable_auth2(self->nvnc, on_auth, self);
-	} else if (self->cfg.enable_auth &&
-	    nvnc_enable_auth(self->nvnc, self->cfg.private_key_file,
-	                     self->cfg.certificate_file, on_auth, self) < 0) {
-		nvnc_log(NVNC_LOG_ERROR, "Failed to enable authentication");
-		goto failure;
+	if (self->cfg.enable_auth) {
+		if (self->cfg.rsa_private_key_file) {
+			if (nvnc_enable_auth2(self->nvnc, on_auth, self) < 0) {
+				nvnc_log(NVNC_LOG_ERROR, "Failed to enable RSA authentication");
+				goto failure;
+			}
+
+			if (nvnc_set_rsa_creds(self->nvnc, self->cfg.rsa_private_key_file) < 0) {
+				nvnc_log(NVNC_LOG_ERROR, "Failed to load RSA credentials");
+				goto failure;
+			}
+		}
+
+		if (self->cfg.private_key_file) {
+			int r = nvnc_enable_auth(self->nvnc, self->cfg.private_key_file,
+					self->cfg.certificate_file, on_auth, self);
+			if (r < 0) {
+				nvnc_log(NVNC_LOG_ERROR, "Failed to enable TLS authentication");
+				goto failure;
+			}
+		}
 	}
 
 	if (self->pointer_manager)

@@ -23,6 +23,7 @@
 	X(bool, enable_auth) \
 	X(string, private_key_file) \
 	X(string, certificate_file) \
+	X(string, rsa_private_key_file) \
 	X(string, username) \
 	X(string, password) \
 	X(string, address) \
