@@ -22,3 +22,4 @@
 
 enum wl_shm_format fourcc_to_wl_shm(uint32_t in);
 uint32_t fourcc_from_wl_shm(enum wl_shm_format in);
+int pixel_size_from_fourcc(uint32_t fourcc);
