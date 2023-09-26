@@ -91,9 +91,9 @@ struct wv_buffer* wv_buffer_create_shm(int width,
 	if (!self->wl_buffer)
 		goto shm_failure;
 
-	// TODO: Get the pixel size from the format instead of assuming it's 4.
+	int bpp = pixel_size_from_fourcc(fourcc);
 	self->nvnc_fb = nvnc_fb_from_buffer(self->pixels, width, height, fourcc,
-			stride / 4);
+			stride / bpp);
 	if (!self->nvnc_fb) {
 		goto nvnc_fb_failure;
 	}
