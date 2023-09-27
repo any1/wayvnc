@@ -92,6 +92,7 @@ struct wv_buffer* wv_buffer_create_shm(int width,
 		goto shm_failure;
 
 	int bpp = pixel_size_from_fourcc(fourcc);
+	assert(bpp > 0);
 	self->nvnc_fb = nvnc_fb_from_buffer(self->pixels, width, height, fourcc,
 			stride / bpp);
 	if (!self->nvnc_fb) {
