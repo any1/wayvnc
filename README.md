@@ -121,9 +121,11 @@ authenticated when connecting to wayvnc.
 For TLS, you'll need a private X509 key and a certificate. A self-signed key
 with a certificate can be generated like so:
 ```
+cd ~/.config/wayvnc
 openssl req -x509 -newkey rsa:4096 -sha256 -days 3650 -nodes \
-	-keyout key.pem -out cert.pem -subj /CN=localhost \
+	-keyout tls_key.pem -out tls_cert.pem -subj /CN=localhost \
 	-addext subjectAltName=DNS:localhost,DNS:localhost,IP:127.0.0.1
+cd -
 ```
 Replace `localhost` and `127.0.0.1` in the command above with your public facing
 host name and IP address, respectively, or just keep them as is if you're
@@ -133,12 +135,13 @@ Create a config with the authentication info and load it using the `--config`
 command line option or place it at the default location
 `$HOME/.config/wayvnc/config`.
 ```
+use_relative_paths=true
 address=0.0.0.0
 enable_auth=true
 username=luser
 password=p455w0rd
-private_key_file=/path/to/key.pem
-certificate_file=/path/to/cert.pem
+private_key_file=tls_key.pem
+certificate_file=tls_cert.pem
 ```
 
 #### RSA-AES
@@ -157,11 +160,12 @@ ssh-keygen -m pem -f ~/.config/wayvnc/rsa_key.pem -t rsa -N ""
 You also need to tell wayvnc where this file is located, by setting setting the
 `rsa_private_key_file` configuration parameter:
 ```
+use_relative_paths=true
 address=0.0.0.0
 enable_auth=true
 username=luser
 password=p455w0rd
-rsa_private_key_file=/path/to/rsa_key.pem
+rsa_private_key_file=rsa_key.pem
 ```
 
 You may also add credentials for TLS in combination with RSA. The client will
