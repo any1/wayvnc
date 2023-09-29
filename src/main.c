@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 - 2022 Andri Yngvason
+ * Copyright (c) 2019 - 2023 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -740,13 +740,21 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port,
 
 	nvnc_set_name(self->nvnc, "WayVNC");
 
+	enum nvnc_auth_flags auth_flags = 0;
 	if (self->cfg.enable_auth) {
-		if (self->cfg.rsa_private_key_file) {
-			if (nvnc_enable_auth2(self->nvnc, on_auth, self) < 0) {
-				nvnc_log(NVNC_LOG_ERROR, "Failed to enable RSA authentication");
-				goto failure;
-			}
+		auth_flags |= NVNC_AUTH_REQUIRE_AUTH;
+	}
+	if (!self->cfg.relax_encryption) {
+		auth_flags |= NVNC_AUTH_REQUIRE_ENCRYPTION;
+	}
 
+	if (self->cfg.enable_auth) {
+		if (nvnc_enable_auth(self->nvnc, auth_flags, on_auth, self) < 0) {
+			nvnc_log(NVNC_LOG_ERROR, "Failed to enable authentication");
+			goto failure;
+		}
+
+		if (self->cfg.rsa_private_key_file) {
 			if (nvnc_set_rsa_creds(self->nvnc, self->cfg.rsa_private_key_file) < 0) {
 				nvnc_log(NVNC_LOG_ERROR, "Failed to load RSA credentials");
 				goto failure;
@@ -754,8 +762,9 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port,
 		}
 
 		if (self->cfg.private_key_file) {
-			int r = nvnc_enable_auth(self->nvnc, self->cfg.private_key_file,
-					self->cfg.certificate_file, on_auth, self);
+			int r = nvnc_set_tls_creds(self->nvnc,
+					self->cfg.private_key_file,
+					self->cfg.certificate_file);
 			if (r < 0) {
 				nvnc_log(NVNC_LOG_ERROR, "Failed to enable TLS authentication");
 				goto failure;

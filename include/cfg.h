@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Andri Yngvason
+ * Copyright (c) 2020 - 2023 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -21,6 +21,7 @@
 
 #define X_CFG_LIST \
 	X(bool, enable_auth) \
+	X(bool, relax_encryption) \
 	X(string, private_key_file) \
 	X(string, certificate_file) \
 	X(string, rsa_private_key_file) \
