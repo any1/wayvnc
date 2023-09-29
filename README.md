@@ -116,8 +116,10 @@ use SSH tunneling while listening on localhost, but users can also be
 authenticated when connecting to wayvnc.
 
 ### Encryption & Authentication
-You'll need a private X509 key and a certificate. A self-signed key with a
-certificate can be generated like so:
+
+#### VeNCrypt (TLS)
+For TLS, you'll need a private X509 key and a certificate. A self-signed key
+with a certificate can be generated like so:
 ```
 openssl req -x509 -newkey rsa:4096 -sha256 -days 3650 -nodes \
 	-keyout key.pem -out cert.pem -subj /CN=localhost \
@@ -138,6 +140,32 @@ password=p455w0rd
 private_key_file=/path/to/key.pem
 certificate_file=/path/to/cert.pem
 ```
+
+#### RSA-AES
+The RSA-AES security type combines RSA with AES in EAX mode to provide secure
+authentication and encryption that's resilient to eavesdropping and MITM. Its
+main weakness is that the user has to verify the server's credentials on first
+use. Thereafter, the client software should warn the user if the server's
+credentials change. It's a Trust on First Use (TOFU) scheme as employed by SSH.
+
+For the RSA-AES to be enabled, you need to generate an RSA key. This can be
+achieved like so:
+```
+ssh-keygen -m pem -f ~/.config/wayvnc/rsa_key.pem -t rsa -N ""
+```
+
+You also need to tell wayvnc where this file is located, by setting setting the
+`rsa_private_key_file` configuration parameter:
+```
+address=0.0.0.0
+enable_auth=true
+username=luser
+password=p455w0rd
+rsa_private_key_file=/path/to/rsa_key.pem
+```
+
+You may also add credentials for TLS in combination with RSA. The client will
+choose.
 
 ### wayvncctl control socket
 
