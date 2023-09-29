@@ -18,6 +18,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <libgen.h>
+#include <limits.h>
 
 #include "cfg.h"
 
@@ -106,17 +108,24 @@ static int cfg__load_line(struct cfg* self, char* line)
 	return cfg__load_key_value(self, key, value);
 }
 
+static char* cfg__dirname(const char* path)
+{
+	char buffer[PATH_MAX];
+	return strdup(dirname(realpath(path, buffer)));
+}
+
 int cfg_load(struct cfg* self, const char* requested_path)
 {
 	const char* path = requested_path ? requested_path
 	                                  : cfg__get_default_path();
-
 	if (!path)
 		return -1;
 
 	FILE* stream = fopen(path, "r");
 	if (!stream)
 		return -1;
+
+	self->directory = cfg__dirname(path);
 
 	char* line = NULL;
 	size_t len = 0;
@@ -136,6 +145,7 @@ int cfg_load(struct cfg* self, const char* requested_path)
 failure:
 	cfg_destroy(self);
 	free(line);
+	free(self->directory);
 	fclose(stream);
 	return lineno;
 }
@@ -153,4 +163,5 @@ void cfg_destroy(struct cfg* self)
 #undef DESTROY_string
 #undef DESTROY_uint
 #undef DESTROY_bool
+	free(self->directory);
 }

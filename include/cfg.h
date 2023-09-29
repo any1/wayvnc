@@ -35,8 +35,10 @@
 	X(string, xkb_layout) \
 	X(string, xkb_variant) \
 	X(string, xkb_options) \
+	X(bool, use_relative_paths) \
 
 struct cfg {
+	char* directory;
 #define string char*
 #define uint uint32_t
 #define X(type, name) type name;

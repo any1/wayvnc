@@ -705,7 +705,18 @@ static int blank_screen(struct wayvnc* self)
 	return 0;
 }
 
-int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port,
+static char* get_cfg_path(const struct cfg* cfg, char* dst, const char* src)
+{
+	if (!cfg->use_relative_paths) {
+		strlcpy(dst, src, PATH_MAX);
+		return dst;
+	}
+
+	snprintf(dst, PATH_MAX, "%s/%s", cfg->directory, src);
+	return dst;
+}
+
+static int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port,
 		enum socket_type socket_type)
 {
 	switch (socket_type) {
@@ -755,16 +766,25 @@ int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port,
 		}
 
 		if (self->cfg.rsa_private_key_file) {
-			if (nvnc_set_rsa_creds(self->nvnc, self->cfg.rsa_private_key_file) < 0) {
+			char tmp[PATH_MAX];
+			const char* key_file = get_cfg_path(&self->cfg, tmp,
+					self->cfg.rsa_private_key_file);
+			if (nvnc_set_rsa_creds(self->nvnc, key_file) < 0) {
 				nvnc_log(NVNC_LOG_ERROR, "Failed to load RSA credentials");
 				goto failure;
 			}
 		}
 
 		if (self->cfg.private_key_file) {
-			int r = nvnc_set_tls_creds(self->nvnc,
-					self->cfg.private_key_file,
+			char key_file[PATH_MAX];
+			char cert_file[PATH_MAX];
+
+			get_cfg_path(&self->cfg, key_file,
+					self->cfg.private_key_file);
+			get_cfg_path(&self->cfg, cert_file,
 					self->cfg.certificate_file);
+			int r = nvnc_set_tls_creds(self->nvnc, key_file,
+					cert_file);
 			if (r < 0) {
 				nvnc_log(NVNC_LOG_ERROR, "Failed to enable TLS authentication");
 				goto failure;
