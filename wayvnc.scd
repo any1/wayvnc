@@ -111,9 +111,17 @@ considered to be part of the key or the value.
 *port*
 	The port to which the server shall bind. Default is 5900.
 
-*private_key_file*
-	The path to the private key file for encryption. Only applicable when
-	*enable_auth*=true.
+*private_key_file_file*
+	The path to the private key file for TLS encryption. Only applicable
+	when *enable_auth*=true.
+
+*relax_encryption*
+	Don't require encryption after the user has been authenticated. This
+	enables some security types such as Apple Diffie-Hellman.
+
+*rsa_private_key_file*
+	The path to the private key file for RSA-AES encryption. Only applicable
+	when *enable_auth*=true.
 
 *username*
 	Choose a username for authentication.
