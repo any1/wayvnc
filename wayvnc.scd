@@ -126,6 +126,9 @@ considered to be part of the key or the value.
 *username*
 	Choose a username for authentication.
 
+*use_relative_paths*
+	Make file paths relative to the location of the config file.
+
 *xkb_layout*
 	The keyboard layout to use for key code lookup.
 
@@ -156,12 +159,14 @@ considered to be part of the key or the value.
 ## EXAMPLE
 
 ```
+use_relative_paths=true
 address=0.0.0.0
 enable_auth=true
 username=luser
 password=p455w0rd
-private_key_file=/path/to/key.pem
-certificate_file=/path/to/cert.pem
+rsa_private_key_file=rsa_key.pem
+private_key_file=tls_key.pem
+certificate_file=tls_cert.pem
 ```
 
 # WAYVNCCTL CONTROL SOCKET
