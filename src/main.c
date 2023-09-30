@@ -707,7 +707,7 @@ static int blank_screen(struct wayvnc* self)
 
 static char* get_cfg_path(const struct cfg* cfg, char* dst, const char* src)
 {
-	if (!cfg->use_relative_paths) {
+	if (!cfg->use_relative_paths || src[0] == '/') {
 		strlcpy(dst, src, PATH_MAX);
 		return dst;
 	}
