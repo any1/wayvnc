@@ -1002,12 +1002,12 @@ int check_cfg_sanity(struct cfg* cfg)
 			return -1;
 		}
 
-		if (!cfg->certificate_file) {
+		if (!cfg->certificate_file && !cfg->rsa_private_key_file) {
 			nvnc_log(NVNC_LOG_ERROR, "Authentication enabled, but missing certificate_file");
 			rc = -1;
 		}
 
-		if (!cfg->private_key_file) {
+		if (!cfg->private_key_file && !cfg->rsa_private_key_file) {
 			nvnc_log(NVNC_LOG_ERROR, "Authentication enabled, but missing private_key_file");
 			rc = -1;
 		}
