@@ -1,7 +1,7 @@
 project(
 	'wayvnc',
 	'c',
-	version: '0.7.0',
+	version: '0.7.1',
 	license: 'ISC',
 	default_options: [
 		'c_std=gnu11',
@@ -54,7 +54,7 @@ wayland_client = dependency('wayland-client')
 jansson = dependency('jansson')
 
 aml_version = ['>=0.3.0', '<0.4.0']
-neatvnc_version = ['>=0.6.0', '<0.7.0']
+neatvnc_version = ['>=0.7.0', '<0.8.0']
 
 neatvnc_project = subproject(
 	'neatvnc',
