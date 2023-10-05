@@ -34,7 +34,7 @@ if git.found()
 	endif
 endif
 
-if buildtype != 'debug' and buildtype != 'debugoptimized'
+if buildtype == 'release'
 	c_args += '-DNDEBUG'
 endif
 
