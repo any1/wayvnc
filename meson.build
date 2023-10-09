@@ -14,7 +14,6 @@ host_system = host_machine.system()
 prefix = get_option('prefix')
 
 c_args = [
-	'-DPROJECT_VERSION="@0@"'.format(meson.project_version()),
 	'-D_GNU_SOURCE',
 	'-DAML_UNSTABLE_API=1',
 
@@ -22,17 +21,21 @@ c_args = [
 	'-Wno-missing-field-initializers',
 ]
 
+version = '"@0@"'.format(meson.project_version())
 git = find_program('git', native: true, required: false)
 if git.found()
-	git_describe = run_command([git, 'describe', '--tags', '--long'])
+	git_commit = run_command([git, 'rev-parse', '--short', 'HEAD'])
 	git_branch = run_command([git, 'rev-parse', '--abbrev-ref', 'HEAD'])
-	if git_describe.returncode() == 0 and git_branch.returncode() == 0
-		c_args += '-DGIT_VERSION="@0@ (@1@)"'.format(
-			git_describe.stdout().strip(),
+	if git_commit.returncode() == 0 and git_branch.returncode() == 0
+		version = '"v@0@-@1@ (@2@)"'.format(
+			meson.project_version(),
+			git_commit.stdout().strip(),
 			git_branch.stdout().strip(),
 		)
 	endif
 endif
+
+add_project_arguments('-DPROJECT_VERSION=@0@'.format(version), language: 'c')
 
 if buildtype != 'debug' and buildtype != 'debugoptimized'
 	c_args += '-DNDEBUG'

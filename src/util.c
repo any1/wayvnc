@@ -23,9 +23,7 @@
 #include "util.h"
 
 const char* wayvnc_version =
-#if defined(GIT_VERSION)
-		GIT_VERSION;
-#elif defined(PROJECT_VERSION)
+#if defined(PROJECT_VERSION)
 		PROJECT_VERSION;
 #else
 		"UNKNOWN";
