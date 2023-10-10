@@ -40,6 +40,7 @@
 #include "xdg-output-unstable-v1.h"
 #include "wlr-output-power-management-unstable-v1.h"
 #include "linux-dmabuf-unstable-v1.h"
+#include "ext-transient-seat-v1.h"
 #include "screencopy.h"
 #include "data-control.h"
 #include "strlcpy.h"
@@ -89,6 +90,7 @@ struct wayvnc {
 	struct zwp_virtual_keyboard_manager_v1* keyboard_manager;
 	struct zwlr_virtual_pointer_manager_v1* pointer_manager;
 	struct zwlr_data_control_manager_v1* data_control_manager;
+	struct ext_transient_seat_manager_v1* transient_seat_manager;
 
 	struct output* selected_output;
 	struct seat* selected_seat;
@@ -108,6 +110,7 @@ struct wayvnc {
 	uint32_t n_frames_captured;
 
 	bool disable_input;
+	bool use_transient_seat;
 
 	int nr_clients;
 	struct aml_ticker* performance_ticker;
@@ -123,6 +126,7 @@ struct wayvnc_client {
 	struct nvnc_client* nvnc_client;
 
 	struct seat* seat;
+	struct ext_transient_seat_v1* transient_seat;
 
 	unsigned id;
 	struct pointer pointer;
@@ -189,6 +193,12 @@ static bool registry_add_input(void* data, struct wl_registry* registry,
 	if (strcmp(interface, zwlr_data_control_manager_v1_interface.name) == 0) {
 		self->data_control_manager = wl_registry_bind(registry, id,
 				&zwlr_data_control_manager_v1_interface, 2);
+		return true;
+	}
+
+	if (strcmp(interface, ext_transient_seat_manager_v1_interface.name) == 0) {
+		self->transient_seat_manager = wl_registry_bind(registry, id,
+				&ext_transient_seat_manager_v1_interface, 1);
 		return true;
 	}
 
@@ -436,6 +446,11 @@ static int init_wayland(struct wayvnc* self)
 
 	if (!self->screencopy.manager) {
 		nvnc_log(NVNC_LOG_ERROR, "Screencopy protocol not supported by compositor. Exiting. Refer to FAQ section in man page.");
+		goto failure;
+	}
+
+	if (!self->transient_seat_manager && self->use_transient_seat) {
+		nvnc_log(NVNC_LOG_ERROR, "Transient seat protocol not supported by compositor");
 		goto failure;
 	}
 
@@ -1084,6 +1099,9 @@ static void client_destroy(void* obj)
 	struct nvnc* nvnc = nvnc_client_get_server(self->nvnc_client);
 	struct wayvnc* wayvnc = nvnc_get_userdata(nvnc);
 
+	if (self->transient_seat)
+		ext_transient_seat_v1_destroy(self->transient_seat);
+
 	if (self->seat)
 		self->seat->occupancy--;
 
@@ -1189,6 +1207,51 @@ static void client_init_pointer(struct wayvnc_client* self)
 	}
 }
 
+static void handle_transient_seat_ready(void* data,
+		struct ext_transient_seat_v1* transient_seat,
+		uint32_t global_name)
+{
+	(void)transient_seat;
+
+	struct wayvnc_client* client = data;
+	struct wayvnc* wayvnc = client->server;
+
+	struct seat* seat = seat_find_by_id(&wayvnc->seats, global_name);
+	assert(seat);
+
+	client->seat = seat;
+}
+
+static void handle_transient_seat_denied(void* data,
+		struct ext_transient_seat_v1* transient_seat)
+{
+	(void)data;
+	(void)transient_seat;
+
+	// TODO: Something more graceful perhaps?
+	nvnc_log(NVNC_LOG_PANIC, "Transient seat denied");
+}
+
+static void client_init_transient_seat(struct wayvnc_client* self)
+{
+	struct wayvnc* wayvnc = self->server;
+
+	self->transient_seat =
+		ext_transient_seat_manager_v1_create(wayvnc->transient_seat_manager);
+
+	static const struct ext_transient_seat_v1_listener listener = {
+		.ready = handle_transient_seat_ready,
+		.denied = handle_transient_seat_denied,
+	};
+	ext_transient_seat_v1_add_listener(self->transient_seat, &listener,
+			self);
+
+	// TODO: Make this asynchronous
+	wl_display_roundtrip(wayvnc->display);
+
+	assert(self->seat);
+}
+
 static void client_init_seat(struct wayvnc_client* self)
 {
 	struct wayvnc* wayvnc = self->server;
@@ -1198,6 +1261,8 @@ static void client_init_seat(struct wayvnc_client* self)
 
 	if (wayvnc->selected_seat) {
 		self->seat = wayvnc->selected_seat;
+	} else if (wayvnc->use_transient_seat) {
+		client_init_transient_seat(self);
 	} else {
 		self->seat = seat_find_unoccupied(&wayvnc->seats);
 		if (!self->seat) {
@@ -1358,6 +1423,7 @@ int main(int argc, char* argv[])
 	bool show_performance = false;
 	int max_rate = 30;
 	bool disable_input = false;
+	bool use_transient_seat = false;
 
 	int drm_fd MAYBE_UNUSED = -1;
 
@@ -1382,6 +1448,8 @@ int main(int argc, char* argv[])
 		  "Select seat by name." },
 		{ 'S', "socket", "<path>",
 		  "Control socket path." },
+		{ 't', "transient-seat", NULL,
+		  "Use transient seat." },
 		{ 'r', "render-cursor", NULL,
 		  "Enable overlay cursor rendering." },
 		{ 'f', "max-fps", "<fps>",
@@ -1437,6 +1505,8 @@ int main(int argc, char* argv[])
 	log_level = log_level_from_string(
 			option_parser_get_value(&option_parser, "log-level"));
 	max_rate = atoi(option_parser_get_value(&option_parser, "max-fps"));
+	use_transient_seat = atoi(option_parser_get_value(&option_parser,
+				"transient-seat"));
 
 	keyboard_options = option_parser_get_value(&option_parser, "keyboard");
 	if (keyboard_options)
@@ -1458,6 +1528,16 @@ int main(int argc, char* argv[])
 
 	if (use_unix_socket && use_websocket) {
 		nvnc_log(NVNC_LOG_ERROR, "websocket and unix-socket are conflicting options");
+		return 1;
+	}
+
+	if (use_transient_seat && disable_input) {
+		nvnc_log(NVNC_LOG_ERROR, "transient-seat and disable-input are conflicting options");
+		return 1;
+	}
+
+	if (seat_name && use_transient_seat) {
+		nvnc_log(NVNC_LOG_ERROR, "transient seat and seat are conflicting options");
 		return 1;
 	}
 
@@ -1486,6 +1566,7 @@ int main(int argc, char* argv[])
 	if (!port) port = DEFAULT_PORT;
 
 	self.disable_input = disable_input;
+	self.use_transient_seat = use_transient_seat;
 
 	if (init_wayland(&self) < 0) {
 		nvnc_log(NVNC_LOG_ERROR, "Failed to initialise wayland");

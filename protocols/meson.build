@@ -22,6 +22,7 @@ client_protocols = [
 	'linux-dmabuf-unstable-v1.xml',
 	'wlr-data-control-unstable-v1.xml',
 	'wlr-output-power-management-unstable-v1.xml',
+	'ext-transient-seat-v1.xml',
 ]
 
 client_protos_src = []
