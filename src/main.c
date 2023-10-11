@@ -1505,8 +1505,8 @@ int main(int argc, char* argv[])
 	log_level = log_level_from_string(
 			option_parser_get_value(&option_parser, "log-level"));
 	max_rate = atoi(option_parser_get_value(&option_parser, "max-fps"));
-	use_transient_seat = atoi(option_parser_get_value(&option_parser,
-				"transient-seat"));
+	use_transient_seat = option_parser_get_value(&option_parser,
+				"transient-seat");
 
 	keyboard_options = option_parser_get_value(&option_parser, "keyboard");
 	if (keyboard_options)
