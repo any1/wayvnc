@@ -369,7 +369,10 @@ static struct cmd_response* generate_vnc_client_list(struct ctl* self)
 			json_object_set_new(packed, "username",
 					json_string(info.username));
 
-		json_object_set_new(packed, "seat", json_string(info.seat));
+		if (info.seat)
+			json_object_set_new(packed, "seat",
+					json_string(info.seat));
+
 		json_array_append_new(response->data, packed);
 	}
 
