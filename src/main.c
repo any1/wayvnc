@@ -542,7 +542,7 @@ static void client_info(const struct ctl_server_client* client_handle,
 	info->id = client->id;
 	info->hostname = nvnc_client_get_hostname(vnc_client);
 	info->username = nvnc_client_get_auth_username(vnc_client);
-	info->seat = client->seat->name;
+	info->seat = client->seat ? client->seat->name : NULL;
 }
 
 static int get_output_list(struct ctl* ctl,
@@ -1113,7 +1113,7 @@ static void client_destroy(void* obj)
 		.id = self->id,
 		.hostname = nvnc_client_get_hostname(self->nvnc_client),
 		.username = nvnc_client_get_auth_username(self->nvnc_client),
-		.seat = self->seat->name,
+		.seat = self->seat ? self->seat->name : NULL,
 	};
 
 	ctl_server_event_disconnected(wayvnc->ctl, &info, wayvnc->nr_clients);
@@ -1161,7 +1161,7 @@ static void on_nvnc_client_new(struct nvnc_client* client)
 		.id = wayvnc_client->id,
 		.hostname = nvnc_client_get_hostname(client),
 		.username = nvnc_client_get_auth_username(client),
-		.seat = wayvnc_client->seat->name,
+		.seat = wayvnc_client->seat ? wayvnc_client->seat->name : NULL,
 	};
 
 	ctl_server_event_connected(self->ctl, &info, self->nr_clients);
