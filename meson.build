@@ -89,6 +89,7 @@ sources = [
 	'src/screencopy.c',
 	'src/data-control.c',
 	'src/output.c',
+	'src/output-management.c',
 	'src/pointer.c',
 	'src/keyboard.c',
 	'src/seat.c',
