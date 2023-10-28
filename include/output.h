@@ -57,6 +57,7 @@ struct output {
 
 	bool is_dimension_changed;
 	bool is_transform_changed;
+	bool is_headless;
 
 	void (*on_dimension_change)(struct output*);
 	void (*on_transform_change)(struct output*);

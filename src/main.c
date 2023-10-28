@@ -39,12 +39,14 @@
 #include "virtual-keyboard-unstable-v1.h"
 #include "xdg-output-unstable-v1.h"
 #include "wlr-output-power-management-unstable-v1.h"
+#include "wlr-output-management-unstable-v1.h"
 #include "linux-dmabuf-unstable-v1.h"
 #include "ext-transient-seat-v1.h"
 #include "screencopy.h"
 #include "data-control.h"
 #include "strlcpy.h"
 #include "output.h"
+#include "output-management.h"
 #include "pointer.h"
 #include "keyboard.h"
 #include "seat.h"
@@ -248,6 +250,15 @@ static void registry_add(void* data, struct wl_registry* registry,
 		return;
 	}
 
+	if (strcmp(interface, zwlr_output_manager_v1_interface.name) == 0) {
+		nvnc_trace("Registering new wlr_output_manager");
+		struct zwlr_output_manager_v1* wlr_output_manager =
+			wl_registry_bind(registry, id,
+				&zwlr_output_manager_v1_interface, 1);
+		wlr_output_manager_setup(wlr_output_manager);
+		return;
+	}
+
 	if (strcmp(interface, zwlr_screencopy_manager_v1_interface.name) == 0) {
 		self->screencopy.manager =
 			wl_registry_bind(registry, id,
@@ -372,6 +383,8 @@ void wayvnc_destroy(struct wayvnc* self)
 
 	if (wlr_output_power_manager)
 		zwlr_output_power_manager_v1_destroy(wlr_output_power_manager);
+
+	wlr_output_manager_destroy();
 
 	wl_shm_destroy(wl_shm);
 
