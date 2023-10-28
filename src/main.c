@@ -758,6 +758,26 @@ static void on_client_cut_text(struct nvnc_client* nvnc_client,
 	}
 }
 
+static bool on_client_resize(struct nvnc_client* nvnc_client,
+		const struct nvnc_desktop_layout* layout)
+{
+	struct wayvnc_client* client = nvnc_get_userdata(nvnc_client);
+
+	uint16_t width = nvnc_desktop_layout_get_width(layout);
+	uint16_t height = nvnc_desktop_layout_get_height(layout);
+	struct output* output = client->server->selected_output;
+
+	if (output == NULL)
+		return false;
+
+	nvnc_log(NVNC_LOG_DEBUG,
+		"Client resolution changed: %ux%u, capturing output %s which is headless: %s",
+		width, height, output->name,
+		output->is_headless ? "yes" : "no");
+
+	return wlr_output_manager_resize_output(output, width, height);
+}
+
 bool on_auth(const char* username, const char* password, void* ud)
 {
 	struct wayvnc* self = ud;
@@ -861,6 +881,8 @@ static int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port,
 	nvnc_set_userdata(self->nvnc, self, NULL);
 
 	nvnc_set_name(self->nvnc, "WayVNC");
+
+	nvnc_set_desktop_layout_fn(self->nvnc, on_client_resize);
 
 	enum nvnc_auth_flags auth_flags = 0;
 	if (self->cfg.enable_auth) {
