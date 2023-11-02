@@ -963,6 +963,9 @@ void wayvnc_process_frame(struct wayvnc* self)
 	nvnc_fb_set_transform(buffer->nvnc_fb,
 			(enum nvnc_transform)buffer_transform);
 
+	pixman_region_intersect_rect(&damage, &damage, 0, 0, buffer->width,
+			buffer->height);
+
 	nvnc_display_feed_buffer(self->nvnc_display, buffer->nvnc_fb,
 			&damage);
 
