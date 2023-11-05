@@ -1002,18 +1002,14 @@ int check_cfg_sanity(struct cfg* cfg)
 
 		if (!nvnc_has_auth()) {
 			nvnc_log(NVNC_LOG_ERROR, "Authentication can't be enabled because it was not selected during build");
-			return -1;
-		}
-
-		if (!cfg->certificate_file && !cfg->rsa_private_key_file) {
-			nvnc_log(NVNC_LOG_ERROR, "Authentication enabled, but missing certificate_file");
 			rc = -1;
 		}
 
-		if (!cfg->private_key_file && !cfg->rsa_private_key_file) {
-			nvnc_log(NVNC_LOG_ERROR, "Authentication enabled, but missing private_key_file");
+		if (!!cfg->certificate_file != !!cfg->private_key_file) {
+			nvnc_log(NVNC_LOG_ERROR, "Need both certificate_file and private_key_file for TLS");
 			rc = -1;
 		}
+
 		if (!cfg->username && !cfg->enable_pam) {
 			nvnc_log(NVNC_LOG_ERROR, "Authentication enabled, but missing username");
 			rc = -1;
@@ -1023,6 +1019,11 @@ int check_cfg_sanity(struct cfg* cfg)
 			nvnc_log(NVNC_LOG_ERROR, "Authentication enabled, but missing password");
 			rc = -1;
 		}
+
+		if (cfg->relax_encryption) {
+			nvnc_log(NVNC_LOG_WARNING, "Authentication enabled with relaxed encryption; not all sessions are guaranteed to be encrypted");
+		}
+
 		return rc;
 	}
 
