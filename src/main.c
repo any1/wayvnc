@@ -119,6 +119,8 @@ struct wayvnc {
 
 	struct ctl* ctl;
 	bool is_initializing;
+
+	bool start_detached;
 };
 
 struct wayvnc_client {
@@ -456,14 +458,21 @@ void on_wayland_event(void* obj)
 	if (wl_display_read_events(self->display) < 0) {
 		if (errno == EPIPE || errno == ECONNRESET) {
 			nvnc_log(NVNC_LOG_ERROR, "Compositor has gone away. Exiting...");
-			wayvnc_exit(self);
+			if (self->start_detached)
+				wayland_detach(self);
+			else
+				wayvnc_exit(self);
+			return;
 		} else {
 			nvnc_log(NVNC_LOG_ERROR, "Failed to read wayland events: %m");
 		}
 	}
 
-	if (wl_display_dispatch_pending(self->display) < 0)
+	if (wl_display_dispatch_pending(self->display) < 0) {
 		nvnc_log(NVNC_LOG_ERROR, "Failed to dispatch pending");
+		wayland_detach(self);
+		// TODO: Re-attach
+	}
 }
 
 static int init_wayland(struct wayvnc* self, const char* display)
@@ -1692,6 +1701,8 @@ int main(int argc, char* argv[])
 	use_transient_seat = !!option_parser_get_value(&option_parser,
 				"transient-seat");
 	start_detached = !!option_parser_get_value(&option_parser, "detached");
+
+	self.start_detached = start_detached;
 
 	keyboard_options = option_parser_get_value(&option_parser, "keyboard");
 	if (keyboard_options)
