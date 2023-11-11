@@ -298,5 +298,8 @@ void screencopy_destroy(struct screencopy* self)
 	if (self->front)
 		wv_buffer_pool_release(self->pool, self->front);
 
+	self->back = NULL;
+	self->front = NULL;
+
 	wv_buffer_pool_destroy(self->pool);
 }

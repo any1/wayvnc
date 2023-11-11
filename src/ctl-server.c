@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2022-2023 Jim Ramsay
+ * Copyright (c) 2023 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -44,6 +45,11 @@ enum send_priority {
 
 struct cmd {
 	enum cmd_type type;
+};
+
+struct cmd_attach {
+	struct cmd cmd;
+	char display[128];
 };
 
 struct cmd_help {
@@ -103,6 +109,19 @@ static void cmd_response_destroy(struct cmd_response* self)
 {
 	json_decref(self->data);
 	free(self);
+}
+
+static struct cmd_attach* cmd_attach_new(json_t* args,
+		struct jsonipc_error* err)
+{
+	const char* display = NULL;
+	if (json_unpack(args, "{s:s}", "display", &display) == -1) {
+		jsonipc_error_printf(err, EINVAL, "Missing display name");
+		return NULL;
+	}
+	struct cmd_attach* cmd = calloc(1, sizeof(*cmd));
+	strlcpy(cmd->display, display, sizeof(cmd->display));
+	return cmd;
 }
 
 static struct cmd_help* cmd_help_new(json_t* args,
@@ -185,6 +204,9 @@ static struct cmd* parse_command(struct jsonipc_request* ipc,
 	enum cmd_type cmd_type = ctl_command_parse_name(ipc->method);
 	struct cmd* cmd = NULL;
 	switch (cmd_type) {
+	case CMD_ATTACH:
+		cmd = (struct cmd*)cmd_attach_new(ipc->params, err);
+		break;
 	case CMD_HELP:
 		cmd = (struct cmd*)cmd_help_new(ipc->params, err);
 		break;
@@ -194,6 +216,7 @@ static struct cmd* parse_command(struct jsonipc_request* ipc,
 	case CMD_CLIENT_DISCONNECT:
 		cmd = (struct cmd*)cmd_disconnect_client_new(ipc->params, err);
 		break;
+	case CMD_DETACH:
 	case CMD_VERSION:
 	case CMD_EVENT_RECEIVE:
 	case CMD_CLIENT_LIST:
@@ -407,6 +430,11 @@ static struct cmd_response* ctl_server_dispatch_cmd(struct ctl* self,
 	nvnc_log(NVNC_LOG_INFO, "Dispatching control client command '%s'", info->name);
 	struct cmd_response* response = NULL;
 	switch (cmd->type) {
+	case CMD_ATTACH:{
+		struct cmd_attach* c = (struct cmd_attach*)cmd;
+		response = self->actions.on_attach(self, c->display);
+		break;
+		}
 	case CMD_HELP:{
 		struct cmd_help* c = (struct cmd_help*)cmd;
 		response = generate_help_object(c->id, c->id_is_command);
@@ -423,6 +451,9 @@ static struct cmd_response* ctl_server_dispatch_cmd(struct ctl* self,
 		response = self->actions.on_disconnect_client(self, c->id);
 		break;
 		}
+	case CMD_DETACH:
+		response = self->actions.on_detach(self);
+		break;
 	case CMD_WAYVNC_EXIT:
 		response = self->actions.on_wayvnc_exit(self);
 		break;

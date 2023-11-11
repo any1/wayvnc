@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2022-2023 Jim Ramsay
+ * Copyright (c) 2023 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -20,6 +21,19 @@
 #include <string.h>
 
 struct cmd_info ctl_command_list[] = {
+	[CMD_ATTACH] = { "attach",
+		"Attach to a running wayland compositor",
+		{
+			{ "display", "Display name", "<name>",
+				.positional = true },
+			{},
+		}
+
+	},
+	[CMD_DETACH] = { "detach",
+		"Detach from the wayland compositor",
+		{{}},
+	},
 	[CMD_HELP] = { "help",
 		"List all commands and events, or show usage of a specific command or event",
 		{

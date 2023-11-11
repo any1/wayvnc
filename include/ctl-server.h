@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2022 Jim Ramsay
+ * Copyright (c) 2023 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -41,6 +42,8 @@ struct ctl_server_output {
 
 struct ctl_server_actions {
 	void* userdata;
+	struct cmd_response* (*on_attach)(struct ctl*, const char* display);
+	struct cmd_response* (*on_detach)(struct ctl*);
 	struct cmd_response* (*on_output_cycle)(struct ctl*,
 			enum output_cycle_direction direction);
 	struct cmd_response* (*on_output_switch)(struct ctl*,

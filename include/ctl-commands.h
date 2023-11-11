@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2022-2023 Jim Ramsay
+ * Copyright (c) 2023 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -19,6 +20,8 @@
 #include <stdbool.h>
 
 enum cmd_type {
+	CMD_ATTACH,
+	CMD_DETACH,
 	CMD_HELP,
 	CMD_EVENT_RECEIVE,
 	CMD_CLIENT_LIST,
