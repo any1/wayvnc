@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2022-2023 Jim Ramsay
+ * Copyright (c) 2023 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -403,6 +404,8 @@ static void pretty_print(json_t* data,
 	case CMD_OUTPUT_LIST:
 		pretty_output_list(data);
 		break;
+	case CMD_ATTACH:
+	case CMD_DETACH:
 	case CMD_CLIENT_DISCONNECT:
 	case CMD_OUTPUT_SET:
 	case CMD_OUTPUT_CYCLE:
