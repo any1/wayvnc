@@ -440,6 +440,8 @@ static void wayland_detach(struct wayvnc* self)
 
 	wl_display_disconnect(self->display);
 	self->display = NULL;
+
+	ctl_server_event_detached(self->ctl);
 }
 
 void wayvnc_destroy(struct wayvnc* self)
