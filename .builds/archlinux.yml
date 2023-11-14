@@ -14,6 +14,7 @@ packages:
   - sway
   - jq
   - lsof
+  - python-pycryptodomex # needed by vncdotool
   - vncdotool
 
 sources:
