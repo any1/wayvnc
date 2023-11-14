@@ -973,3 +973,8 @@ void ctl_server_event_capture_changed(struct ctl* self,
 	ctl_server_enqueue_event(self, EVT_CAPTURE_CHANGED,
 			json_pack("{s:s}", "output", captured_output));
 }
+
+void ctl_server_event_detached(struct ctl* self)
+{
+	ctl_server_enqueue_event(self, EVT_DETACHED, json_object());
+}

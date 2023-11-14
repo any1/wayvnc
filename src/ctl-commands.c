@@ -124,6 +124,10 @@ struct cmd_info ctl_event_list[] = {
 		"Sent by waynvc when a VNC client disconnects",
 		{ CLIENT_EVENT_PARAMS("not including") }
 	},
+	[EVT_DETACHED] = {"detached",
+		"Sent after detaching from compositor",
+		{}
+	},
 };
 
 enum cmd_type ctl_command_parse_name(const char* name)
