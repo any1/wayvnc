@@ -150,6 +150,7 @@ static void client_detach_wayland(struct wayvnc_client* self);
 static int blank_screen(struct wayvnc* self);
 static bool wayland_attach(struct wayvnc* self, const char* display,
 		const char* output);
+static void wayland_detach(struct wayvnc* self);
 
 struct wl_shm* wl_shm = NULL;
 struct zwp_linux_dmabuf_v1* zwp_linux_dmabuf = NULL;
@@ -309,8 +310,13 @@ static void registry_remove(void* data, struct wl_registry* registry,
 		output_destroy(out);
 
 		if (out == self->selected_output) {
-			nvnc_log(NVNC_LOG_ERROR, "No fallback outputs left. Exiting...");
-			wayvnc_exit(self);
+			if (self->start_detached) {
+				nvnc_log(NVNC_LOG_WARNING, "No fallback outputs left. Detaching...");
+				wayland_detach(self);
+			} else {
+				nvnc_log(NVNC_LOG_ERROR, "No fallback outputs left. Exiting...");
+				wayvnc_exit(self);
+			}
 		}
 
 		return;
