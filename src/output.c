@@ -219,8 +219,9 @@ void output_name(void* data, struct zxdg_output_v1* xdg_output,
 	struct output* self = data;
 
 	strlcpy(self->name, name, sizeof(self->name));
-	self->is_headless = strncmp(
-		name, "HEADLESS-", strlen("HEADLESS-")) == 0;
+	self->is_headless =
+		(strncmp(name, "HEADLESS-", strlen("HEADLESS-")) == 0) ||
+		(strncmp(name, "NOOP-", strlen("NOOP-")) == 0);
 
 	nvnc_trace("Output %u name: %s, headless: %s", self->id, self->name,
 		self->is_headless ? "yes" : "no");
