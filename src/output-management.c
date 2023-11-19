@@ -256,6 +256,13 @@ bool wlr_output_manager_resize_output(struct output* output,
 			nvnc_trace("reconfiguring output %s", head->name);
 			zwlr_output_configuration_head_v1_set_custom_mode(
 				config_head, width, height, refresh_rate);
+
+			/* It doesn't make any sense to have rotation on a
+			 * headless display, so we set the transform here to be
+			 * sure.
+			 */
+			zwlr_output_configuration_head_v1_set_transform(
+					config_head, WL_OUTPUT_TRANSFORM_NORMAL);
 		}
 	}
 
