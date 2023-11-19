@@ -74,6 +74,8 @@
 
 #define MAYBE_UNUSED __attribute__((unused))
 
+struct wayvnc_client;
+
 enum socket_type {
 	SOCKET_TYPE_TCP = 0,
 	SOCKET_TYPE_UNIX,
@@ -123,6 +125,8 @@ struct wayvnc {
 	bool is_initializing;
 
 	bool start_detached;
+
+	struct wayvnc_client* master_layout_client;
 };
 
 struct wayvnc_client {
@@ -762,6 +766,7 @@ static bool on_client_resize(struct nvnc_client* nvnc_client,
 		const struct nvnc_desktop_layout* layout)
 {
 	struct wayvnc_client* client = nvnc_get_userdata(nvnc_client);
+	struct wayvnc* self = client->server;
 
 	uint16_t width = nvnc_desktop_layout_get_width(layout);
 	uint16_t height = nvnc_desktop_layout_get_height(layout);
@@ -769,6 +774,11 @@ static bool on_client_resize(struct nvnc_client* nvnc_client,
 
 	if (output == NULL)
 		return false;
+
+	if (self->master_layout_client && self->master_layout_client != client)
+		return false;
+
+	self->master_layout_client = client;
 
 	nvnc_log(NVNC_LOG_DEBUG,
 		"Client resolution changed: %ux%u, capturing output %s which is headless: %s",
@@ -1245,6 +1255,9 @@ static void client_destroy(void* obj)
 	struct wayvnc_client* self = obj;
 	struct nvnc* nvnc = nvnc_client_get_server(self->nvnc_client);
 	struct wayvnc* wayvnc = nvnc_get_userdata(nvnc);
+
+	if (self == wayvnc->master_layout_client)
+		wayvnc->master_layout_client = NULL;
 
 	if (self->transient_seat)
 		ext_transient_seat_v1_destroy(self->transient_seat);
