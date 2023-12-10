@@ -1,9 +1,11 @@
 Source: wayvnc
 Priority: optional
 Section: admin
-Maintainer: Johannes Schauer Marin Rodrigues <josch@debian.org>
+Maintainer: Andri Yngvason <andri@yngvason.is>
 Uploaders:
  Boyuan Yang <byang@debian.org>,
+ Johannes Schauer Marin Rodrigues <josch@debian.org>,
+ Simon Long <simon@raspberrypi.com>,
 Standards-Version: 4.6.2
 Build-Depends:
  debhelper-compat (= 13),
@@ -23,8 +25,8 @@ Build-Depends:
  gnutls-dev,
 Rules-Requires-Root: no
 Homepage: https://github.com/any1/wayvnc
-Vcs-Git: https://salsa.debian.org/debian/wayvnc.git
-Vcs-Browser: https://salsa.debian.org/debian/wayvnc
+Vcs-Git: https://github.com/any1/wayvnc.git
+Vcs-Browser: https://github.com/any1/wayvnc
 
 Package: wayvnc
 Architecture: any

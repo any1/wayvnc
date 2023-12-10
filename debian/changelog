@@ -1,3 +1,9 @@
+wayvnc (0.8.0-rc0-1) bookworm; urgency=medium
+
+  * Upgrade to v0.8-rc0
+
+ -- Andri Yngvason <andri@yngvason.is>  Sun, 10 Dec 2023 20:00:00 +0000
+
 wayvnc (0.7.1-1~bpo12+rpt2) bookworm; urgency=medium
 
   * Add unreleased 0.7.2 changes
