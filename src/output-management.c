@@ -211,7 +211,18 @@ void wlr_output_manager_destroy(void)
 	if (!wlr_output_manager)
 		return;
 
+	struct output_manager_head* head;
+	struct output_manager_head* tmp;
+	wl_list_for_each_safe(head, tmp, &heads, link) {
+		wl_list_remove(&head->link);
+		free(head->name);
+		free(head);
+	}
+
 	zwlr_output_manager_v1_destroy(wlr_output_manager);
+	wlr_output_manager = NULL;
+
+	last_config_serial = 0;
 }
 
 bool wlr_output_manager_resize_output(struct output* output,
