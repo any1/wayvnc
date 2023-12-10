@@ -87,6 +87,7 @@ struct wayvnc {
 
 	struct wl_display* display;
 	struct wl_registry* registry;
+	struct aml_handler* wl_handler;
 	struct wl_list outputs;
 	struct wl_list seats;
 	struct cfg cfg;
@@ -392,6 +393,10 @@ static void wayland_detach(struct wayvnc* self)
 	if (!self->display)
 		return;
 
+	aml_stop(aml_get_default(), self->wl_handler);
+	aml_unref(self->wl_handler);
+	self->wl_handler = NULL;
+
 	// Screen blanking is required to release wl_shm of linux_dmabuf.
 	if (self->nvnc)
 		blank_screen(self);
@@ -561,21 +566,21 @@ static int init_wayland(struct wayvnc* self, const char* display)
 	self->screencopy.on_done = on_capture_done;
 	self->screencopy.userdata = self;
 
-	struct aml_handler* wl_handler;
-	wl_handler = aml_handler_new(wl_display_get_fd(self->display),
+	self->wl_handler = aml_handler_new(wl_display_get_fd(self->display),
 	                             on_wayland_event, self, NULL);
-	if (!wl_handler)
+	if (!self->wl_handler)
 		goto failure;
 
-	int rc = aml_start(aml_get_default(), wl_handler);
-	aml_unref(wl_handler);
+	int rc = aml_start(aml_get_default(), self->wl_handler);
 	if (rc < 0)
-		goto failure;
+		goto handler_failure;
 
 	return 0;
 
 failure:
 	wl_display_disconnect(self->display);
+handler_failure:
+	aml_unref(self->wl_handler);
 	return -1;
 }
 
