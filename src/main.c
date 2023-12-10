@@ -469,7 +469,8 @@ static void wayland_detach(struct wayvnc* self)
 	wl_display_disconnect(self->display);
 	self->display = NULL;
 
-	ctl_server_event_detached(self->ctl);
+	if (self->ctl)
+		ctl_server_event_detached(self->ctl);
 }
 
 void wayvnc_destroy(struct wayvnc* self)
@@ -1274,14 +1275,18 @@ static void client_destroy(void* obj)
 	nvnc_log(NVNC_LOG_DEBUG, "Client disconnected, new client count: %d",
 			wayvnc->nr_clients);
 
-	struct ctl_server_client_info info = {
-		.id = self->id,
-		.hostname = nvnc_client_get_hostname(self->nvnc_client),
-		.username = nvnc_client_get_auth_username(self->nvnc_client),
-		.seat = self->seat ? self->seat->name : NULL,
-	};
+	if (wayvnc->ctl) {
+		struct ctl_server_client_info info = {
+			.id = self->id,
+			.hostname = nvnc_client_get_hostname(self->nvnc_client),
+			.username = nvnc_client_get_auth_username(
+					self->nvnc_client),
+			.seat = self->seat ? self->seat->name : NULL,
+		};
 
-	ctl_server_event_disconnected(wayvnc->ctl, &info, wayvnc->nr_clients);
+		ctl_server_event_disconnected(wayvnc->ctl, &info,
+				wayvnc->nr_clients);
+	}
 
 	if (wayvnc->nr_clients == 0 && wayvnc->display) {
 		nvnc_log(NVNC_LOG_INFO, "Stopping screen capture");
@@ -1938,6 +1943,7 @@ int main(int argc, char* argv[])
 		screencopy_stop(&self.screencopy);
 
 	ctl_server_destroy(self.ctl);
+	self.ctl = NULL;
 
 	nvnc_display_unref(self.nvnc_display);
 	nvnc_close(self.nvnc);
