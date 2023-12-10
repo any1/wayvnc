@@ -30,7 +30,7 @@ static int pam_return_pwd(int num_msg, const struct pam_message** msgm,
                           struct pam_response** response, void* appdata_ptr)
 {
 	struct credentials* cred = appdata_ptr;
-	struct pam_response* resp = calloc(sizeof(*response), num_msg);
+	struct pam_response* resp = calloc(num_msg, sizeof(*resp));
 	for (int i = 0; i < num_msg; i++) {
 		resp[i].resp_retcode = PAM_SUCCESS;
 		switch(msgm[i]->msg_style) {
