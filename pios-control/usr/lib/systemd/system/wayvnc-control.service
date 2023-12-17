@@ -1,0 +1,13 @@
+[Unit]
+Description=VNC Control Service
+After=wayvnc.service
+BindsTo=wayvnc.service
+ConditionPathExists=/etc/wayvnc/config
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/wayvnc-control.py
+Restart=always
+
+[Install]
+WantedBy=wayvnc.service

@@ -1,0 +1,14 @@
+#!/bin/sh
+
+set -e
+
+case "$1" in
+	remove)
+		systemctl --system daemon-reload >/dev/null || true
+	;;
+	purge)
+		rm -rf /etc/wayvnc
+	;;
+	*)
+	;;
+esac
