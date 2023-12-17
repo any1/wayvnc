@@ -1,0 +1,9 @@
+[Unit]
+Description=WayVNC Key Generation
+ConditionPathExists=|!/etc/wayvnc/rsa_key.pem
+ConditionPathExists=|!/etc/wayvnc/tls_key.pem
+ConditionPathExists=|!/etc/wayvnc/tls_cert.pem
+
+[Service]
+ExecStart=/usr/sbin/wayvnc-generate-keys.sh
+Type=oneshot
