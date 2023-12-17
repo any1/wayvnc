@@ -1,0 +1,31 @@
+#!/bin/sh
+
+set -e
+
+configure_wayvnc()
+{
+	systemd-sysusers ${DPKG_ROOT:+--root="$DPKG_ROOT"} vnc.conf
+	systemctl --system daemon-reload >/dev/null || true
+	deb-systemd-invoke enable 'wayvnc-control.service' >/dev/null || true
+
+	# If wayvnc was previously configured using xdg-autostart, we want to
+	# enable it; otherwise, leave it disabled.
+	if [ -e /etc/xdg/autostart/wayvnc.desktop ]; then
+		rm -f /etc/xdg/autostart/wayvnc.desktop
+		deb-systemd-invoke enable 'wayvnc.service' >/dev/null || true
+	fi
+
+	deb-systemd-invoke try-restart 'wayvnc.service' >/dev/null || true
+}
+
+case "$1" in
+	configure)
+		configure_wayvnc
+	;;
+	abort-upgrade|abort-remove|abort-deconfigure)
+	;;
+	*)
+		echo "postinstall called with unknown argument \`$1'" >&2
+		exit 1
+	;;
+esac

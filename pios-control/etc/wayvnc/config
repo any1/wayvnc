@@ -1,0 +1,7 @@
+use_relative_paths=true
+address=::
+enable_auth=true
+enable_pam=true
+private_key_file=tls_key.pem
+certificate_file=tls_cert.pem
+rsa_private_key_file=rsa_key.pem
