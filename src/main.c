@@ -1558,16 +1558,42 @@ void switch_to_prev_output(struct wayvnc* self)
 	switch_to_output(self, prev);
 }
 
+static char intercepted_error[256];
+
+static void intercept_cmd_error(const struct nvnc_log_data* meta,
+		const char* message)
+{
+	if (meta->level != NVNC_LOG_ERROR) {
+		nvnc_default_logger(meta, message);
+		return;
+	}
+
+	struct nvnc_log_data meta_override = *meta;
+	meta_override.level = NVNC_LOG_DEBUG;
+	nvnc_default_logger(&meta_override, message);
+
+	size_t len = strlen(intercepted_error);
+	if (len != 0 && len < sizeof(intercepted_error) - 2)
+		intercepted_error[len++] = '\n';
+
+	strlcpy(intercepted_error + len, message,
+			sizeof(intercepted_error) - len);
+}
+
 static struct cmd_response* on_attach(struct ctl* ctl, const char* display)
 {
 	struct wayvnc* self = ctl_server_userdata(ctl);
 	assert(self);
 
-	// TODO: Add optional output argument
-	if (!wayland_attach(self, display, NULL))
-		return cmd_failed("Failed to attach to %s", display);
+	memset(intercepted_error, 0, sizeof(intercepted_error));
+	nvnc_set_log_fn_thread_local(intercept_cmd_error);
 
-	return cmd_ok();
+	// TODO: Add optional output argument
+	bool ok = wayland_attach(self, display, NULL);
+
+	nvnc_set_log_fn_thread_local(NULL);
+
+	return ok ? cmd_ok() : cmd_failed("%s", intercepted_error);
 }
 
 static bool wayland_attach(struct wayvnc* self, const char* display,
