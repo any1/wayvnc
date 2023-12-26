@@ -580,8 +580,11 @@ static int init_wayland(struct wayvnc* self, const char* display)
 
 failure:
 	wl_display_disconnect(self->display);
+	self->display = NULL;
 handler_failure:
-	aml_unref(self->wl_handler);
+	if (self->wl_handler)
+		aml_unref(self->wl_handler);
+	self->wl_handler = NULL;
 	return -1;
 }
 
