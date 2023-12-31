@@ -636,17 +636,24 @@ static struct ctl_server_client *client_next(struct ctl* ctl,
 		(struct ctl_server_client*)nvnc_client_first(self->nvnc);
 }
 
+static void compose_client_info(const struct wayvnc_client* client,
+		struct ctl_server_client_info* info)
+{
+	info->id = client->id;
+	socklen_t addrlen = sizeof(info->address);
+	nvnc_client_get_address(client->nvnc_client,
+			(struct sockaddr*)&info->address, &addrlen);
+	info->username = nvnc_client_get_auth_username(client->nvnc_client);
+	info->seat = client->seat ? client->seat->name : NULL;
+}
+
 static void client_info(const struct ctl_server_client* client_handle,
 		struct ctl_server_client_info* info)
 {
 	const struct nvnc_client *vnc_client =
 		(const struct nvnc_client*)client_handle;
 	const struct wayvnc_client *client = nvnc_get_userdata(vnc_client);
-
-	info->id = client->id;
-	info->hostname = nvnc_client_get_hostname(vnc_client);
-	info->username = nvnc_client_get_auth_username(vnc_client);
-	info->seat = client->seat ? client->seat->name : NULL;
+	compose_client_info(client, info);
 }
 
 static int get_output_list(struct ctl* ctl,
@@ -1279,13 +1286,8 @@ static void client_destroy(void* obj)
 			wayvnc->nr_clients);
 
 	if (wayvnc->ctl) {
-		struct ctl_server_client_info info = {
-			.id = self->id,
-			.hostname = nvnc_client_get_hostname(self->nvnc_client),
-			.username = nvnc_client_get_auth_username(
-					self->nvnc_client),
-			.seat = self->seat ? self->seat->name : NULL,
-		};
+		struct ctl_server_client_info info = {};
+		compose_client_info(self, &info);
 
 		ctl_server_event_disconnected(wayvnc->ctl, &info,
 				wayvnc->nr_clients);
@@ -1335,12 +1337,8 @@ static void on_nvnc_client_new(struct nvnc_client* client)
 	nvnc_log(NVNC_LOG_DEBUG, "Client connected, new client count: %d",
 			self->nr_clients);
 
-	struct ctl_server_client_info info = {
-		.id = wayvnc_client->id,
-		.hostname = nvnc_client_get_hostname(client),
-		.username = nvnc_client_get_auth_username(client),
-		.seat = wayvnc_client->seat ? wayvnc_client->seat->name : NULL,
-	};
+	struct ctl_server_client_info info = {};
+	compose_client_info(wayvnc_client, &info);
 
 	ctl_server_event_connected(self->ctl, &info, self->nr_clients);
 }

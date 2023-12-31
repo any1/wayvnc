@@ -27,6 +27,7 @@
 #include <neatvnc.h>
 #include <aml.h>
 #include <jansson.h>
+#include <arpa/inet.h>
 
 #include "output.h"
 #include "ctl-commands.h"
@@ -362,6 +363,25 @@ static struct ctl_server_client* ctl_server_client_next(struct ctl* self,
 	return self->actions.client_next(self, prev);
 }
 
+static int sockaddr_to_string(char* dst, size_t sz, const struct sockaddr* addr)
+{
+	struct sockaddr_in* sa_in = (struct sockaddr_in*)addr;
+	struct sockaddr_in6* sa_in6 = (struct sockaddr_in6*)addr;
+
+	switch (addr->sa_family) {
+	case AF_INET:
+		inet_ntop(addr->sa_family, &sa_in->sin_addr, dst, sz);
+		return 0;
+	case AF_INET6:
+		inet_ntop(addr->sa_family, &sa_in6->sin6_addr, dst, sz);
+		return 0;
+	}
+	nvnc_log(NVNC_LOG_DEBUG,
+			"Don't know how to convert sa_family %d to string",
+			addr->sa_family);
+	return -1;
+}
+
 static void ctl_server_client_get_info(struct ctl* self,
 		const struct ctl_server_client* client,
 		struct ctl_server_client_info* info)
@@ -384,9 +404,12 @@ static struct cmd_response* generate_vnc_client_list(struct ctl* self)
 		snprintf(id_str, sizeof(id_str), "%d", info.id);
 		json_t* packed = json_pack("{s:s}", "id", id_str);
 
-		if (info.hostname)
-			json_object_set_new(packed, "hostname",
-					json_string(info.hostname));
+		char address_string[256];
+		if (sockaddr_to_string(address_string, sizeof(address_string),
+					&info.address) == 0) {
+			json_object_set_new(packed, "address",
+					json_string(address_string));
+		}
 
 		if (info.username)
 			json_object_set_new(packed, "username",
@@ -897,9 +920,13 @@ json_t* pack_connection_event_params(
 	char id_str[64];
 	snprintf(id_str, sizeof(id_str), "%d", info->id);
 
+	char address_string[256];
+	bool have_addr = sockaddr_to_string(address_string,
+			sizeof(address_string), &info->address) == 0;
+
 	return json_pack("{s:s, s:s?, s:s?, s:s?, s:i}",
 			"id", id_str,
-			"hostname", info->hostname,
+			"address", have_addr ? address_string : NULL,
 			"username", info->username,
 			"seat", info->seat,
 			"connection_count", new_connection_count);

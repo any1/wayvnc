@@ -269,8 +269,8 @@ Parameters:
 *connection_count=...*
 	The total number of connected VNC clients including this one.
 
-*hostname=...*
-	The hostname or IP of this client. May be null.
+*address=...*
+	The IP address of this client. May be null.
 
 *username=...*
 	The username used to authenticate this client. May be null.
@@ -288,8 +288,8 @@ Parameters:
 *connection_count=...*
 	The total number of connected VNC clients not including this one.
 
-*hostname=...*
-	The hostname or IP of this client. May be null.
+*address=...*
+	The IP address of this client. May be null.
 
 *username=...*
 	The username used to authenticate this client. May be null.
