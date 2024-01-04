@@ -57,7 +57,7 @@ wayland_client = dependency('wayland-client')
 jansson = dependency('jansson')
 
 aml_version = ['>=0.3.0', '<0.4.0']
-neatvnc_version = ['>=0.7.0', '<0.9.0']
+neatvnc_version = ['>=0.8', '<0.9.0']
 
 neatvnc_project = subproject(
 	'neatvnc',

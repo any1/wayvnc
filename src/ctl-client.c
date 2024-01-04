@@ -354,17 +354,17 @@ static void pretty_client_list(json_t* data)
 	json_t* value;
 	json_array_foreach(data, i, value) {
 		char* id = NULL;
-		char* hostname = NULL;
+		char* address = NULL;
 		char* username = NULL;
 
-		json_unpack(value, "{s:s, s?s, s?s}", "id", &id, "hostname",
-				&hostname, "username", &username);
+		json_unpack(value, "{s:s, s?s, s?s}", "id", &id, "address",
+				&address, "username", &username);
 		printf("  %s: ", id);
 
 		if (username)
 			printf("%s@", username);
 
-		printf("%s\n", hostname ? hostname : "<unknown>");
+		printf("%s\n", address ? address : "<unknown>");
 	}
 }
 

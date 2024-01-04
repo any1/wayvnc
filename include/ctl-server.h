@@ -19,6 +19,8 @@
 
 #include "output.h"
 
+#include <sys/socket.h>
+
 struct ctl;
 struct cmd_response;
 
@@ -26,9 +28,12 @@ struct ctl_server_client;
 
 struct ctl_server_client_info {
 	int id;
-	const char *hostname;
-	const char *username;
-	const char *seat;
+	union {
+		struct sockaddr_storage address_storage;
+		struct sockaddr address;
+	};
+	const char* username;
+	const char* seat;
 };
 
 struct ctl_server_output {

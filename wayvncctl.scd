@@ -63,8 +63,8 @@ the end, for ease in scripting:
 
 ```
 $ wayvncctl --json event-receive
-{"method":"client-connected","params":{"id":"0x10ef670","hostname":null,"username":null,"connection_count":1}}
-{"method":"client-disconnected","params":{"id":"0x10ef670","hostname":null,"username":null,"connection_count":0}}
+{"method":"client-connected","params":{"id":"0x10ef670","address":null,"username":null,"connection_count":1}}
+{"method":"client-disconnected","params":{"id":"0x10ef670","address":null,"username":null,"connection_count":0}}
 ```
 
 The default human-readible output is a multi-line yaml-like format, with two
@@ -75,12 +75,12 @@ $ wayvncctl event-receive
 
 client-connected:
   id: 0x10ef670
-  hostname: 192.168.1.18
+  address: 192.168.1.18
   connection_count: 1
 
 client-disconnected:
   id: 0x10ef670
-  hostname: 192.168.1.18
+  address: 192.168.1.18
   connection_count: 0
 
 ```
