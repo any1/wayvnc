@@ -1,7 +1,7 @@
 project(
 	'wayvnc',
 	'c',
-	version: '0.8-rc0',
+	version: '0.8.0',
 	license: 'ISC',
 	default_options: [
 		'c_std=gnu11',
