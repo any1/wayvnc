@@ -19,10 +19,9 @@ generate_tls_creds()
 	KEY_FILE="$WAYVNC_CONFIG_PATH/tls_key.pem"
 	CERT_FILE="$WAYVNC_CONFIG_PATH/tls_cert.pem"
 	HOSTNAME=$(cat /etc/hostname)
-	IP=$(ip a | awk '$1=="inet" && $2 != "127.0.0.1/8" {split($2, a, "/"); print a[1]}')
 	openssl req -x509 -newkey rsa:4096 -sha256 -days 3650 -nodes \
 		-keyout "$KEY_FILE" -out "$CERT_FILE" -subj /CN=$HOSTNAME \
-		-addext subjectAltName=DNS:localhost,DNS:$HOSTNAME,IP:$IP 2>/dev/null
+		-addext subjectAltName=DNS:localhost,DNS:$HOSTNAME,DNS:$HOSTNAME.local 2>/dev/null
 	chown root:vnc "$KEY_FILE" "$CERT_FILE"
 	chmod 640 "$KEY_FILE" "$CERT_FILE"
 	echo "Done"
