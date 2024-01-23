@@ -1,3 +1,10 @@
+wayvnc (0.8.0-rc0-2) bookworm; urgency=medium
+
+  * Removed IP and added local domain to TLS
+  * Using ECDSA instead of RSA for TLS
+
+ -- Andri Yngvason <andri@yngvason.is>  Tue, 23 Jan 2024 23:00:00 +0000
+
 wayvnc (0.8.0-rc0-1) bookworm; urgency=medium
 
   * Upgrade to v0.8-rc0
