@@ -1005,3 +1005,15 @@ void ctl_server_event_detached(struct ctl* self)
 {
 	ctl_server_enqueue_event(self, EVT_DETACHED, json_object());
 }
+
+void ctl_server_event_output_added(struct ctl* self, const char* name)
+{
+	ctl_server_enqueue_event(self, EVT_OUTPUT_ADDED,
+			json_pack("{s:s}", "name", name));
+}
+
+void ctl_server_event_output_removed(struct ctl* self, const char* name)
+{
+	ctl_server_enqueue_event(self, EVT_OUTPUT_REMOVED,
+			json_pack("{s:s}", "name", name));
+}

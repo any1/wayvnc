@@ -89,3 +89,6 @@ void ctl_server_event_capture_changed(struct ctl*,
 		const char* captured_output);
 
 void ctl_server_event_detached(struct ctl*);
+
+void ctl_server_event_output_added(struct ctl*, const char* name);
+void ctl_server_event_output_removed(struct ctl*, const char* name);
