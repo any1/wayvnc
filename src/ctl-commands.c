@@ -98,8 +98,8 @@ struct cmd_info ctl_command_list[] = {
 	{ "connection_count", \
 		"The total number of connected VNC clients " including " this one.", \
 		"<integer>" }, \
-	{ "hostname", \
-		"The hostname or IP address of this client (may be null)", \
+	{ "address", \
+		"The IP address of this client (may be null)", \
 		"<name|ip>" }, \
 	{ "username", \
 		"The username used to authentice this client (may be null).", \

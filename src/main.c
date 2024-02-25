@@ -580,8 +580,11 @@ static int init_wayland(struct wayvnc* self, const char* display)
 
 failure:
 	wl_display_disconnect(self->display);
+	self->display = NULL;
 handler_failure:
-	aml_unref(self->wl_handler);
+	if (self->wl_handler)
+		aml_unref(self->wl_handler);
+	self->wl_handler = NULL;
 	return -1;
 }
 
@@ -633,17 +636,24 @@ static struct ctl_server_client *client_next(struct ctl* ctl,
 		(struct ctl_server_client*)nvnc_client_first(self->nvnc);
 }
 
+static void compose_client_info(const struct wayvnc_client* client,
+		struct ctl_server_client_info* info)
+{
+	info->id = client->id;
+	socklen_t addrlen = sizeof(info->address);
+	nvnc_client_get_address(client->nvnc_client,
+			(struct sockaddr*)&info->address, &addrlen);
+	info->username = nvnc_client_get_auth_username(client->nvnc_client);
+	info->seat = client->seat ? client->seat->name : NULL;
+}
+
 static void client_info(const struct ctl_server_client* client_handle,
 		struct ctl_server_client_info* info)
 {
 	const struct nvnc_client *vnc_client =
 		(const struct nvnc_client*)client_handle;
 	const struct wayvnc_client *client = nvnc_get_userdata(vnc_client);
-
-	info->id = client->id;
-	info->hostname = nvnc_client_get_hostname(vnc_client);
-	info->username = nvnc_client_get_auth_username(vnc_client);
-	info->seat = client->seat ? client->seat->name : NULL;
+	compose_client_info(client, info);
 }
 
 static int get_output_list(struct ctl* ctl,
@@ -1276,13 +1286,8 @@ static void client_destroy(void* obj)
 			wayvnc->nr_clients);
 
 	if (wayvnc->ctl) {
-		struct ctl_server_client_info info = {
-			.id = self->id,
-			.hostname = nvnc_client_get_hostname(self->nvnc_client),
-			.username = nvnc_client_get_auth_username(
-					self->nvnc_client),
-			.seat = self->seat ? self->seat->name : NULL,
-		};
+		struct ctl_server_client_info info = {};
+		compose_client_info(self, &info);
 
 		ctl_server_event_disconnected(wayvnc->ctl, &info,
 				wayvnc->nr_clients);
@@ -1332,12 +1337,8 @@ static void on_nvnc_client_new(struct nvnc_client* client)
 	nvnc_log(NVNC_LOG_DEBUG, "Client connected, new client count: %d",
 			self->nr_clients);
 
-	struct ctl_server_client_info info = {
-		.id = wayvnc_client->id,
-		.hostname = nvnc_client_get_hostname(client),
-		.username = nvnc_client_get_auth_username(client),
-		.seat = wayvnc_client->seat ? wayvnc_client->seat->name : NULL,
-	};
+	struct ctl_server_client_info info = {};
+	compose_client_info(wayvnc_client, &info);
 
 	ctl_server_event_connected(self->ctl, &info, self->nr_clients);
 }
@@ -1558,16 +1559,42 @@ void switch_to_prev_output(struct wayvnc* self)
 	switch_to_output(self, prev);
 }
 
+static char intercepted_error[256];
+
+static void intercept_cmd_error(const struct nvnc_log_data* meta,
+		const char* message)
+{
+	if (meta->level != NVNC_LOG_ERROR) {
+		nvnc_default_logger(meta, message);
+		return;
+	}
+
+	struct nvnc_log_data meta_override = *meta;
+	meta_override.level = NVNC_LOG_DEBUG;
+	nvnc_default_logger(&meta_override, message);
+
+	size_t len = strlen(intercepted_error);
+	if (len != 0 && len < sizeof(intercepted_error) - 2)
+		intercepted_error[len++] = '\n';
+
+	strlcpy(intercepted_error + len, message,
+			sizeof(intercepted_error) - len);
+}
+
 static struct cmd_response* on_attach(struct ctl* ctl, const char* display)
 {
 	struct wayvnc* self = ctl_server_userdata(ctl);
 	assert(self);
 
-	// TODO: Add optional output argument
-	if (!wayland_attach(self, display, NULL))
-		return cmd_failed("Failed to attach to %s", display);
+	memset(intercepted_error, 0, sizeof(intercepted_error));
+	nvnc_set_log_fn_thread_local(intercept_cmd_error);
 
-	return cmd_ok();
+	// TODO: Add optional output argument
+	bool ok = wayland_attach(self, display, NULL);
+
+	nvnc_set_log_fn_thread_local(NULL);
+
+	return ok ? cmd_ok() : cmd_failed("%s", intercepted_error);
 }
 
 static bool wayland_attach(struct wayvnc* self, const char* display,
