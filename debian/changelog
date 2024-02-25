@@ -1,3 +1,11 @@
+wayvnc (0.8.0-rel-1) bookworm; urgency=medium
+
+  * Upgrade to v0.8.0
+  * The rel bit is there for sake of the new version being greater than the
+    previous one. Remove later.
+
+ -- Andri Yngvason <andri@yngvason.is>  Sun, 25 Feb 2024 13:00:00 +0000
+
 wayvnc (0.8.0-rc0-2) bookworm; urgency=medium
 
   * Removed IP and added local domain to TLS
