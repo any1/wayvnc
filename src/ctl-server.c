@@ -28,6 +28,7 @@
 #include <aml.h>
 #include <jansson.h>
 #include <arpa/inet.h>
+#include <netinet/in.h>
 
 #include "output.h"
 #include "ctl-commands.h"
