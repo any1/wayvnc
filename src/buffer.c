@@ -31,6 +31,7 @@
 #include "buffer.h"
 #include "pixels.h"
 #include "config.h"
+#include "util.h"
 
 #ifdef ENABLE_SCREENCOPY_DMABUF
 #include <gbm.h>
@@ -162,9 +163,14 @@ static struct gbm_bo* create_cma_gbm_bo(int width, int height, uint32_t fourcc)
 		nvnc_log(NVNC_LOG_PANIC, "Unsupported pixel format: %" PRIu32,
 				fourcc);
 	}
-	int stride = bpp * width;
 
-	int fd = linux_cma_alloc(stride * height);
+	/* TODO: Get alignment through feedback mechanism.
+	 * Buffer sizes are aligned on both axes by 16 and we'll do the same
+	 * in the encoder, but this requirement should come from the encoder.
+	 */
+	int stride = bpp * ALIGN_UP(width, 16);
+
+	int fd = linux_cma_alloc(stride * ALIGN_UP(height, 16));
 	if (fd < 0) {
 		return NULL;
 	}
