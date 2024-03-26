@@ -17,8 +17,15 @@ SELF_PID=$$
 	systemd-notify --ready --pid=$SELF_PID
 } &
 
-wayvnc --render-cursor \
-	--detached \
-	--gpu \
-	--config /etc/wayvnc/config \
-	--socket /tmp/wayvnc/wayvncctl.sock
+if raspi-config nonint is_pifive ; then
+	wayvnc --render-cursor \
+		--detached \
+		--config /etc/wayvnc/config \
+		--socket /tmp/wayvnc/wayvncctl.sock
+else
+	wayvnc --render-cursor \
+		--detached \
+		--gpu \
+		--config /etc/wayvnc/config \
+		--socket /tmp/wayvnc/wayvncctl.sock
+fi
