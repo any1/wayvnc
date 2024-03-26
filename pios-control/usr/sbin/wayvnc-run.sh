@@ -19,5 +19,6 @@ SELF_PID=$$
 
 wayvnc --render-cursor \
 	--detached \
+	--gpu \
 	--config /etc/wayvnc/config \
 	--socket /tmp/wayvnc/wayvncctl.sock
