@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 - 2021 Andri Yngvason
+ * Copyright (c) 2020 - 2024 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -31,9 +31,16 @@
 #include "buffer.h"
 #include "pixels.h"
 #include "config.h"
+#include "util.h"
 
 #ifdef ENABLE_SCREENCOPY_DMABUF
 #include <gbm.h>
+#include <sys/ioctl.h>
+#include <fcntl.h>
+#include <linux/dma-buf.h>
+#include <linux/dma-heap.h>
+
+#define LINUX_CMA_PATH "/dev/dma_heap/linux,cma"
 #endif
 
 extern struct wl_shm* wl_shm;
@@ -118,6 +125,79 @@ failure:
 }
 
 #ifdef ENABLE_SCREENCOPY_DMABUF
+static bool have_linux_cma(void)
+{
+	return access(LINUX_CMA_PATH, R_OK | W_OK) == 0;
+}
+
+static int linux_cma_alloc(size_t size)
+{
+	int fd = open(LINUX_CMA_PATH, O_RDWR | O_CLOEXEC, 0);
+	if (fd < 0) {
+		nvnc_log(NVNC_LOG_ERROR, "Failed to open CMA device: %m");
+		return -1;
+	}
+
+	struct dma_heap_allocation_data data = {
+		.len = size,
+		.fd_flags = O_CLOEXEC | O_RDWR,
+	};
+
+	int r = ioctl(fd, DMA_HEAP_IOCTL_ALLOC, &data);
+	if (r < 0) {
+		nvnc_log(NVNC_LOG_ERROR, "Failed to allocate CMA buffer: %m");
+		return -1;
+	}
+	close(fd);
+
+        return data.fd;
+}
+
+// Some devices (mostly ARM SBCs) need CMA for hardware encoders.
+static struct gbm_bo* create_cma_gbm_bo(int width, int height, uint32_t fourcc)
+{
+	assert(gbm_device);
+
+	int bpp = pixel_size_from_fourcc(fourcc);
+	if (!bpp) {
+		nvnc_log(NVNC_LOG_PANIC, "Unsupported pixel format: %" PRIu32,
+				fourcc);
+	}
+
+	/* TODO: Get alignment through feedback mechanism.
+	 * Buffer sizes are aligned on both axes by 16 and we'll do the same
+	 * in the encoder, but this requirement should come from the encoder.
+	 */
+	int stride = bpp * ALIGN_UP(width, 16);
+
+	int fd = linux_cma_alloc(stride * ALIGN_UP(height, 16));
+	if (fd < 0) {
+		return NULL;
+	}
+
+	struct gbm_import_fd_modifier_data d = {
+		.format = fourcc,
+		.width = width,
+		.height = height,
+		// v4l2m2m doesn't support modifiers, so we use linear
+		.modifier = DRM_FORMAT_MOD_LINEAR,
+		.num_fds = 1,
+		.fds[0] = fd,
+		.offsets[0] = 0,
+		.strides[0] = stride,
+	};
+
+	struct gbm_bo* bo = gbm_bo_import(gbm_device, GBM_BO_IMPORT_FD_MODIFIER,
+			&d, 0);
+	if (!bo) {
+		nvnc_log(NVNC_LOG_DEBUG, "Failed to import dmabuf: %m");
+		close(fd);
+		return NULL;
+	}
+
+	return bo;
+}
+
 static struct wv_buffer* wv_buffer_create_dmabuf(int width, int height,
 		uint32_t fourcc)
 {
@@ -133,8 +213,10 @@ static struct wv_buffer* wv_buffer_create_dmabuf(int width, int height,
 	self->height = height;
 	self->format = fourcc;
 
-	self->bo = gbm_bo_create(gbm_device, width, height, fourcc,
-			GBM_BO_USE_RENDERING);
+	self->bo = have_linux_cma() ?
+		create_cma_gbm_bo(width, height, fourcc) :
+		gbm_bo_create(gbm_device, width, height, fourcc,
+				GBM_BO_USE_RENDERING);
 	if (!self->bo)
 		goto bo_failure;
 

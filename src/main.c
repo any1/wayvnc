@@ -240,7 +240,10 @@ static void registry_add(void* data, struct wl_registry* registry,
 		if (!self->is_initializing) {
 			wl_display_dispatch(self->display);
 			wl_display_roundtrip(self->display);
+
+			ctl_server_event_output_added(self->ctl, output->name);
 		}
+
 		return;
 	}
 
@@ -321,6 +324,8 @@ static void registry_remove(void* data, struct wl_registry* registry,
 			switch_to_prev_output(self);
 		} else
 			nvnc_log(NVNC_LOG_INFO, "Output %s went away", out->name);
+
+		ctl_server_event_output_removed(self->ctl, out->name);
 
 		wl_list_remove(&out->link);
 		output_destroy(out);

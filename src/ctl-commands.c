@@ -128,6 +128,20 @@ struct cmd_info ctl_event_list[] = {
 		"Sent after detaching from compositor",
 		{}
 	},
+	[EVT_OUTPUT_ADDED] = {"output-added",
+		"Sent when an output is added by the compositor",
+		{
+			{ "name", "Output name", "<string>" },
+			{}
+		}
+	},
+	[EVT_OUTPUT_REMOVED] = {"output-removed",
+		"Sent when an output is removed by the compositor",
+		{
+			{ "name", "Output name", "<string>" },
+			{}
+		}
+	},
 };
 
 enum cmd_type ctl_command_parse_name(const char* name)

@@ -19,6 +19,7 @@
 #include <sys/types.h>
 
 #define UDIV_UP(a, b) (((a) + (b) - 1) / (b))
+#define ALIGN_UP(a, b) ((b) * UDIV_UP((a), (b)))
 
 extern const char* wayvnc_version;
 
