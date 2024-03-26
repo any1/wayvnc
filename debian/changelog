@@ -1,3 +1,11 @@
+wayvnc (0.9.0~dev) bookworm; urgency=medium
+
+  * Upgrade to v0.9.0-dev
+  * This adds aligned CMA buffer allocation which is required for h264 encoding
+    on the Raspberry Pi 4.
+
+ -- Andri Yngvason <andri@yngvason.is>  Tue, 26 Mar 2024 11:00:00 +0000
+
 wayvnc (0.8.0-rel-1) bookworm; urgency=medium
 
   * Upgrade to v0.8.0

@@ -19,7 +19,7 @@ Build-Depends:
  libwayland-dev,
  libaml-dev (>= 0.3.0),
  libjansson-dev,
- libneatvnc-dev (>= 0.8.0),
+ libneatvnc-dev (>= 0.9.0),
  zlib1g-dev,
  libturbojpeg0-dev,
  gnutls-dev,
