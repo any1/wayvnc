@@ -30,7 +30,7 @@ Vcs-Browser: https://github.com/any1/wayvnc
 
 Package: wayvnc
 Architecture: any
-Depends: ${misc:Depends}, ${shlibs:Depends}, python3
+Depends: ${misc:Depends}, ${shlibs:Depends}, python3, raspi-config
 Description: VNC server for wlroots-based Wayland compositors
  It attaches to a running Wayland session, creates virtual input devices, and
  exposes a single display via the RFB protocol. The Wayland session may be a
