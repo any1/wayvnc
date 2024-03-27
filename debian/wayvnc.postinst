@@ -4,6 +4,7 @@ set -e
 
 configure_wayvnc()
 {
+	adduser vnc render
 	systemd-sysusers ${DPKG_ROOT:+--root="$DPKG_ROOT"} vnc.conf
 	systemctl --system daemon-reload >/dev/null || true
 	deb-systemd-invoke enable 'wayvnc-control.service' >/dev/null || true
