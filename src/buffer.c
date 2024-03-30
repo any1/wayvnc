@@ -37,11 +37,14 @@
 #include <gbm.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
+
+#ifdef HAVE_LINUX_DMA_HEAP
 #include <linux/dma-buf.h>
 #include <linux/dma-heap.h>
 
 #define LINUX_CMA_PATH "/dev/dma_heap/linux,cma"
-#endif
+#endif // HAVE_LINUX_DMA_HEAP
+#endif // ENABLE_SCREENCOPY_DMABUF
 
 extern struct wl_shm* wl_shm;
 extern struct zwp_linux_dmabuf_v1* zwp_linux_dmabuf;
@@ -125,6 +128,7 @@ failure:
 }
 
 #ifdef ENABLE_SCREENCOPY_DMABUF
+#ifdef HAVE_LINUX_DMA_HEAP
 static bool have_linux_cma(void)
 {
 	return access(LINUX_CMA_PATH, R_OK | W_OK) == 0;
@@ -197,6 +201,7 @@ static struct gbm_bo* create_cma_gbm_bo(int width, int height, uint32_t fourcc)
 
 	return bo;
 }
+#endif // HAVE_LINUX_DMA_HEAP
 
 static struct wv_buffer* wv_buffer_create_dmabuf(int width, int height,
 		uint32_t fourcc)
@@ -213,10 +218,15 @@ static struct wv_buffer* wv_buffer_create_dmabuf(int width, int height,
 	self->height = height;
 	self->format = fourcc;
 
+#ifdef HAVE_LINUX_DMA_HEAP
 	self->bo = have_linux_cma() ?
 		create_cma_gbm_bo(width, height, fourcc) :
 		gbm_bo_create(gbm_device, width, height, fourcc,
 				GBM_BO_USE_RENDERING);
+#endif
+	self->bo = gbm_bo_create(gbm_device, width, height, fourcc,
+				GBM_BO_USE_RENDERING);
+
 	if (!self->bo)
 		goto bo_failure;
 
