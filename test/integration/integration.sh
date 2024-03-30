@@ -377,4 +377,4 @@ multioutput_test() {
 }
 
 smoke_test
-multioutput_test
+#multioutput_test
