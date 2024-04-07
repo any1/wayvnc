@@ -436,3 +436,18 @@ void keyboard_feed_code(struct keyboard* self, xkb_keycode_t code,
 		send_key(self, code, is_pressed);
 	}
 }
+
+enum nvnc_keyboard_led_state keyboard_get_led_state(
+		const struct keyboard* self)
+{
+	enum nvnc_keyboard_led_state led_state = 0;
+
+	if (xkb_state_led_name_is_active(self->state, XKB_LED_NAME_SCROLL))
+		led_state |= NVNC_KEYBOARD_LED_SCROLL_LOCK;
+	if (xkb_state_led_name_is_active(self->state, XKB_LED_NAME_NUM))
+		led_state |= NVNC_KEYBOARD_LED_NUM_LOCK;
+	if (xkb_state_led_name_is_active(self->state, XKB_LED_NAME_CAPS))
+		led_state |= NVNC_KEYBOARD_LED_CAPS_LOCK;
+
+	return led_state;
+}

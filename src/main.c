@@ -760,6 +760,9 @@ static void on_key_event(struct nvnc_client* client, uint32_t symbol,
 	}
 
 	keyboard_feed(&wv_client->keyboard, symbol, is_pressed);
+
+	nvnc_client_set_led_state(wv_client->nvnc_client,
+			keyboard_get_led_state(&wv_client->keyboard));
 }
 
 static void on_key_code_event(struct nvnc_client* client, uint32_t code,
@@ -771,6 +774,9 @@ static void on_key_code_event(struct nvnc_client* client, uint32_t code,
 	}
 
 	keyboard_feed_code(&wv_client->keyboard, code + 8, is_pressed);
+
+	nvnc_client_set_led_state(wv_client->nvnc_client,
+			keyboard_get_led_state(&wv_client->keyboard));
 }
 
 static void on_client_cut_text(struct nvnc_client* nvnc_client,
