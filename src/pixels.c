@@ -81,3 +81,20 @@ int pixel_size_from_fourcc(uint32_t fourcc)
 
 	return 0;
 }
+
+uint32_t calculate_region_area(struct pixman_region16* region)
+{
+	uint32_t area = 0;
+
+	int n_rects = 0;
+	struct pixman_box16* rects = pixman_region_rectangles(region,
+		&n_rects);
+
+	for (int i = 0; i < n_rects; ++i) {
+		int width = rects[i].x2 - rects[i].x1;
+		int height = rects[i].y2 - rects[i].y1;
+		area += width * height;
+	}
+
+	return area;
+}

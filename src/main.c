@@ -56,6 +56,7 @@
 #include "ctl-server.h"
 #include "util.h"
 #include "option-parser.h"
+#include "pixels.h"
 
 #ifdef ENABLE_PAM
 #include "pam_auth.h"
@@ -1079,23 +1080,6 @@ static void on_output_power_change(struct output* output)
 	default:
 		break;
 	}
-}
-
-static uint32_t calculate_region_area(struct pixman_region16* region)
-{
-	uint32_t area = 0;
-
-	int n_rects = 0;
-	struct pixman_box16* rects = pixman_region_rectangles(region,
-		&n_rects);
-
-	for (int i = 0; i < n_rects; ++i) {
-		int width = rects[i].x2 - rects[i].x1;
-		int height = rects[i].y2 - rects[i].y1;
-		area += width * height;
-	}
-
-	return area;
 }
 
 void wayvnc_process_frame(struct wayvnc* self)
