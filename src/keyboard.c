@@ -29,7 +29,7 @@
 #include <wayland-client.h>
 #include <neatvnc.h>
 
-#include "virtual-keyboard-unstable-v1.h"
+#include "virtual-keyboard.h"
 #include "keyboard.h"
 #include "shm.h"
 #include "intset.h"
@@ -227,9 +227,7 @@ int keyboard_init(struct keyboard* self, const struct xkb_rule_names* rule_names
 
 	free(keymap_string);
 
-	zwp_virtual_keyboard_v1_keymap(self->virtual_keyboard,
-	                               WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1,
-	                               keymap_fd, keymap_size);
+	virtual_keyboard_keymap(self->virtual_keyboard, keymap_fd, keymap_size);
 
 	close(keymap_fd);
 
@@ -334,8 +332,8 @@ static void keyboard_send_mods(struct keyboard* self)
 	group = get_current_layout_group(self);
 	self->last_sent_group = group;
 
-	zwp_virtual_keyboard_v1_modifiers(self->virtual_keyboard, depressed,
-	                                  latched, locked, group);
+	virtual_keyboard_modifiers(self->virtual_keyboard, depressed, latched,
+			locked, group);
 }
 
 static void keyboard_apply_mods(struct keyboard* self, xkb_keycode_t code,
@@ -407,7 +405,7 @@ static bool keyboard_symbol_is_mod(xkb_keysym_t symbol)
 
 static void send_key(struct keyboard* self, xkb_keycode_t code, bool is_pressed)
 {
-	zwp_virtual_keyboard_v1_key(self->virtual_keyboard, 0, code - 8,
+	virtual_keyboard_key(self->virtual_keyboard, 0, code - 8,
 	                            is_pressed ? WL_KEYBOARD_KEY_STATE_PRESSED
 	                                       : WL_KEYBOARD_KEY_STATE_RELEASED);
 }

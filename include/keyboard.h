@@ -23,12 +23,12 @@
 
 #include "intset.h"
 
-struct zwp_virtual_keyboard_v1;
+struct virtual_keyboard;
 struct table_entry;
 struct nvnc;
 
 struct keyboard {
-	struct zwp_virtual_keyboard_v1* virtual_keyboard;
+	struct virtual_keyboard* virtual_keyboard;
 
 	struct xkb_context* context;
 	struct xkb_keymap* keymap;
