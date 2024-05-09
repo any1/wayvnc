@@ -26,6 +26,8 @@ struct virtual_keyboard_impl {
 			uint32_t latched, uint32_t locked, uint32_t group);
 	void (*key)(struct virtual_keyboard*, uint32_t time, uint32_t key,
 			enum wl_keyboard_key_state);
+	void (*repeat_info)(struct virtual_keyboard*, int32_t rate,
+			int32_t delay);
 };
 
 struct virtual_keyboard {

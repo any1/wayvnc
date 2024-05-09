@@ -27,6 +27,7 @@ client_protocols = [
 	'wlr-output-management-unstable-v1.xml',
 	'wlr-output-power-management-unstable-v1.xml',
 	'ext-transient-seat-v1.xml',
+	'ext-virtual-keyboard-v1.xml',
 ]
 
 client_protos_src = []

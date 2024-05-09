@@ -108,6 +108,7 @@ sources = [
 	'src/table-printer.c',
 	'src/virtual-keyboard.c',
 	'src/purism-virtual-keyboard.c',
+	'src/ext-virtual-keyboard.c',
 ]
 
 dependencies = [

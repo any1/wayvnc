@@ -40,6 +40,7 @@
 #include "ext-image-capture-source-v1.h"
 #include "wlr-virtual-pointer-unstable-v1.h"
 #include "virtual-keyboard-unstable-v1.h"
+#include "ext-virtual-keyboard-v1.h"
 #include "xdg-output-unstable-v1.h"
 #include "wlr-output-power-management-unstable-v1.h"
 #include "wlr-output-management-unstable-v1.h"
@@ -191,6 +192,7 @@ struct ext_image_copy_capture_manager_v1* ext_image_copy_capture_manager = NULL;
 
 extern struct screencopy_impl wlr_screencopy_impl, ext_image_copy_capture_impl;
 struct zwp_virtual_keyboard_manager_v1* purism_virtual_keyboard_manager = NULL;
+struct ext_virtual_keyboard_manager_v1* ext_virtual_keyboard_manager = NULL;
 
 static bool registry_add_input(void* data, struct wl_registry* registry,
 			 uint32_t id, const char* interface,
@@ -226,8 +228,13 @@ static bool registry_add_input(void* data, struct wl_registry* registry,
 
 	if (strcmp(interface, zwp_virtual_keyboard_manager_v1_interface.name) == 0) {
 		purism_virtual_keyboard_manager = wl_registry_bind(registry, id,
-				&zwp_virtual_keyboard_manager_v1_interface,
-				1);
+				&zwp_virtual_keyboard_manager_v1_interface, 1);
+		return true;
+	}
+
+	if (strcmp(interface, ext_virtual_keyboard_manager_v1_interface.name) == 0) {
+		ext_virtual_keyboard_manager = wl_registry_bind(registry, id,
+				&ext_virtual_keyboard_manager_v1_interface, 1);
 		return true;
 	}
 
@@ -450,6 +457,10 @@ static void wayland_detach(struct wayvnc* self)
 	wl_shm_destroy(wl_shm);
 	wl_shm = NULL;
 
+	if (ext_virtual_keyboard_manager)
+		ext_virtual_keyboard_manager_v1_destroy(ext_virtual_keyboard_manager);
+	ext_virtual_keyboard_manager = NULL;
+
 	if (purism_virtual_keyboard_manager)
 		zwp_virtual_keyboard_manager_v1_destroy(purism_virtual_keyboard_manager);
 	purism_virtual_keyboard_manager = NULL;
@@ -569,7 +580,9 @@ static int init_wayland(struct wayvnc* self, const char* display)
 		goto failure;
 	}
 
-	if (!purism_virtual_keyboard_manager && !self->disable_input) {
+	bool have_virtual_keyboard = purism_virtual_keyboard_manager ||
+		ext_virtual_keyboard_manager;
+	if (!have_virtual_keyboard && !self->disable_input) {
 		nvnc_log(NVNC_LOG_ERROR, "Virtual Keyboard protocol not supported by compositor.");
 		nvnc_log(NVNC_LOG_ERROR, "wayvnc may still work if started with --disable-input.");
 		goto failure;
@@ -1689,7 +1702,9 @@ static void client_init_keyboard(struct wayvnc_client* self)
 {
 	struct wayvnc* wayvnc = self->server;
 
-	if (!purism_virtual_keyboard_manager)
+	bool have_virtual_keyboard = purism_virtual_keyboard_manager ||
+		ext_virtual_keyboard_manager;
+	if (!have_virtual_keyboard)
 		return;
 
 	self->keyboard.virtual_keyboard =

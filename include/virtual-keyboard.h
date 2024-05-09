@@ -19,6 +19,7 @@
 #include <wayland-client-protocol.h>
 #include <unistd.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 struct wl_seat;
 struct virtual_keyboard;
@@ -33,3 +34,5 @@ void virtual_keyboard_modifiers(struct virtual_keyboard* self,
 		uint32_t group);
 void virtual_keyboard_key(struct virtual_keyboard* self, uint32_t time,
 		uint32_t key, enum wl_keyboard_key_state state);
+bool virtual_keyboard_repeat_info(struct virtual_keyboard* self,
+		int32_t rate, int32_t delay);

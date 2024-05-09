@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="ext_virtual_keyboard_v1">
+  <copyright>
+    Copyright © 2008-2011  Kristian Høgsberg
+    Copyright © 2010-2013  Intel Corporation
+    Copyright © 2012-2013  Collabora, Ltd.
+    Copyright © 2018       Purism SPC
+    Copyright © 2023       Simon Ser
+
+    Permission is hereby granted, free of charge, to any person obtaining a
+    copy of this software and associated documentation files (the "Software"),
+    to deal in the Software without restriction, including without limitation
+    the rights to use, copy, modify, merge, publish, distribute, sublicense,
+    and/or sell copies of the Software, and to permit persons to whom the
+    Software is furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice (including the next
+    paragraph) shall be included in all copies or substantial portions of the
+    Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+    THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+    FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+    DEALINGS IN THE SOFTWARE.
+  </copyright>
+
+  <description summary="virtual keyboard protocol">
+    This protocol allows privileged clients to create a virtual keyboard device
+    and emit synthetic input events. It is intended to be used by remote
+    desktop applications and on-screen keyboards.
+
+    The compositor may choose to restrict this protocol to a special client
+    launched by the compositor itself or expose it to all privileged clients,
+    this is compositor policy.
+
+    The key words "must", "must not", "required", "shall", "shall not", "should",
+    "should not", "recommended",  "may", and "optional" in this document are to
+    be interpreted as described in IETF RFC 2119.
+
+    Warning! The protocol described in this file is currently in the testing
+    phase. Backward compatible changes may be added together with the
+    corresponding interface version bump. Backward incompatible changes can
+    only be done by creating a new major version of the extension.
+  </description>
+
+  <interface name="ext_virtual_keyboard_manager_v1" version="1">
+    <description summary="virtual keyboard manager">
+      A virtual keyboard manager allows an application to create virtual
+      keyboards.
+    </description>
+
+    <request name="create_virtual_keyboard">
+      <description summary="create a new virtual keyboard">
+        Create a new virtual keyboard.
+
+        If the seat is null, the compositor will pick one. If the seat is
+        non-null, the compositor must attach the virtual keyboard to that seat
+        (or immediately send the finished event).
+      </description>
+      <arg name="seat" type="object" interface="wl_seat" allow-null="true"/>
+      <arg name="id" type="new_id" interface="ext_virtual_keyboard_v1"
+        summary="the newly created virtual keyboard"/>
+    </request>
+
+    <request name="destroy" type="destructor">
+      <description summary="destroy the virtual keyboard manager">
+        Destroy the virtual keyboard manager.
+
+        Existing ext_virtual_keyboard_v1 objects remain valid.
+      </description>
+    </request>
+  </interface>
+
+  <interface name="ext_virtual_keyboard_v1" version="1">
+    <description summary="virtual keyboard">
+      The virtual keyboard interface allows a client to send synthetic keyboard
+      input events.
+    </description>
+
+    <enum name="error">
+      <entry name="invalid_keymap" value="1" summary="keymap format invalid"/>
+      <entry name="invalid_key_state" value="2" summary="key state invalid"/>
+    </enum>
+
+    <request name="keymap">
+      <description summary="keyboard mapping">
+        Provide a file descriptor to the compositor which can be memory-mapped
+        to provide a keyboard mapping description.
+
+        The FD must be mapped with MAP_PRIVATE by the recipient, as MAP_SHARED
+        may fail.
+
+        The underlying keymap data must remain available as long as the object
+        hasn't been destroyed.
+
+        If the keymap format is invalid, the invalid_keymap protocol error is
+        raised.
+
+        The compositor must take care to notify clients of the correct keymap
+        before it sends other wl_keyboard events, i.e. set the keymap
+        corresponding to the event source.
+      </description>
+      <arg name="format" type="uint" enum="wl_keyboard.keymap_format"
+        summary="keymap format"/>
+      <arg name="fd" type="fd" summary="keymap file descriptor"/>
+      <arg name="size" type="uint" summary="keymap size, in bytes"/>
+    </request>
+
+    <request name="key">
+      <description summary="key event">
+        Notify that a key was pressed or released.
+
+        The time argument is a timestamp with millisecond granularity in the
+        CLOCK_MONOTONIC domain.
+
+        If the state is invalid, the invalid_key_state protocol error is raised.
+      </description>
+      <arg name="time" type="uint"
+        summary="timestamp with millisecond granularity"/>
+      <arg name="key" type="uint" summary="key that produced the event"/>
+      <arg name="state" type="uint" enum="wl_keyboard.key_state"
+        summary="physical state of the key"/>
+    </request>
+
+    <request name="modifiers">
+      <description summary="modifier and group state">
+        Notify that the modifier and/or group state has changed.
+      </description>
+      <arg name="mods_depressed" type="uint" summary="depressed modifiers"/>
+      <arg name="mods_latched" type="uint" summary="latched modifiers"/>
+      <arg name="mods_locked" type="uint" summary="locked modifiers"/>
+      <arg name="group" type="uint" summary="keyboard layout"/>
+    </request>
+
+    <request name="repeat_info">
+      <description summary="set repeat info">
+        Sets the repeat info for associated wl_keyboard objects.
+
+        This request should be passed by the compositor to clients via the
+        wl_keyboard.repeat_info event.
+      </description>
+      <arg name="rate" type="int" summary="the rate of repeating keys in characters per second"/>
+      <arg name="delay" type="int" summary="delay in milliseconds since key down until repeating starts"/>
+    </request>
+
+    <request name="destroy" type="destructor">
+      <description summary="destroy the virtual keyboard">
+        Destroy the virtual keyboard.
+
+        The compositor should release any pressed keys.
+      </description>
+    </request>
+
+    <event name="finished">
+      <description summary="the virtual keyboard should be destroyed">
+        The compositor has decided that the virtual keyboard should be
+        destroyed as it will no longer be used by the compositor. Exactly when
+        this event is sent is compositor policy, but it must never be sent more
+        than once for a given virtual keyboard object.
+
+        This might be sent because the user has decided to stop the virtual
+        input device, or the compositor has decided to deny the client request
+        for some other reason.
+
+        Upon receiving this event, the client should send a destroy request.
+      </description>
+    </event>
+  </interface>
+</protocol>

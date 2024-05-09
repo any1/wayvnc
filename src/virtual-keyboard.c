@@ -20,10 +20,12 @@
 #include <assert.h>
 
 extern struct virtual_keyboard_impl purism_virtual_keyboard_impl;
+extern struct virtual_keyboard_impl ext_virtual_keyboard_impl;
 
 struct virtual_keyboard *virtual_keyboard_create(struct wl_seat* seat)
 {
-	return purism_virtual_keyboard_impl.create(seat);
+	struct virtual_keyboard* kb = ext_virtual_keyboard_impl.create(seat);
+	return kb ? kb : purism_virtual_keyboard_impl.create(seat);
 }
 
 void virtual_keyboard_destroy(struct virtual_keyboard* self)
@@ -54,4 +56,13 @@ void virtual_keyboard_key(struct virtual_keyboard* self, uint32_t time,
 {
 	assert(self->impl && self->impl->key);
 	self->impl->key(self, time, key, state);
+}
+
+bool virtual_keyboard_repeat_info(struct virtual_keyboard* self, int32_t rate,
+		int32_t delay)
+{
+	if (!self->impl->repeat_info)
+		return false;
+	self->impl->repeat_info(self, rate, delay);
+	return true;
 }
