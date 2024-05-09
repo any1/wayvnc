@@ -41,6 +41,7 @@ struct keyboard {
 	struct intset key_state;
 
 	int last_sent_group;
+	bool handle_key_repeat;
 };
 
 int keyboard_init(struct keyboard* self, const struct xkb_rule_names* rule_names);

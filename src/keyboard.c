@@ -227,6 +227,11 @@ int keyboard_init(struct keyboard* self, const struct xkb_rule_names* rule_names
 
 	free(keymap_string);
 
+	self->handle_key_repeat =
+		virtual_keyboard_repeat_info(self->virtual_keyboard, 0, 0);
+	nvnc_log(NVNC_LOG_DEBUG, "handle_key_repeat: %s",
+			self->handle_key_repeat ? "true" : "false");
+
 	virtual_keyboard_keymap(self->virtual_keyboard, keymap_fd, keymap_size);
 
 	close(keymap_fd);
@@ -403,11 +408,10 @@ static bool keyboard_symbol_is_mod(xkb_keysym_t symbol)
 	return false;
 }
 
-static void send_key(struct keyboard* self, xkb_keycode_t code, bool is_pressed)
+static void send_key(struct keyboard* self, xkb_keycode_t code,
+		enum wl_keyboard_key_state state)
 {
-	virtual_keyboard_key(self->virtual_keyboard, 0, code - 8,
-	                            is_pressed ? WL_KEYBOARD_KEY_STATE_PRESSED
-	                                       : WL_KEYBOARD_KEY_STATE_RELEASED);
+	virtual_keyboard_key(self->virtual_keyboard, 0, code - 8, state);
 }
 
 static void save_mods(struct keyboard* self, struct kb_mods* mods)
@@ -428,7 +432,7 @@ static void restore_mods(struct keyboard* self, struct kb_mods* mods)
 }
 
 static void send_key_with_level(struct keyboard* self, xkb_keycode_t code,
-		bool is_pressed, int level)
+		enum wl_keyboard_key_state state, int level)
 {
 	int current_group = get_current_layout_group(self);
 	struct kb_mods save;
@@ -444,7 +448,7 @@ static void send_key_with_level(struct keyboard* self, xkb_keycode_t code,
 	nvnc_log(NVNC_LOG_DEBUG, "send key with level: old mods: %x, new mods: %x",
 			save.latched | save.locked | save.depressed, mods);
 
-	send_key(self, code, is_pressed);
+	send_key(self, code, state);
 
 	restore_mods(self, &save);
 	keyboard_send_mods(self);
@@ -489,25 +493,49 @@ void keyboard_feed(struct keyboard* self, xkb_keysym_t symbol, bool is_pressed)
 	keyboard__dump_entry(self, entry);
 #endif
 
-	if (!update_key_state(self, entry->code, is_pressed))
+	bool is_changed = update_key_state(self, entry->code, is_pressed);
+	bool is_repeated = is_pressed && !is_changed;
+	if (is_repeated && !self->handle_key_repeat)
 		return;
 
-	keyboard_apply_mods(self, entry->code, is_pressed);
+	enum wl_keyboard_key_state state;
+	if (is_pressed && !is_repeated)
+		state = WL_KEYBOARD_KEY_STATE_PRESSED;
+	else if (is_pressed && is_repeated)
+		state = WL_KEYBOARD_KEY_STATE_REPEATED;
+	else
+		state = WL_KEYBOARD_KEY_STATE_RELEASED;
+
+	if (!is_repeated)
+		keyboard_apply_mods(self, entry->code, is_pressed);
 
 	if (level_is_match)
-		send_key(self, entry->code, is_pressed);
+		send_key(self, entry->code, state);
 	else
-		send_key_with_level(self, entry->code, is_pressed,
+		send_key_with_level(self, entry->code, state,
 				entry->level);
 }
 
 void keyboard_feed_code(struct keyboard* self, xkb_keycode_t code,
 		bool is_pressed)
 {
-	if (update_key_state(self, code, is_pressed)) {
+	bool is_changed = update_key_state(self, code, is_pressed);
+	bool is_repeated = is_pressed && !is_changed;
+	if (is_repeated && !self->handle_key_repeat)
+		return;
+
+	enum wl_keyboard_key_state state;
+	if (is_pressed && !is_repeated)
+		state = WL_KEYBOARD_KEY_STATE_PRESSED;
+	else if (is_pressed && is_repeated)
+		state = WL_KEYBOARD_KEY_STATE_REPEATED;
+	else
+		state = WL_KEYBOARD_KEY_STATE_RELEASED;
+
+	if (!is_repeated)
 		keyboard_apply_mods(self, code, is_pressed);
-		send_key(self, code, is_pressed);
-	}
+
+	send_key(self, code, state);
 }
 
 enum nvnc_keyboard_led_state keyboard_get_led_state(
