@@ -1726,7 +1726,6 @@ int main(int argc, char* argv[])
 	bool use_transient_seat = false;
 
 	bool quit_on_disconnect = false;
-	bool first_client_connected = false;
 
 	int drm_fd MAYBE_UNUSED = -1;
 
