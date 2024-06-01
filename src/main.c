@@ -1837,7 +1837,7 @@ int main(int argc, char* argv[])
 	}
 
 	if (seat_name && use_transient_seat) {
-		nvnc_log(NVNC_LOG_ERROR, "transient seat and seat are conflicting options");
+		nvnc_log(NVNC_LOG_ERROR, "transient-seat and seat are conflicting options");
 		return 1;
 	}
 
