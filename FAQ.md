@@ -19,6 +19,16 @@ bindsym $mod+Pause mode passthrough
 This makes it so that when you press $mod+Pause, all keybindings, except the one
 to switch back, are disabled.
 
+Disable `floating_modifier` during the mode if it's set up in your config file
+and you wish to be able to use the same functionality in the nested desktop:
+```
+mode passthrough {
+    bindsym $mod+Pause mode default; floating_modifier $mod normal
+}
+bindsym $mod+Pause mode passthrough; floating_modifier none
+```
+Replace `$mod normal` with different arguments if applicable.
+
 **Q: Not all symbols show up when I'm typing. What can I do to fix this?**
 
 A: Try setting the keyboard layout in wayvnc to the one that most closely
