@@ -645,9 +645,9 @@ static void compose_client_info(const struct wayvnc_client* client,
 		struct ctl_server_client_info* info)
 {
 	info->id = client->id;
-	socklen_t addrlen = sizeof(info->address);
+	socklen_t addrlen = sizeof(info->address_storage);
 	nvnc_client_get_address(client->nvnc_client,
-			(struct sockaddr*)&info->address, &addrlen);
+			(struct sockaddr*)&info->address_storage, &addrlen);
 	info->username = nvnc_client_get_auth_username(client->nvnc_client);
 	info->seat = client->seat ? client->seat->name : NULL;
 }
