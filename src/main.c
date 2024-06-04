@@ -1929,9 +1929,6 @@ int main(int argc, char* argv[])
 	else if (use_websocket)
 		socket_type = SOCKET_TYPE_WEBSOCKET;
 
-	if (init_nvnc(&self, address, port, socket_type) < 0)
-		goto nvnc_failure;
-
 	if (!start_detached) {
 		if (self.screencopy.manager)
 			screencopy_init(&self.screencopy);
@@ -1963,6 +1960,9 @@ int main(int argc, char* argv[])
 	self.ctl = ctl_server_new(socket_path, &ctl_actions);
 	if (!self.ctl)
 		goto ctl_server_failure;
+
+	if (init_nvnc(&self, address, port, socket_type) < 0)
+		goto nvnc_failure;
 
 	if (self.display)
 		wl_display_dispatch_pending(self.display);
@@ -1997,11 +1997,10 @@ int main(int argc, char* argv[])
 
 	return 0;
 
+nvnc_failure:
+	ctl_server_destroy(self.ctl);
 ctl_server_failure:
 capture_failure:
-	nvnc_display_unref(self.nvnc_display);
-	nvnc_close(self.nvnc);
-nvnc_failure:
 wayland_failure:
 	aml_unref(aml);
 failure:
