@@ -55,6 +55,11 @@ wayvnc - A VNC server for wlroots based Wayland compositors.
 *-w, --websocket*
 	Create a websocket.
 
+*-x, --external-listener-fd=<fd>*
+	Have the VNC server listen on an already bound socket at this file
+	descriptor which should be inherited from wayvnc's parent process.
+	This is incompatible with all other server socket-related options.
+
 *-L, --log-level*
 	Set log level. The levels are: error, warning, info, debug, trace and
 	quiet.
