@@ -85,6 +85,7 @@ enum socket_type {
 
 struct wayvnc {
 	bool do_exit;
+	bool exit_on_disconnect;
 
 	struct wl_display* display;
 	struct wl_registry* registry;
@@ -1302,6 +1303,10 @@ static void client_destroy(void* obj)
 	nvnc_log(NVNC_LOG_DEBUG, "Client disconnected, new client count: %d",
 			wayvnc->nr_clients);
 
+	if (self->server->exit_on_disconnect && self->server->nr_clients == 0) {
+		wayvnc_exit(wayvnc);
+	}
+
 	if (wayvnc->ctl) {
 		struct ctl_server_client_info info = {};
 		compose_client_info(self, &info);
@@ -1727,6 +1732,8 @@ int main(int argc, char* argv[])
 	bool disable_input = false;
 	bool use_transient_seat = false;
 
+	bool exit_on_disconnect = false;
+
 	int drm_fd MAYBE_UNUSED = -1;
 
 	int log_level = NVNC_LOG_WARNING;
@@ -1759,6 +1766,8 @@ int main(int argc, char* argv[])
 		  .default_ = "30" },
 		{ 'p', "performance", NULL,
 		  "Show performance counters." },
+		{ 'e', "exit-on-disconnect", NULL,
+		  "Exit on last client disconnect." },
 		{ 'u', "unix-socket", NULL,
 		  "Create unix domain socket." },
 		{ 'x', "external-listener-fd", "<fd>",
@@ -1804,6 +1813,7 @@ int main(int argc, char* argv[])
 	socket_path = option_parser_get_value(&option_parser, "socket");
 	overlay_cursor = !!option_parser_get_value(&option_parser, "render-cursor");
 	show_performance = !!option_parser_get_value(&option_parser, "performance");
+	exit_on_disconnect = !!option_parser_get_value(&option_parser, "exit-on-disconnect");
 	use_unix_socket = !!option_parser_get_value(&option_parser, "unix-socket");
 	use_websocket = !!option_parser_get_value(&option_parser, "websocket");
 	external_listener_fd = atoi(option_parser_get_value(&option_parser, "external-listener-fd"));
@@ -1818,6 +1828,7 @@ int main(int argc, char* argv[])
 	start_detached = !!option_parser_get_value(&option_parser, "detached");
 
 	self.start_detached = start_detached;
+	self.exit_on_disconnect = exit_on_disconnect;
 
 	keyboard_options = option_parser_get_value(&option_parser, "keyboard");
 	if (keyboard_options)
