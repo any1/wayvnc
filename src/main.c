@@ -1803,7 +1803,8 @@ int main(int argc, char* argv[])
 	seat_name = option_parser_get_value(&option_parser, "seat");
 	socket_path = option_parser_get_value(&option_parser, "socket");
 	overlay_cursor = !!option_parser_get_value(&option_parser, "render-cursor");
-	show_performance = !!option_parser_get_value(&option_parser, "performance");
+	show_performance = !!option_parser_get_value(&option_parser,
+			"show-performance");
 	use_unix_socket = !!option_parser_get_value(&option_parser, "unix-socket");
 	use_websocket = !!option_parser_get_value(&option_parser, "websocket");
 	external_listener_fd = atoi(option_parser_get_value(&option_parser, "external-listener-fd"));
