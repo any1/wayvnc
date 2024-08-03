@@ -254,7 +254,7 @@ static void registry_add(void* data, struct wl_registry* registry,
 			wl_registry_bind(registry, id,
 			                 &zxdg_output_manager_v1_interface, 3);
 
-		output_setup_wl_managers(&self->outputs);
+		output_setup_xdg_output_managers(&self->outputs);
 		return;
 	}
 
@@ -262,7 +262,6 @@ static void registry_add(void* data, struct wl_registry* registry,
 		nvnc_trace("Registering new wlr_output_power_manager");
 		wlr_output_power_manager = wl_registry_bind(registry, id,
 					&zwlr_output_power_manager_v1_interface, 1);
-		output_setup_wl_managers(&self->outputs);
 		return;
 	}
 
@@ -1001,15 +1000,20 @@ int wayvnc_start_capture_immediate(struct wayvnc* self)
 	if (self->capture_retry_timer)
 		return 0;
 
-	if (self->selected_output->power == OUTPUT_POWER_OFF) {
-		nvnc_log(NVNC_LOG_WARNING, "Selected output is in powersaving mode. Delaying capture until it turns on.");
-		if (output_set_power_state(self->selected_output, OUTPUT_POWER_ON)
-				== 0)
-			nvnc_log(NVNC_LOG_WARNING, "Requested power ON.");
+	struct output* output = self->selected_output;
+	int rc = output_acquire_power_on(output);
+	if (rc == 0) {
+		nvnc_log(NVNC_LOG_DEBUG, "Acquired power state management. Waiting for power event to start capturing");
 		return 0;
+	} else if (rc > 0 && output->power != OUTPUT_POWER_ON) {
+		nvnc_log(NVNC_LOG_DEBUG, "Output power state management already acquired, but not yet powered on");
+		return 0;
+	} else if (rc < 0) {
+		nvnc_log(NVNC_LOG_WARNING, "Failed to acquire power state control. Capturing may fail.");
 	}
 
-	int rc = screencopy_start_immediate(&self->screencopy);
+	nvnc_log(NVNC_LOG_DEBUG, "screencopy_start_immediate");
+	rc = screencopy_start_immediate(&self->screencopy);
 	if (rc < 0) {
 		nvnc_log(NVNC_LOG_ERROR, "Failed to start capture. Exiting...");
 		wayvnc_exit(self);
@@ -1053,7 +1057,8 @@ void on_output_dimension_change(struct output* output)
 
 static void on_output_power_change(struct output* output)
 {
-	nvnc_trace("Output %s power state changed to %s", output->name, output_power_state_name(output->power));
+	nvnc_trace("Output %s power state changed to %s", output->name,
+			output_power_state_name(output->power));
 
 	struct wayvnc* self = output->userdata;
 	if (self->selected_output != output || self->nr_clients == 0)
@@ -1061,7 +1066,6 @@ static void on_output_power_change(struct output* output)
 
 	switch (output->power) {
 	case OUTPUT_POWER_ON:
-		nvnc_log(NVNC_LOG_WARNING, "Output is now on. Restarting frame capture");
 		wayvnc_start_capture_immediate(self);
 		break;
 	case OUTPUT_POWER_OFF:
@@ -1313,6 +1317,7 @@ static void client_destroy(void* obj)
 	if (wayvnc->nr_clients == 0 && wayvnc->display) {
 		nvnc_log(NVNC_LOG_INFO, "Stopping screen capture");
 		screencopy_stop(&wayvnc->screencopy);
+		output_release_power_on(wayvnc->selected_output);
 		stop_performance_ticker(wayvnc);
 	}
 
@@ -1553,6 +1558,7 @@ void switch_to_output(struct wayvnc* self, struct output* output)
 		return;
 	}
 	screencopy_stop(&self->screencopy);
+	output_release_power_on(output);
 	set_selected_output(self, output);
 	reinitialise_pointers(self);
 	if (self->nr_clients > 0)

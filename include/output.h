@@ -68,8 +68,9 @@ struct output {
 
 struct output* output_new(struct wl_output* wl_output, uint32_t id);
 void output_destroy(struct output* output);
-void output_setup_wl_managers(struct wl_list* list);
-int output_set_power_state(struct output* output, enum output_power_state state);
+void output_setup_xdg_output_managers(struct wl_list* list);
+int output_acquire_power_on(struct output* output);
+void output_release_power_on(struct output* output);
 void output_list_destroy(struct wl_list* list);
 struct output* output_find_by_id(struct wl_list* list, uint32_t id);
 struct output* output_find_by_name(struct wl_list* list, const char* name);

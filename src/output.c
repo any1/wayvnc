@@ -184,6 +184,7 @@ static const struct wl_output_listener output_listener = {
 
 void output_destroy(struct output* output)
 {
+	output_release_power_on(output);
 	if (output->xdg_output)
 		zxdg_output_v1_destroy(output->xdg_output);
 	if (output->wlr_output_power)
@@ -307,34 +308,35 @@ static const struct zwlr_output_power_v1_listener wlr_output_power_listener = {
 	.failed = output_power_failed,
 };
 
-static void output_setup_wlr_output_power_manager(struct output* self)
+int output_acquire_power_on(struct output* output)
 {
-	if (!wlr_output_power_manager || self->wlr_output_power)
-		return;
+	if (output->wlr_output_power)
+		return 1;
+
+	if (!wlr_output_power_manager)
+		return -1;
 
 	struct zwlr_output_power_v1* wlr_output_power =
 		zwlr_output_power_manager_v1_get_output_power(
-				wlr_output_power_manager,
-				self->wl_output);
-	self->wlr_output_power = wlr_output_power;
+				wlr_output_power_manager, output->wl_output);
+	output->wlr_output_power = wlr_output_power;
 
-	zwlr_output_power_v1_add_listener(self->wlr_output_power,
-			&wlr_output_power_listener, self);
+	zwlr_output_power_v1_add_listener(output->wlr_output_power,
+			&wlr_output_power_listener, output);
+
+	zwlr_output_power_v1_set_mode(output->wlr_output_power,
+		ZWLR_OUTPUT_POWER_V1_MODE_ON);
+	return 0;
 }
 
-int output_set_power_state(struct output* output, enum output_power_state state)
+void output_release_power_on(struct output* output)
 {
-	assert(state != OUTPUT_POWER_UNKNOWN);
-	if (!output->wlr_output_power) {
-		errno = ENOENT;
-		return -1;
-	}
-	nvnc_trace("Output %s requesting power %s", output->name,
-			output_power_state_name(state));
-	int mode = (state == OUTPUT_POWER_ON) ? ZWLR_OUTPUT_POWER_V1_MODE_ON :
-		ZWLR_OUTPUT_POWER_V1_MODE_OFF;
-	zwlr_output_power_v1_set_mode(output->wlr_output_power, mode);
-	return 0;
+	if (!output->wlr_output_power)
+		return;
+
+	zwlr_output_power_v1_destroy(output->wlr_output_power);
+	output->wlr_output_power = NULL;
+	output->power = OUTPUT_POWER_UNKNOWN;
 }
 
 struct output* output_find_by_id(struct wl_list* list, uint32_t id)
@@ -386,12 +388,11 @@ struct output* output_cycle(const struct wl_list* list,
 	return wl_container_of(iter, output, link);
 }
 
-void output_setup_wl_managers(struct wl_list* list)
+void output_setup_xdg_output_managers(struct wl_list* list)
 {
 	struct output* output;
 	wl_list_for_each(output, list, link) {
 		output_setup_xdg_output_manager(output);
-		output_setup_wlr_output_power_manager(output);
 	}
 }
 
@@ -411,7 +412,6 @@ struct output* output_new(struct wl_output* wl_output, uint32_t id)
 			output);
 
 	output_setup_xdg_output_manager(output);
-	output_setup_wlr_output_power_manager(output);
 
 	return output;
 }
