@@ -96,19 +96,19 @@ static int test_indent_and_reflow(void)
 static int test_defaults(void)
 {
 	struct table_printer one;
-	table_printer_init(&one, stdout, 1);
+	table_printer_init(&one, stdout);
 	table_printer_set_defaults(20, 2, 2);
 	struct table_printer two;
-	table_printer_init(&two, stderr, 2);
+	table_printer_init(&two, stderr);
 	ASSERT_INT_EQ(80, one.max_width);
 	ASSERT_INT_EQ(4, one.left_indent);
-	ASSERT_INT_EQ(8, one.column_offset);
-	ASSERT_INT_EQ(1, one.left_width);
+	ASSERT_INT_EQ(4, one.column_offset);
+	ASSERT_INT_EQ(30, one.left_width);
 	ASSERT_PTR_EQ(stdout, one.stream);
 	ASSERT_INT_EQ(20, two.max_width);
 	ASSERT_INT_EQ(2, two.left_indent);
 	ASSERT_INT_EQ(2, two.column_offset);
-	ASSERT_INT_EQ(2, two.left_width);
+	ASSERT_INT_EQ(30, two.left_width);
 	ASSERT_PTR_EQ(stderr, two.stream);
 	return 0;
 }
@@ -120,7 +120,7 @@ static int test_print_line(void)
 	struct table_printer printer = {
 		.max_width = 20,
 		.left_indent = 2,
-		.left_width = 6,
+		.left_width = 10,
 		.column_offset = 2,
 	};
 
@@ -144,23 +144,23 @@ static int test_print_fmtline(void)
 	size_t len;
 	char* buf;
 	struct table_printer printer = {
-		.max_width = 20,
+		.max_width = 25,
 		.left_indent = 2,
-		.left_width = 6,
+		.left_width = 15,
 		.column_offset = 2,
 	};
 
 	printer.stream = open_memstream(&buf, &len);
 	table_printer_print_fmtline(&printer, "right", "left");
 	fclose(printer.stream);
-	ASSERT_STR_EQ("  left    right\n", buf);
+	ASSERT_STR_EQ("  left         right\n", buf);
 	free(buf);
 
 	printer.stream = open_memstream(&buf, &len);
 	table_printer_print_fmtline(&printer, "right side will wrap", "left%d", 2);
 	fclose(printer.stream);
-	ASSERT_STR_EQ("  left2   right side\n"
-		      "          will wrap\n", buf);
+	ASSERT_STR_EQ("  left2        right side\n"
+		      "               will wrap\n", buf);
 	free(buf);
 	return 0;
 }

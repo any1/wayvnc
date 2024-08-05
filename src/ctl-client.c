@@ -693,15 +693,9 @@ static int ctl_client_print_single_command(struct ctl_client* self,
 void ctl_client_print_command_list(FILE* stream)
 {
 	fprintf(stream, "Commands:\n");
-	size_t max_namelen = 0;
-	for (size_t i = 0; i < CMD_LIST_LEN; ++i) {
-		if (i == CMD_HELP) // hidden
-			continue;
-		max_namelen = MAX(max_namelen, strlen(ctl_command_list[i].name));
-	}
 
 	struct table_printer printer;
-	table_printer_init(&printer, stdout, max_namelen);
+	table_printer_init(&printer, stdout);
 	for (size_t i = 0; i < CMD_LIST_LEN; ++i) {
 		if (i == CMD_HELP) // hidden
 			continue;
@@ -723,12 +717,8 @@ static void print_event_info(const struct cmd_info* info)
 	option_parser_print_cmd_summary(info->description, stdout);
 	if (info->params[0].name != NULL) {
 		printf("Data fields:\n");
-		size_t max_namelen = 0;
-		for (int i = 0; info->params[i].name != NULL; ++i)
-			max_namelen = MAX(max_namelen, param_render_length(&info->params[i]));
-
 		struct table_printer printer;
-		table_printer_init(&printer, stdout, max_namelen);
+		table_printer_init(&printer, stdout);
 		for (int i = 0; info->params[i].name != NULL; ++i)
 			table_printer_print_fmtline(&printer,
 					info->params[i].description,
@@ -760,15 +750,9 @@ static int print_event_details(const char* evt_name)
 void ctl_client_print_event_list(FILE* stream)
 {
 	printf("Events:\n");
-	size_t max_namelen = 0;
-	for (size_t i = 0; i < EVT_LIST_LEN; ++i)
-		max_namelen = MAX(max_namelen, strlen(ctl_event_list[i].name));
-
-	for (size_t i = 0; i < INTERNAL_EVT_LEN; ++i)
-		max_namelen = MAX(max_namelen, strlen(internal_events[i].name));
 
 	struct table_printer printer;
-	table_printer_init(&printer, stdout, max_namelen);
+	table_printer_init(&printer, stdout);
 	for (size_t i = 0; i < EVT_LIST_LEN; ++i)
 		table_printer_print_line(&printer, ctl_event_list[i].name,
 				ctl_event_list[i].description);

@@ -26,9 +26,9 @@
 static struct table_printer defaults = {
 	.max_width = 80,
 	.left_indent = 4,
-	.column_offset = 8,
+	.column_offset = 4,
 	.stream = NULL,
-	.left_width = 0,
+	.left_width = 30,
 };
 
 void table_printer_set_defaults(int max_width, int left_indent,
@@ -39,12 +39,10 @@ void table_printer_set_defaults(int max_width, int left_indent,
 	defaults.column_offset = column_offset;
 }
 
-void table_printer_init(struct table_printer* self, FILE* stream,
-		int left_width)
+void table_printer_init(struct table_printer* self, FILE* stream)
 {
 	memcpy(self, &defaults, sizeof(*self));
 	self->stream = stream;
-	self->left_width = left_width;
 }
 
 int table_printer_reflow_text(char* dst, int dst_size, const char* src,
@@ -109,14 +107,18 @@ void table_printer_indent_and_reflow_text(FILE* stream, const char* src,
 void table_printer_print_line(struct table_printer* self, const char* left_text,
 		const char* right_text)
 {
-	fprintf(self->stream, "%*s", self->left_indent, "");
-	int field_len = fprintf(self->stream, "%s", left_text);
-	fprintf(self->stream, "%*s", self->left_width - field_len + self->column_offset, "");
-	int column_indent = self->left_indent + self->left_width + self->column_offset;
-	int column_width = self->max_width - column_indent;
-	table_printer_indent_and_reflow_text(self->stream,
-			right_text,
-			column_width, 0, column_indent);
+	int field_len = fprintf(self->stream, "%*s", self->left_indent, "");
+	field_len += fprintf(self->stream, "%s", left_text);
+	if (field_len > self->left_width - self->column_offset -
+			self->left_indent) {
+		fprintf(self->stream, "\n");
+		field_len = 0;
+	}
+	int column_width = self->max_width - self->left_width;
+	int first_indent = self->left_width - field_len;
+	int subsequent_indent = self->left_width;
+	table_printer_indent_and_reflow_text(self->stream, right_text,
+			column_width, first_indent, subsequent_indent);
 }
 
 void table_printer_print_fmtline(struct table_printer* self,

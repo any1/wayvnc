@@ -16,7 +16,7 @@
 
 #include <stdio.h>
 
-struct table_printer{
+struct table_printer {
 	FILE* stream;
 	int max_width;
 	int left_indent;
@@ -28,8 +28,7 @@ struct table_printer{
 void table_printer_set_defaults(int max_width, int left_indent,
 		int column_offset);
 
-void table_printer_init(struct table_printer* self, FILE* stream,
-		int left_width);
+void table_printer_init(struct table_printer* self, FILE* stream);
 
 void table_printer_print_line(struct table_printer* self, const char* left_text,
 		const char* right_text);

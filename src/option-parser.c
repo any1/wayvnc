@@ -45,36 +45,6 @@ void option_parser_init(struct option_parser* self,
 	self->name = "Options";
 }
 
-static int get_left_col_width(const struct wv_option* opts, int n)
-{
-	int max_width = 0;
-
-	for (int i = 0; i < n; ++i) {
-		int width = 0;
-
-		if (opts[i].short_opt)
-			width += 2;
-
-		if (opts[i].long_opt)
-			width += 2 + strlen(opts[i].long_opt);
-
-		if (opts[i].short_opt && opts[i].long_opt)
-			width += 1; // for ','
-
-		if (opts[i].schema) {
-			width += strlen(opts[i].schema);
-
-			if (opts[i].long_opt)
-				width += 1; // for '='
-		}
-
-		if (width > max_width)
-			max_width = width;
-	}
-
-	return max_width;
-}
-
 static const char* format_help(const struct wv_option* opt)
 {
 	if (!opt->default_)
@@ -109,9 +79,8 @@ static void format_option(struct table_printer* printer, const struct wv_option*
 void option_parser_print_options(struct option_parser* self, FILE* stream)
 {
 	fprintf(stream, "%s:\n", self->name);
-	int left_col_width = get_left_col_width(self->options, self->n_opts);
 	struct table_printer printer;
-	table_printer_init(&printer, stream, left_col_width);
+	table_printer_init(&printer, stream);
 	for (int i = 0; i < self->n_opts; ++i)
 		format_option(&printer, &self->options[i]);
 }
@@ -151,19 +120,19 @@ void option_parser_print_usage(struct option_parser* self, FILE* stream)
 
 int option_parser_print_arguments(struct option_parser* self, FILE* stream)
 {
-	size_t max_arg = 0;
+	bool have_args = 0;
 	for (int i = 0; i < self->n_opts; ++i) {
 		const struct wv_option* opt = &self->options[i];
 		if (!opt->positional || !opt->help || opt->is_subcommand)
 			continue;
-		max_arg = MAX(max_arg, strlen(opt->positional));
+		have_args = true;
 	}
-	if (!max_arg)
+	if (!have_args)
 		return 0;
 
 	fprintf(stream, "Arguments:\n");
 	struct table_printer printer;
-	table_printer_init(&printer, stream, max_arg);
+	table_printer_init(&printer, stream);
 	int i;
 	for (i = 0; i < self->n_opts; ++i) {
 		const struct wv_option* opt = &self->options[i];
@@ -428,7 +397,7 @@ const char* option_parser_get_value(const struct option_parser* self,
 void option_parser_print_cmd_summary(const char* summary, FILE* stream)
 {
 	struct table_printer printer;
-	table_printer_init(&printer, stream, 0);
+	table_printer_init(&printer, stream);
 	fprintf(stream, "\n");
 	table_printer_indent_and_reflow_text(stream, summary, printer.max_width, 0, 0);
 	fprintf(stream, "\n");
