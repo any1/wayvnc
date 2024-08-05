@@ -885,7 +885,7 @@ static char* get_cfg_path(const struct cfg* cfg, char* dst, const char* src)
 }
 
 static int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port,
-		int fd, enum socket_type socket_type)
+		enum socket_type socket_type)
 {
 	switch (socket_type) {
 		case SOCKET_TYPE_TCP:
@@ -897,7 +897,8 @@ static int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port,
 		case SOCKET_TYPE_WEBSOCKET:
 			self->nvnc = nvnc_open_websocket(addr, port);
 			break;
-		case SOCKET_TYPE_FROM_FD:
+		case SOCKET_TYPE_FROM_FD:;
+			int fd = atoi(addr);
 			self->nvnc = nvnc_open_from_fd(fd);
 			break;
 		default:
@@ -910,9 +911,11 @@ static int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port,
 	if (socket_type == SOCKET_TYPE_UNIX)
 		nvnc_log(NVNC_LOG_INFO, "Listening for connections on %s", addr);
 	else if (socket_type == SOCKET_TYPE_FROM_FD)
-		nvnc_log(NVNC_LOG_INFO, "Listening for connections on fd %d", fd);
+		nvnc_log(NVNC_LOG_INFO, "Listening for connections on fd %s",
+				addr);
 	else
-		nvnc_log(NVNC_LOG_INFO, "Listening for connections on %s:%d", addr, port);
+		nvnc_log(NVNC_LOG_INFO, "Listening for connections on %s:%d",
+				addr, port);
 
 	self->nvnc_display = nvnc_display_new(0, 0);
 	if (!self->nvnc_display)
@@ -1717,7 +1720,7 @@ int main(int argc, char* argv[])
 
 	const char* address = NULL;
 	int port = 0;
-	int external_listener_fd = -1;
+	bool use_external_fd = false;
 	bool use_unix_socket = false;
 	bool use_websocket = false;
 	bool start_detached = false;
@@ -1767,9 +1770,8 @@ int main(int argc, char* argv[])
 		  "Show performance counters." },
 		{ 'u', "unix-socket", NULL,
 		  "Create unix domain socket." },
-		{ 'x', "external-listener-fd", "<fd>",
-		  "Listen on a bound socket at <fd> instead of binding to an address.",
-		  .default_ = "-1" },
+		{ 'x', "external-listener-fd", NULL,
+		  "The address is a pre-bound file descriptor.", },
 		{ 'd', "disable-input", NULL,
 		  "Disable all remote input." },
 		{ 'D', "detached", NULL,
@@ -1813,7 +1815,8 @@ int main(int argc, char* argv[])
 			"show-performance");
 	use_unix_socket = !!option_parser_get_value(&option_parser, "unix-socket");
 	use_websocket = !!option_parser_get_value(&option_parser, "websocket");
-	external_listener_fd = atoi(option_parser_get_value(&option_parser, "external-listener-fd"));
+	use_external_fd = !!option_parser_get_value(&option_parser,
+			"external-listener-fd");
 	disable_input = !!option_parser_get_value(&option_parser, "disable-input");
 	log_level = option_parser_get_value(&option_parser, "verbose")
 		? NVNC_LOG_INFO : NVNC_LOG_WARNING;
@@ -1844,18 +1847,10 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 
-	if (use_unix_socket && use_websocket) {
-		nvnc_log(NVNC_LOG_ERROR, "websocket and unix-socket are conflicting options");
-		return 1;
-	}
-
-	if (external_listener_fd >= 0 && use_unix_socket) {
-		nvnc_log(NVNC_LOG_ERROR, "external-listener-fd and unix-socket are conflicting options");
-		return 1;
-	}
-
-	if (external_listener_fd >= 0 && use_websocket) {
-		nvnc_log(NVNC_LOG_ERROR, "external-listener-fd and websocket are conflicting options");
+	int n_address_modifiers = use_unix_socket + use_websocket +
+		use_external_fd;
+	if (n_address_modifiers > 1) {
+		nvnc_log(NVNC_LOG_ERROR, "Only one of the websocket, unix-socket or the external-listener-fd options may be set");
 		return 1;
 	}
 
@@ -1888,16 +1883,6 @@ int main(int argc, char* argv[])
 	if (cfg_rc == 0) {
 		if (!address) address = self.cfg.address;
 		if (!port) port = self.cfg.port;
-	}
-
-	if (external_listener_fd >= 0 && address) {
-		nvnc_log(NVNC_LOG_ERROR, "external-listener-fd and address are conflicting options");
-		return 1;
-	}
-
-	if (external_listener_fd >= 0 && port) {
-		nvnc_log(NVNC_LOG_ERROR, "external-listener-fd and port are conflicting options");
-		return 1;
 	}
 
 	if (!address) address = DEFAULT_ADDRESS;
@@ -1966,7 +1951,7 @@ int main(int argc, char* argv[])
 		socket_type = SOCKET_TYPE_UNIX;
 	else if (use_websocket)
 		socket_type = SOCKET_TYPE_WEBSOCKET;
-	else if (external_listener_fd >= 0)
+	else if (use_external_fd)
 		socket_type = SOCKET_TYPE_FROM_FD;
 
 	if (!start_detached) {
@@ -2001,7 +1986,7 @@ int main(int argc, char* argv[])
 	if (!self.ctl)
 		goto ctl_server_failure;
 
-	if (init_nvnc(&self, address, port, external_listener_fd, socket_type) < 0)
+	if (init_nvnc(&self, address, port, socket_type) < 0)
 		goto nvnc_failure;
 
 	if (self.display)
