@@ -706,11 +706,6 @@ void ctl_client_print_command_list(FILE* stream)
 	fprintf(stream, "\nRun 'wayvncctl command-name --help' for command-specific details.\n");
 }
 
-static size_t param_render_length(const struct cmd_param_info* param)
-{
-	return strlen(param->name) + strlen(param->schema) + 1;
-}
-
 static void print_event_info(const struct cmd_info* info)
 {
 	printf("%s\n", info->name);
