@@ -19,12 +19,18 @@
 #include <unistd.h>
 
 extern struct zwlr_screencopy_manager_v1* screencopy_manager;
+extern struct ext_output_image_capture_source_manager_v1*
+		ext_output_image_capture_source_manager;
+extern struct ext_image_copy_capture_manager_v1* ext_image_copy_capture_manager;
 
 extern struct screencopy_impl wlr_screencopy_impl;
+extern struct screencopy_impl ext_image_copy_capture_impl;
 
 struct screencopy* screencopy_create(struct wl_output* output,
 		bool render_cursor)
 {
+	if (ext_image_copy_capture_manager && ext_output_image_capture_source_manager)
+		return ext_image_copy_capture_impl.create(output, render_cursor);
 	if (screencopy_manager)
 		return wlr_screencopy_impl.create(output, render_cursor);
 	return NULL;
@@ -33,6 +39,8 @@ struct screencopy* screencopy_create(struct wl_output* output,
 struct screencopy* screencopy_create_cursor(struct wl_output* output,
 		struct wl_seat* seat)
 {
+	if (ext_image_copy_capture_manager && ext_output_image_capture_source_manager)
+		return ext_image_copy_capture_impl.create_cursor(output, seat);
 	return NULL;
 }
 

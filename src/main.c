@@ -35,8 +35,8 @@
 #include <fcntl.h>
 
 #include "wlr-screencopy-unstable-v1.h"
-#include "ext-screencopy-v1.h"
-#include "ext-image-source-v1.h"
+#include "ext-image-copy-capture-v1.h"
+#include "ext-image-capture-source-v1.h"
 #include "wlr-virtual-pointer-unstable-v1.h"
 #include "virtual-keyboard-unstable-v1.h"
 #include "xdg-output-unstable-v1.h"
@@ -181,10 +181,11 @@ struct gbm_device* gbm_device = NULL;
 struct zxdg_output_manager_v1* xdg_output_manager = NULL;
 struct zwlr_output_power_manager_v1* wlr_output_power_manager = NULL;
 struct zwlr_screencopy_manager_v1* screencopy_manager = NULL;
-struct ext_output_image_source_manager_v1* ext_output_image_source_manager = NULL;
-struct ext_screencopy_manager_v1* ext_screencopy_manager = NULL;
+struct ext_output_image_capture_source_manager_v1*
+		ext_output_image_capture_source_manager = NULL;
+struct ext_image_copy_capture_manager_v1* ext_image_copy_capture_manager = NULL;
 
-extern struct screencopy_impl wlr_screencopy_impl, ext_screencopy_impl;
+extern struct screencopy_impl wlr_screencopy_impl, ext_image_copy_capture_impl;
 
 static bool registry_add_input(void* data, struct wl_registry* registry,
 			 uint32_t id, const char* interface,
@@ -303,18 +304,18 @@ static void registry_add(void* data, struct wl_registry* registry,
 	}
 
 #if 1
-	if (strcmp(interface, ext_screencopy_manager_v1_interface.name) == 0) {
-		ext_screencopy_manager =
+	if (strcmp(interface, ext_image_copy_capture_manager_v1_interface.name) == 0) {
+		ext_image_copy_capture_manager =
 			wl_registry_bind(registry, id,
-					 &ext_screencopy_manager_v1_interface,
+					 &ext_image_copy_capture_manager_v1_interface,
 					 MIN(1, version));
 		return;
 	}
 
-	if (strcmp(interface, ext_output_image_source_manager_v1_interface.name) == 0) {
-		ext_output_image_source_manager =
+	if (strcmp(interface, ext_output_image_capture_source_manager_v1_interface.name) == 0) {
+		ext_output_image_capture_source_manager =
 			wl_registry_bind(registry, id,
-					&ext_output_image_source_manager_v1_interface,
+					&ext_output_image_capture_source_manager_v1_interface,
 					MIN(1, version));
 		return;
 	}
@@ -509,13 +510,14 @@ static void wayland_detach(struct wayvnc* self)
 		zwlr_screencopy_manager_v1_destroy(screencopy_manager);
 	screencopy_manager = NULL;
 
-	if (ext_output_image_source_manager)
-		ext_output_image_source_manager_v1_destroy(ext_output_image_source_manager);
-	ext_output_image_source_manager = NULL;
+	if (ext_output_image_capture_source_manager)
+		ext_output_image_capture_source_manager_v1_destroy(
+				ext_output_image_capture_source_manager);
+	ext_output_image_capture_source_manager = NULL;
 
-	if (ext_screencopy_manager)
-		ext_screencopy_manager_v1_destroy(ext_screencopy_manager);
-	ext_screencopy_manager = NULL;
+	if (ext_image_copy_capture_manager)
+		ext_image_copy_capture_manager_v1_destroy(ext_image_copy_capture_manager);
+	ext_image_copy_capture_manager = NULL;
 
 	if (self->capture_retry_timer)
 		aml_unref(self->capture_retry_timer);
@@ -612,7 +614,7 @@ static int init_wayland(struct wayvnc* self, const char* display)
 		goto failure;
 	}
 
-	if (!screencopy_manager && !ext_screencopy_manager) {
+	if (!screencopy_manager && !ext_image_copy_capture_manager) {
 		nvnc_log(NVNC_LOG_ERROR, "Screencopy protocol not supported by compositor. Exiting. Refer to FAQ section in man page.");
 		goto failure;
 	}

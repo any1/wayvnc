@@ -16,6 +16,9 @@ wayland_scanner_client = generator(
 client_protocols = [
 	'wlr-export-dmabuf-unstable-v1.xml',
 	'wlr-screencopy-unstable-v1.xml',
+	'ext-image-copy-capture-v1.xml',
+	'ext-image-capture-source-v1.xml',
+	'ext-foreign-toplevel-list-v1.xml',
 	'wlr-virtual-pointer-unstable-v1.xml',
 	'virtual-keyboard-unstable-v1.xml',
 	'xdg-output-unstable-v1.xml',
