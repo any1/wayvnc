@@ -87,6 +87,7 @@ sources = [
 	'src/strlcpy.c',
 	'src/shm.c',
 	'src/screencopy.c',
+	'src/screencopy-interface.c',
 	'src/data-control.c',
 	'src/output.c',
 	'src/output-management.c',
