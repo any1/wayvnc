@@ -23,9 +23,11 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <pixman.h>
+#include <sys/types.h>
 
 struct wl_buffer;
 struct gbm_bo;
+struct gbm_device;
 struct nvnc_fb;
 
 enum wv_buffer_type {
@@ -63,6 +65,7 @@ struct wv_buffer {
 
 	/* The following is only applicable to DMABUF */
 	struct gbm_bo* bo;
+	dev_t node;
 
 	/* The following is only applicable to cursors */
 	uint16_t cursor_width;
@@ -78,12 +81,23 @@ struct wv_buffer_pool {
 	enum wv_buffer_type type;
 	int width, height, stride;
 	uint32_t format;
+
+	dev_t node;
+	int gbm_fd;
+	struct gbm_device* gbm;
+};
+
+struct wv_buffer_config {
+	enum wv_buffer_type type;
+	int width, height, stride;
+	uint32_t format;
+	dev_t node;
 };
 
 enum wv_buffer_type wv_buffer_get_available_types(void);
 
 struct wv_buffer* wv_buffer_create(enum wv_buffer_type, int width, int height,
-		int stride, uint32_t fourcc);
+		int stride, uint32_t fourcc, struct gbm_device* gbm);
 void wv_buffer_destroy(struct wv_buffer* self);
 
 void wv_buffer_damage_rect(struct wv_buffer* self, int x, int y, int width,
@@ -91,11 +105,11 @@ void wv_buffer_damage_rect(struct wv_buffer* self, int x, int y, int width,
 void wv_buffer_damage_whole(struct wv_buffer* self);
 void wv_buffer_damage_clear(struct wv_buffer* self);
 
-struct wv_buffer_pool* wv_buffer_pool_create(enum wv_buffer_type, int width,
-		int height, int stride, uint32_t format);
+struct wv_buffer_pool* wv_buffer_pool_create(
+		const struct wv_buffer_config* config);
 void wv_buffer_pool_destroy(struct wv_buffer_pool* pool);
-void wv_buffer_pool_resize(struct wv_buffer_pool* pool, enum wv_buffer_type,
-		int width, int height, int stride, uint32_t format);
+void wv_buffer_pool_reconfig(struct wv_buffer_pool* pool,
+		const struct wv_buffer_config* config);
 struct wv_buffer* wv_buffer_pool_acquire(struct wv_buffer_pool* pool);
 void wv_buffer_pool_release(struct wv_buffer_pool* pool,
 		struct wv_buffer* buffer);

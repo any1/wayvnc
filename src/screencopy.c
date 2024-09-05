@@ -121,27 +121,26 @@ static void screencopy_buffer_done(void* data,
 			      struct zwlr_screencopy_frame_v1* frame)
 {
 	struct wlr_screencopy* self = data;
-	uint32_t width, height, stride, fourcc;
-	enum wv_buffer_type type = WV_BUFFER_UNSPEC;
+	struct wv_buffer_config config = {};
 
 #ifdef ENABLE_SCREENCOPY_DMABUF
 	if (self->have_linux_dmabuf && self->parent.enable_linux_dmabuf) {
-		width = self->dmabuf_width;
-		height = self->dmabuf_height;
-		stride = 0;
-		fourcc = self->fourcc;
-		type = WV_BUFFER_DMABUF;
+		config.width = self->dmabuf_width;
+		config.height = self->dmabuf_height;
+		config.stride = 0;
+		config.format = self->fourcc;
+		config.type = WV_BUFFER_DMABUF;
 	} else
 #endif
 	{
-		width = self->wl_shm_width;
-		height = self->wl_shm_height;
-		stride = self->wl_shm_stride;
-		fourcc = fourcc_from_wl_shm(self->wl_shm_format);
-		type = WV_BUFFER_SHM;
+		config.width = self->wl_shm_width;
+		config.height = self->wl_shm_height;
+		config.stride = self->wl_shm_stride;
+		config.format = fourcc_from_wl_shm(self->wl_shm_format);
+		config.type = WV_BUFFER_SHM;
 	}
 
-	wv_buffer_pool_resize(self->pool, type, width, height, stride, fourcc);
+	wv_buffer_pool_reconfig(self->pool, &config);
 
 	struct wv_buffer* buffer = wv_buffer_pool_acquire(self->pool);
 	if (!buffer) {
@@ -331,7 +330,7 @@ static struct screencopy* wlr_screencopy_create(struct wl_output* output,
 	self->wl_output = output;
 	self->overlay_cursor = render_cursor;
 
-	self->pool = wv_buffer_pool_create(0, 0, 0, 0, 0);
+	self->pool = wv_buffer_pool_create(NULL);
 	assert(self->pool);
 
 	self->timer = aml_timer_new(0, screencopy__poll, self, NULL);

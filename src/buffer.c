@@ -32,11 +32,14 @@
 #include "pixels.h"
 #include "config.h"
 #include "util.h"
+#include "strlcpy.h"
 
 #ifdef ENABLE_SCREENCOPY_DMABUF
 #include <gbm.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
+#include <sys/sysmacros.h>
+#include <xf86drm.h>
 
 #ifdef HAVE_LINUX_DMA_HEAP
 #include <linux/dma-buf.h>
@@ -48,7 +51,6 @@
 
 extern struct wl_shm* wl_shm;
 extern struct zwp_linux_dmabuf_v1* zwp_linux_dmabuf;
-extern struct gbm_device* gbm_device;
 
 LIST_HEAD(wv_buffer_list, wv_buffer);
 
@@ -62,7 +64,7 @@ enum wv_buffer_type wv_buffer_get_available_types(void)
 		type |= WV_BUFFER_SHM;
 
 #ifdef ENABLE_SCREENCOPY_DMABUF
-	if (zwp_linux_dmabuf && gbm_device)
+	if (zwp_linux_dmabuf)
 		type |= WV_BUFFER_DMABUF;
 #endif
 
@@ -165,10 +167,9 @@ static int linux_cma_alloc(size_t size)
 }
 
 // Some devices (mostly ARM SBCs) need CMA for hardware encoders.
-static struct gbm_bo* create_cma_gbm_bo(int width, int height, uint32_t fourcc)
+static struct gbm_bo* create_cma_gbm_bo(int width, int height, uint32_t fourcc,
+		struct gbm_device* gbm)
 {
-	assert(gbm_device);
-
 	int bpp = pixel_size_from_fourcc(fourcc);
 	if (!bpp) {
 		nvnc_log(NVNC_LOG_PANIC, "Unsupported pixel format: %" PRIu32,
@@ -198,8 +199,7 @@ static struct gbm_bo* create_cma_gbm_bo(int width, int height, uint32_t fourcc)
 		.strides[0] = stride,
 	};
 
-	struct gbm_bo* bo = gbm_bo_import(gbm_device, GBM_BO_IMPORT_FD_MODIFIER,
-			&d, 0);
+	struct gbm_bo* bo = gbm_bo_import(gbm, GBM_BO_IMPORT_FD_MODIFIER, &d, 0);
 	if (!bo) {
 		nvnc_log(NVNC_LOG_DEBUG, "Failed to import dmabuf: %m");
 		close(fd);
@@ -211,10 +211,9 @@ static struct gbm_bo* create_cma_gbm_bo(int width, int height, uint32_t fourcc)
 #endif // HAVE_LINUX_DMA_HEAP
 
 static struct wv_buffer* wv_buffer_create_dmabuf(int width, int height,
-		uint32_t fourcc)
+		uint32_t fourcc, struct gbm_device* gbm)
 {
 	assert(zwp_linux_dmabuf);
-	assert(gbm_device);
 
 	struct wv_buffer* self = calloc(1, sizeof(*self));
 	if (!self)
@@ -227,12 +226,11 @@ static struct wv_buffer* wv_buffer_create_dmabuf(int width, int height,
 
 #ifdef HAVE_LINUX_DMA_HEAP
 	self->bo = have_linux_cma() ?
-		create_cma_gbm_bo(width, height, fourcc) :
-		gbm_bo_create(gbm_device, width, height, fourcc,
-				GBM_BO_USE_RENDERING);
+		create_cma_gbm_bo(width, height, fourcc, gbm) :
+		gbm_bo_create(gbm, width, height, fourcc, GBM_BO_USE_RENDERING);
 #else
-	self->bo = gbm_bo_create(gbm_device, width, height, fourcc,
-				GBM_BO_USE_RENDERING);
+	self->bo = gbm_bo_create(gbm, width, height, fourcc,
+			GBM_BO_USE_RENDERING);
 #endif
 
 	if (!self->bo)
@@ -288,14 +286,18 @@ bo_failure:
 #endif
 
 struct wv_buffer* wv_buffer_create(enum wv_buffer_type type, int width,
-		int height, int stride, uint32_t fourcc)
+		int height, int stride, uint32_t fourcc,
+		struct gbm_device* gbm)
 {
+	nvnc_trace("wv_buffer_create: %dx%d, stride: %d, format: %"PRIu32" gbm: %p",
+			width, height, stride, fourcc, gbm);
+
 	switch (type) {
 	case WV_BUFFER_SHM:
 		return wv_buffer_create_shm(width, height, stride, fourcc);
 #ifdef ENABLE_SCREENCOPY_DMABUF
 	case WV_BUFFER_DMABUF:
-		return wv_buffer_create_dmabuf(width, height, fourcc);
+		return wv_buffer_create_dmabuf(width, height, fourcc, gbm);
 #endif
 	case WV_BUFFER_UNSPEC:;
 	}
@@ -360,19 +362,18 @@ void wv_buffer_damage_clear(struct wv_buffer* self)
 	pixman_region_clear(&self->frame_damage);
 }
 
-struct wv_buffer_pool* wv_buffer_pool_create(enum wv_buffer_type type,
-		int width, int height, int stride, uint32_t format)
+struct wv_buffer_pool* wv_buffer_pool_create(
+		const struct wv_buffer_config* config)
 {
 	struct wv_buffer_pool* self = calloc(1, sizeof(*self));
 	if (!self)
 		return NULL;
 
 	TAILQ_INIT(&self->queue);
-	self->type = type;
-	self->width = width;
-	self->height = height;
-	self->stride = stride;
-	self->format = format;
+	self->gbm_fd = -1;
+
+	if (config)
+		wv_buffer_pool_reconfig(self, config);
 
 	return self;
 }
@@ -389,23 +390,116 @@ static void wv_buffer_pool_clear(struct wv_buffer_pool* pool)
 void wv_buffer_pool_destroy(struct wv_buffer_pool* pool)
 {
 	wv_buffer_pool_clear(pool);
+#ifdef ENABLE_SCREENCOPY_DMABUF
+	if (pool->gbm)
+		gbm_device_destroy(pool->gbm);
+	if (pool->gbm_fd > 0)
+		close(pool->gbm_fd);
+#endif
 	free(pool);
 }
 
-void wv_buffer_pool_resize(struct wv_buffer_pool* pool,
-		enum wv_buffer_type type, int width, int height, int stride,
-		uint32_t format)
+#ifdef ENABLE_SCREENCOPY_DMABUF
+static int render_node_from_dev_t(char* node, size_t maxlen, dev_t device)
 {
-	if (pool->type != type || pool->width != width || pool->height != height
-	    || pool->stride != stride || pool->format != format) {
-		wv_buffer_pool_clear(pool);
+   drmDevice *dev_ptr;
+
+   if (drmGetDeviceFromDevId(device, 0, &dev_ptr) < 0)
+      return -1;
+
+   if (dev_ptr->available_nodes & (1 << DRM_NODE_RENDER))
+      strlcpy(node, dev_ptr->nodes[DRM_NODE_RENDER], maxlen);
+
+   drmFreeDevice(&dev_ptr);
+
+   return 0;
+}
+
+static int find_render_node(char *node, size_t maxlen) {
+	bool r = -1;
+	drmDevice *devices[64];
+
+	int n = drmGetDevices2(0, devices, sizeof(devices) / sizeof(devices[0]));
+	for (int i = 0; i < n; ++i) {
+		drmDevice *dev = devices[i];
+		if (!(dev->available_nodes & (1 << DRM_NODE_RENDER)))
+			continue;
+
+		strlcpy(node, dev->nodes[DRM_NODE_RENDER], maxlen);
+		r = 0;
+		break;
 	}
 
-	pool->type = type;
-	pool->width = width;
-	pool->height = height;
-	pool->stride = stride;
-	pool->format = format;
+	drmFreeDevices(devices, n);
+	return r;
+}
+
+static void open_render_node(struct wv_buffer_pool* pool)
+{
+	char path[256];
+	if (major(pool->node) != 0 || minor(pool->node) != 0) {
+		if (render_node_from_dev_t(path, sizeof(path), pool->node) < 0) {
+			nvnc_log(NVNC_LOG_ERROR, "Could not find render node from dev_t");
+			return;
+		}
+	} else if (find_render_node(path, sizeof(path)) < 0) {
+		nvnc_log(NVNC_LOG_ERROR, "Could not find a render node");
+		return;
+	}
+
+	nvnc_log(NVNC_LOG_DEBUG, "Using render node: %s", path);
+
+	pool->gbm_fd = open(path, O_RDWR);
+	if (pool->gbm_fd < 0) {
+		nvnc_log(NVNC_LOG_ERROR, "Failed to open render node %s: %m",
+				path);
+		return;
+	}
+
+	pool->gbm = gbm_create_device(pool->gbm_fd);
+	if (!pool->gbm) {
+		nvnc_log(NVNC_LOG_ERROR, "Failed to create a GBM device");
+	}
+}
+#endif // ENABLE_SCREENCOPY_DMABUF
+
+void wv_buffer_pool_reconfig(struct wv_buffer_pool* pool,
+		const struct wv_buffer_config* config)
+{
+	if (pool->type == config->type && pool->width == config->width &&
+			pool->height == config->height &&
+			pool->stride == config->stride &&
+			pool->format == config->format &&
+			pool->node == config->node) {
+		return;
+	}
+
+	wv_buffer_pool_clear(pool);
+
+	pool->type = config->type;
+	pool->width = config->width;
+	pool->height = config->height;
+	pool->stride = config->stride;
+	pool->format = config->format;
+
+#ifdef ENABLE_SCREENCOPY_DMABUF
+	if (pool->node != config->node) {
+		pool->node = config->node;
+
+		if (pool->gbm)
+			gbm_device_destroy(pool->gbm);
+		if (pool->gbm_fd > 0)
+			close(pool->gbm_fd);
+		pool->gbm_fd = -1;
+
+		open_render_node(pool);
+	}
+
+	if (major(pool->node) == 0 && minor(pool->node) == 0 && !pool->gbm)
+		open_render_node(pool);
+
+	assert(pool->gbm);
+#endif
 }
 
 static bool wv_buffer_pool_match_buffer(struct wv_buffer_pool* pool,
@@ -426,7 +520,8 @@ static bool wv_buffer_pool_match_buffer(struct wv_buffer_pool* pool,
 #endif
 		if (pool->width != buffer->width
 		    || pool->height != buffer->height
-		    || pool->format != buffer->format)
+		    || pool->format != buffer->format
+		    || pool->node != buffer->node)
 			return false;
 
 		return true;
@@ -455,7 +550,7 @@ struct wv_buffer* wv_buffer_pool_acquire(struct wv_buffer_pool* pool)
 	}
 
 	buffer = wv_buffer_create(pool->type, pool->width, pool->height,
-			pool->stride, pool->format);
+			pool->stride, pool->format, pool->gbm);
 	if (buffer)
 		nvnc_fb_set_release_fn(buffer->nvnc_fb,
 				wv_buffer_pool__on_release, pool);

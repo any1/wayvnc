@@ -19,7 +19,9 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <inttypes.h>
+#include <string.h>
 #include <sys/mman.h>
+#include <sys/types.h>
 #include <wayland-client.h>
 #include <libdrm/drm_fourcc.h>
 #include <aml.h>
@@ -58,6 +60,8 @@ struct ext_image_copy_capture {
 	bool have_wl_shm;
 	bool have_linux_dmabuf;
 	uint32_t dmabuf_format;
+	bool have_dmabuf_dev;
+	dev_t dmabuf_dev;
 
 	struct { int x, y; } hotspot;
 
@@ -217,7 +221,15 @@ static void session_handle_dmabuf_device(void* data,
 		struct ext_image_copy_capture_session_v1* session,
 		struct wl_array *device)
 {
-	// TODO
+	struct ext_image_copy_capture* self = data;
+
+	if (device->size != sizeof(self->dmabuf_dev)) {
+		nvnc_log(NVNC_LOG_ERROR, "array size != sizeof(dev_t)");
+		return;
+	}
+
+	self->have_dmabuf_dev = true;
+	memcpy(&self->dmabuf_dev, device->data, sizeof(self->dmabuf_dev));
 }
 
 static void session_handle_dimensions(void *data,
@@ -238,29 +250,31 @@ static void session_handle_constraints_done(void *data,
 		struct ext_image_copy_capture_session_v1 *session)
 {
 	struct ext_image_copy_capture* self = data;
-	uint32_t width, height, stride, format;
-	enum wv_buffer_type type = WV_BUFFER_UNSPEC;
+	struct wv_buffer_config config = {};
 
-	width = self->width;
-	height = self->height;
+	config.width = self->width;
+	config.height = self->height;
 
 #ifdef ENABLE_SCREENCOPY_DMABUF
 	if (self->have_linux_dmabuf && self->parent.enable_linux_dmabuf) {
-		format = self->dmabuf_format;
-		stride = 0;
-		type = WV_BUFFER_DMABUF;
+		config.format = self->dmabuf_format;
+		config.stride = 0;
+		config.type = WV_BUFFER_DMABUF;
+
+		if (self->have_dmabuf_dev)
+			config.node = self->dmabuf_dev;
 	} else
 #endif
 	if (self->have_wl_shm) {
-		format = self->wl_shm_format;
-		stride = self->wl_shm_stride;
-		type = WV_BUFFER_SHM;
+		config.format = self->wl_shm_format;
+		config.stride = self->wl_shm_stride;
+		config.type = WV_BUFFER_SHM;
 	} else {
 		nvnc_log(NVNC_LOG_DEBUG, "No buffer formats supplied");
 		return;
 	}
 
-	wv_buffer_pool_resize(self->pool, type, width, height, stride, format);
+	wv_buffer_pool_reconfig(self->pool, &config);
 
 	if (self->should_start) {
 		ext_image_copy_capture_schedule_capture(self);
@@ -502,7 +516,7 @@ static struct screencopy* ext_image_copy_capture_create(struct wl_output* output
 			NULL);
 	assert(self->timer);
 
-	self->pool = wv_buffer_pool_create(0, 0, 0, 0, 0);
+	self->pool = wv_buffer_pool_create(NULL);
 	if (!self->pool)
 		goto failure;
 
@@ -535,7 +549,7 @@ static struct screencopy* ext_image_copy_capture_create_cursor(struct wl_output*
 			NULL);
 	assert(self->timer);
 
-	self->pool = wv_buffer_pool_create(0, 0, 0, 0, 0);
+	self->pool = wv_buffer_pool_create(NULL);
 	if (!self->pool)
 		goto failure;
 

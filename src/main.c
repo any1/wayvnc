@@ -65,11 +65,6 @@
 #include "pam_auth.h"
 #endif
 
-#ifdef ENABLE_SCREENCOPY_DMABUF
-#include <gbm.h>
-#include <xf86drm.h>
-#endif
-
 #define DEFAULT_ADDRESS "127.0.0.1"
 #define DEFAULT_PORT 5900
 
@@ -177,7 +172,6 @@ static bool configure_cursor_sc(struct wayvnc* self,
 
 struct wl_shm* wl_shm = NULL;
 struct zwp_linux_dmabuf_v1* zwp_linux_dmabuf = NULL;
-struct gbm_device* gbm_device = NULL;
 struct zxdg_output_manager_v1* xdg_output_manager = NULL;
 struct zwlr_output_power_manager_v1* wlr_output_power_manager = NULL;
 struct zwlr_screencopy_manager_v1* screencopy_manager = NULL;
@@ -391,46 +385,6 @@ static void registry_remove(void* data, struct wl_registry* registry,
 		return;
 	}
 }
-
-#ifdef ENABLE_SCREENCOPY_DMABUF
-static int find_render_node(char *node, size_t maxlen) {
-	bool r = -1;
-	drmDevice *devices[64];
-
-	int n = drmGetDevices2(0, devices, sizeof(devices) / sizeof(devices[0]));
-	for (int i = 0; i < n; ++i) {
-		drmDevice *dev = devices[i];
-		if (!(dev->available_nodes & (1 << DRM_NODE_RENDER)))
-			continue;
-
-		strlcpy(node, dev->nodes[DRM_NODE_RENDER], maxlen);
-		r = 0;
-		break;
-	}
-
-	drmFreeDevices(devices, n);
-	return r;
-}
-
-static int init_render_node(int* fd)
-{
-	char render_node[256];
-	if (find_render_node(render_node, sizeof(render_node)) < 0)
-		return -1;
-
-	*fd = open(render_node, O_RDWR);
-	if (*fd < 0)
-		return -1;
-
-	gbm_device = gbm_create_device(*fd);
-	if (!gbm_device) {
-		close(*fd);
-		return -1;
-	}
-
-	return 0;
-}
-#endif
 
 static void wayland_detach(struct wayvnc* self)
 {
@@ -2094,12 +2048,6 @@ int main(int argc, char* argv[])
 		self.selected_seat = seat;
 	}
 
-#ifdef ENABLE_SCREENCOPY_DMABUF
-	if (enable_gpu_features && init_render_node(&drm_fd) < 0) {
-		nvnc_log(NVNC_LOG_ERROR, "Failed to initialise DRM render node. No GPU acceleration will be available.");
-	}
-#endif
-
 	if (aml_unstable_abi_version != AML_UNSTABLE_API)
 		nvnc_log(NVNC_LOG_PANIC, "libaml is incompatible with this build of wayvnc!");
 
@@ -2167,12 +2115,6 @@ int main(int argc, char* argv[])
 		zwp_linux_dmabuf_v1_destroy(zwp_linux_dmabuf);
 	if (self.screencopy)
 		screencopy_destroy(self.screencopy);
-#ifdef ENABLE_SCREENCOPY_DMABUF
-	if (gbm_device) {
-		gbm_device_destroy(gbm_device);
-		close(drm_fd);
-	}
-#endif
 	aml_unref(aml);
 
 	return 0;
@@ -2188,11 +2130,5 @@ wayland_failure:
 failure:
 	self.nvnc = NULL;
 	wayvnc_destroy(&self);
-#ifdef ENABLE_SCREENCOPY_DMABUF
-	if (gbm_device)
-		gbm_device_destroy(gbm_device);
-	if (drm_fd >= 0)
-		close(drm_fd);
-#endif
 	return 1;
 }
