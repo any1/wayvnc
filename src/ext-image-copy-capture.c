@@ -34,7 +34,6 @@
 #include "usdt.h"
 #include "pixels.h"
 #include "config.h"
-#include "logging.h"
 
 extern struct ext_output_image_capture_source_manager_v1* ext_output_image_capture_source_manager;
 extern struct ext_image_copy_capture_manager_v1* ext_image_copy_capture_manager;
