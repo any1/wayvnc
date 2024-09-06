@@ -20,6 +20,7 @@
 #include <stdbool.h>
 #include <assert.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 #include <libdrm/drm_fourcc.h>
 #include <wayland-client.h>
 #include <pixman.h>
@@ -223,6 +224,11 @@ static struct wv_buffer* wv_buffer_create_dmabuf(int width, int height,
 	self->width = width;
 	self->height = height;
 	self->format = fourcc;
+
+	int device_fd = gbm_device_get_fd(gbm);
+	struct stat st = {};
+	fstat(device_fd, &st);
+	self->node = st.st_rdev;
 
 #ifdef HAVE_LINUX_DMA_HEAP
 	self->bo = have_linux_cma() ?
