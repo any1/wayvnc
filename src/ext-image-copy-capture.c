@@ -132,6 +132,7 @@ static int ext_image_copy_capture_init_cursor_session(struct ext_image_copy_capt
 	self->cursor = ext_image_copy_capture_manager_v1_create_pointer_cursor_session(
 			ext_image_copy_capture_manager, source, pointer);
 	ext_image_capture_source_v1_destroy(source);
+	wl_pointer_release(pointer);
 	if (!self->cursor)
 		return -1;
 
