@@ -95,6 +95,10 @@ static void ext_image_copy_capture_deinit_session(struct ext_image_copy_capture*
 	if (self->cursor)
 		ext_image_copy_capture_cursor_session_v1_destroy(self->cursor);
 	self->cursor = NULL;
+
+	if (self->buffer)
+		wv_buffer_pool_release(self->pool, self->buffer);
+	self->buffer = NULL;
 }
 
 static int ext_image_copy_capture_init_session(struct ext_image_copy_capture* self)
@@ -591,14 +595,8 @@ void ext_image_copy_capture_destroy(struct screencopy* ptr)
 	aml_stop(aml_get_default(), self->timer);
 	aml_unref(self->timer);
 
-	if (self->frame)
-		ext_image_copy_capture_frame_v1_destroy(self->frame);
-	if (self->cursor)
-		ext_image_copy_capture_cursor_session_v1_destroy(self->cursor);
-	if (self->session)
-		ext_image_copy_capture_session_v1_destroy(self->session);
-	if (self->buffer)
-		wv_buffer_pool_release(self->pool, self->buffer);
+	ext_image_copy_capture_deinit_session(self);
+
 	wv_buffer_pool_destroy(self->pool);
 	free(self);
 }

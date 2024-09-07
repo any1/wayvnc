@@ -418,16 +418,13 @@ static void wayland_detach(struct wayvnc* self)
 		zwp_linux_dmabuf_v1_destroy(zwp_linux_dmabuf);
 	zwp_linux_dmabuf = NULL;
 
-	if (screencopy_manager) {
-		screencopy_stop(self->screencopy);
-		screencopy_destroy(self->screencopy);
-		self->screencopy = NULL;
-		screencopy_stop(self->cursor_sc);
-		screencopy_destroy(self->cursor_sc);
-		self->cursor_sc = NULL;
-		zwlr_screencopy_manager_v1_destroy(screencopy_manager);
-	}
-	screencopy_manager = NULL;
+	screencopy_stop(self->screencopy);
+	screencopy_destroy(self->screencopy);
+	self->screencopy = NULL;
+
+	screencopy_stop(self->cursor_sc);
+	screencopy_destroy(self->cursor_sc);
+	self->cursor_sc = NULL;
 
 	if (xdg_output_manager)
 		zxdg_output_manager_v1_destroy(xdg_output_manager);
@@ -476,6 +473,9 @@ static void wayland_detach(struct wayvnc* self)
 	if (self->capture_retry_timer)
 		aml_unref(self->capture_retry_timer);
 	self->capture_retry_timer = NULL;
+
+	if (self->transient_seat_manager)
+		ext_transient_seat_manager_v1_destroy(self->transient_seat_manager);
 
 	wl_registry_destroy(self->registry);
 	self->registry = NULL;

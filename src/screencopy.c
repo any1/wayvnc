@@ -356,6 +356,7 @@ static void wlr_screencopy_destroy(struct screencopy* ptr)
 	self->front = NULL;
 
 	wv_buffer_pool_destroy(self->pool);
+	free(self);
 }
 
 struct screencopy_impl wlr_screencopy_impl = {

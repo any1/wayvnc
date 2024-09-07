@@ -538,6 +538,7 @@ void wv_buffer_pool_reconfig(struct wv_buffer_pool* pool,
 	if (old_node != config->node) {
 		if (pool->gbm)
 			gbm_device_destroy(pool->gbm);
+		pool->gbm = NULL;
 		if (pool->gbm_fd > 0)
 			close(pool->gbm_fd);
 		pool->gbm_fd = -1;
