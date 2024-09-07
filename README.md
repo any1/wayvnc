@@ -1,7 +1,7 @@
 # wayvnc
 
 [![Build and Unit Test](https://github.com/any1/wayvnc/actions/workflows/build.yml/badge.svg)](https://github.com/any1/wayvnc/actions/workflows/build.yml)
-[![builds.sr.ht status](https://builds.sr.ht/~andri/wayvnc/pulls/1.svg)](https://builds.sr.ht/~andri/wayvnc/pulls/1?)
+[![builds.sr.ht status](https://builds.sr.ht/~andri/wayvnc.svg)](https://builds.sr.ht/~andri/wayvnc?)
 [![Packaging status](https://repology.org/badge/tiny-repos/wayvnc.svg)](https://repology.org/project/wayvnc/versions)
 
 ## Introduction
