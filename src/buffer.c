@@ -40,7 +40,6 @@
 #include <gbm.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
-#include <sys/sysmacros.h>
 #include <xf86drm.h>
 
 #ifdef HAVE_LINUX_DMA_HEAP
@@ -497,7 +496,7 @@ static int find_render_node(char *node, size_t maxlen) {
 static void open_render_node(struct wv_buffer_pool* pool)
 {
 	char path[256];
-	if (major(pool->config.node) != 0 || minor(pool->config.node) != 0) {
+	if (pool->config.node) {
 		if (render_node_from_dev_t(path, sizeof(path),
 					pool->config.node) < 0) {
 			nvnc_log(NVNC_LOG_ERROR, "Could not find render node from dev_t");
@@ -546,8 +545,7 @@ void wv_buffer_pool_reconfig(struct wv_buffer_pool* pool,
 		open_render_node(pool);
 	}
 
-	if (major(pool->config.node) == 0 && minor(pool->config.node) == 0 &&
-			!pool->gbm)
+	if (!pool->config.node && !pool->gbm)
 		open_render_node(pool);
 
 	assert(pool->gbm);
