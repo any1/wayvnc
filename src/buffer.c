@@ -24,6 +24,7 @@
 #include <libdrm/drm_fourcc.h>
 #include <wayland-client.h>
 #include <pixman.h>
+#include <string.h>
 #include <neatvnc.h>
 
 #include "linux-dmabuf-unstable-v1.h"
@@ -57,6 +58,47 @@ LIST_HEAD(wv_buffer_list, wv_buffer);
 
 static struct wv_buffer_list buffer_registry;
 
+static bool modifiers_match(const uint64_t* a, int a_len, const uint64_t* b,
+		int b_len)
+{
+	if (a_len != b_len)
+		return false;
+	return a_len == 0 || memcmp(a, b, a_len) == 0;
+}
+
+static bool buffer_configs_match(const struct wv_buffer_config* a,
+		const struct wv_buffer_config* b)
+{
+#define X(n) if (a->n != b->n) return false
+	X(type);
+	X(width);
+	X(height);
+	X(stride);
+	X(format);
+	X(node);
+	X(n_modifiers);
+#undef X
+	return modifiers_match(a->modifiers, a->n_modifiers, b->modifiers,
+			b->n_modifiers);
+}
+
+static void copy_buffer_config(struct wv_buffer_config* dst,
+		const struct wv_buffer_config* src)
+{
+	free(dst->modifiers);
+
+	memcpy(dst, src, sizeof(*dst));
+	dst->n_modifiers = 0;
+	dst->modifiers = NULL;
+
+	if (src->n_modifiers > 0) {
+		assert(src->modifiers);
+		dst->modifiers = malloc(src->n_modifiers * 8);
+		assert(dst->modifiers);
+		memcpy(dst->modifiers, src->modifiers, src->n_modifiers * 8);
+	}
+}
+
 enum wv_buffer_type wv_buffer_get_available_types(void)
 {
 	enum wv_buffer_type type = 0;
@@ -72,23 +114,22 @@ enum wv_buffer_type wv_buffer_get_available_types(void)
 	return type;
 }
 
-struct wv_buffer* wv_buffer_create_shm(int width,
-		int height, int stride, uint32_t fourcc)
+struct wv_buffer* wv_buffer_create_shm(const struct wv_buffer_config* config)
 {
 	assert(wl_shm);
-	enum wl_shm_format wl_fmt = fourcc_to_wl_shm(fourcc);
+	enum wl_shm_format wl_fmt = fourcc_to_wl_shm(config->format);
 
 	struct wv_buffer* self = calloc(1, sizeof(*self));
 	if (!self)
 		return NULL;
 
 	self->type = WV_BUFFER_SHM;
-	self->width = width;
-	self->height = height;
-	self->stride = stride;
-	self->format = fourcc;
+	self->width = config->width;
+	self->height = config->height;
+	self->stride = config->stride;
+	self->format = config->format;
 
-	self->size = height * stride;
+	self->size = config->height * config->stride;
 	int fd = shm_alloc_fd(self->size);
 	if (fd < 0)
 		goto failure;
@@ -102,16 +143,16 @@ struct wv_buffer* wv_buffer_create_shm(int width,
 	if (!pool)
 		goto pool_failure;
 
-	self->wl_buffer = wl_shm_pool_create_buffer(pool, 0, width, height,
-			stride, wl_fmt);
+	self->wl_buffer = wl_shm_pool_create_buffer(pool, 0, config->width,
+			config->height, config->stride, wl_fmt);
 	wl_shm_pool_destroy(pool);
 	if (!self->wl_buffer)
 		goto shm_failure;
 
-	int bpp = pixel_size_from_fourcc(fourcc);
+	int bpp = pixel_size_from_fourcc(config->format);
 	assert(bpp > 0);
-	self->nvnc_fb = nvnc_fb_from_buffer(self->pixels, width, height, fourcc,
-			stride / bpp);
+	self->nvnc_fb = nvnc_fb_from_buffer(self->pixels, config->width,
+			config->height, config->format, config->stride / bpp);
 	if (!self->nvnc_fb) {
 		goto nvnc_fb_failure;
 	}
@@ -119,7 +160,8 @@ struct wv_buffer* wv_buffer_create_shm(int width,
 	nvnc_set_userdata(self->nvnc_fb, self, NULL);
 
 	pixman_region_init(&self->frame_damage);
-	pixman_region_init_rect(&self->buffer_damage, 0, 0, width, height);
+	pixman_region_init_rect(&self->buffer_damage, 0, 0, config->width,
+			config->height);
 
 	LIST_INSERT_HEAD(&buffer_registry, self, registry_link);
 
@@ -211,8 +253,8 @@ static struct gbm_bo* create_cma_gbm_bo(int width, int height, uint32_t fourcc,
 }
 #endif // HAVE_LINUX_DMA_HEAP
 
-static struct wv_buffer* wv_buffer_create_dmabuf(int width, int height,
-		uint32_t fourcc, struct gbm_device* gbm)
+static struct wv_buffer* wv_buffer_create_dmabuf(
+		const struct wv_buffer_config* config, struct gbm_device* gbm)
 {
 	assert(zwp_linux_dmabuf);
 
@@ -221,22 +263,30 @@ static struct wv_buffer* wv_buffer_create_dmabuf(int width, int height,
 		return NULL;
 
 	self->type = WV_BUFFER_DMABUF;
-	self->width = width;
-	self->height = height;
-	self->format = fourcc;
+	self->width = config->width;
+	self->height = config->height;
+	self->format = config->format;
+	self->node = config->node;
+	self->n_modifiers = config->n_modifiers;
 
-	int device_fd = gbm_device_get_fd(gbm);
-	struct stat st = {};
-	fstat(device_fd, &st);
-	self->node = st.st_rdev;
+	if (self->n_modifiers > 0) {
+		self->modifiers = malloc(config->n_modifiers * 8);
+		assert(self->modifiers);
+		memcpy(self->modifiers, config->modifiers, self->n_modifiers * 8);
+	}
 
 #ifdef HAVE_LINUX_DMA_HEAP
 	self->bo = have_linux_cma() ?
-		create_cma_gbm_bo(width, height, fourcc, gbm) :
-		gbm_bo_create(gbm, width, height, fourcc, GBM_BO_USE_RENDERING);
+		create_cma_gbm_bo(config->width, config->height,
+				config->format, gbm) :
+		gbm_bo_create_with_modifiers2(gbm, config->width,
+				config->height, config->format,
+				config->modifiers, config->n_modifiers,
+				GBM_BO_USE_RENDERING);
 #else
-	self->bo = gbm_bo_create(gbm, width, height, fourcc,
-			GBM_BO_USE_RENDERING);
+	self->bo = gbm_bo_create_with_modifiers2(gbm, config->width,
+			config->height, config->format, config->modifiers,
+			config->n_modifiers, GBM_BO_USE_RENDERING);
 #endif
 
 	if (!self->bo)
@@ -256,8 +306,9 @@ static struct wv_buffer* wv_buffer_create_dmabuf(int width, int height,
 
 	zwp_linux_buffer_params_v1_add(params, fd, 0, offset, stride,
 			mod >> 32, mod & 0xffffffff);
-	self->wl_buffer = zwp_linux_buffer_params_v1_create_immed(params, width,
-			height, fourcc, /* flags */ 0);
+	self->wl_buffer = zwp_linux_buffer_params_v1_create_immed(params,
+			config->width, config->height, config->format,
+			/* flags */ 0);
 	zwp_linux_buffer_params_v1_destroy(params);
 	close(fd);
 
@@ -272,7 +323,8 @@ static struct wv_buffer* wv_buffer_create_dmabuf(int width, int height,
 	nvnc_set_userdata(self->nvnc_fb, self, NULL);
 
 	pixman_region_init(&self->frame_damage);
-	pixman_region_init_rect(&self->buffer_damage, 0, 0, width, height);
+	pixman_region_init_rect(&self->buffer_damage, 0, 0, config->width,
+			config->height);
 
 	LIST_INSERT_HEAD(&buffer_registry, self, registry_link);
 
@@ -291,19 +343,19 @@ bo_failure:
 }
 #endif
 
-struct wv_buffer* wv_buffer_create(enum wv_buffer_type type, int width,
-		int height, int stride, uint32_t fourcc,
+struct wv_buffer* wv_buffer_create(const struct wv_buffer_config* config,
 		struct gbm_device* gbm)
 {
 	nvnc_trace("wv_buffer_create: %dx%d, stride: %d, format: %"PRIu32" gbm: %p",
-			width, height, stride, fourcc, gbm);
+			config->width, config->height, config->stride,
+			config->format, gbm);
 
-	switch (type) {
+	switch (config->type) {
 	case WV_BUFFER_SHM:
-		return wv_buffer_create_shm(width, height, stride, fourcc);
+		return wv_buffer_create_shm(config);
 #ifdef ENABLE_SCREENCOPY_DMABUF
 	case WV_BUFFER_DMABUF:
-		return wv_buffer_create_dmabuf(width, height, fourcc, gbm);
+		return wv_buffer_create_dmabuf(config, gbm);
 #endif
 	case WV_BUFFER_UNSPEC:;
 	}
@@ -325,6 +377,7 @@ static void wv_buffer_destroy_dmabuf(struct wv_buffer* self)
 {
 	nvnc_fb_unref(self->nvnc_fb);
 	wl_buffer_destroy(self->wl_buffer);
+	free(self->modifiers);
 	gbm_bo_destroy(self->bo);
 	free(self);
 }
@@ -396,6 +449,7 @@ static void wv_buffer_pool_clear(struct wv_buffer_pool* pool)
 void wv_buffer_pool_destroy(struct wv_buffer_pool* pool)
 {
 	wv_buffer_pool_clear(pool);
+	free(pool->config.modifiers);
 #ifdef ENABLE_SCREENCOPY_DMABUF
 	if (pool->gbm)
 		gbm_device_destroy(pool->gbm);
@@ -408,17 +462,17 @@ void wv_buffer_pool_destroy(struct wv_buffer_pool* pool)
 #ifdef ENABLE_SCREENCOPY_DMABUF
 static int render_node_from_dev_t(char* node, size_t maxlen, dev_t device)
 {
-   drmDevice *dev_ptr;
+	drmDevice *dev_ptr;
 
-   if (drmGetDeviceFromDevId(device, 0, &dev_ptr) < 0)
-      return -1;
+	if (drmGetDeviceFromDevId(device, 0, &dev_ptr) < 0)
+		return -1;
 
-   if (dev_ptr->available_nodes & (1 << DRM_NODE_RENDER))
-      strlcpy(node, dev_ptr->nodes[DRM_NODE_RENDER], maxlen);
+	if (dev_ptr->available_nodes & (1 << DRM_NODE_RENDER))
+		strlcpy(node, dev_ptr->nodes[DRM_NODE_RENDER], maxlen);
 
-   drmFreeDevice(&dev_ptr);
+	drmFreeDevice(&dev_ptr);
 
-   return 0;
+	return 0;
 }
 
 static int find_render_node(char *node, size_t maxlen) {
@@ -443,8 +497,9 @@ static int find_render_node(char *node, size_t maxlen) {
 static void open_render_node(struct wv_buffer_pool* pool)
 {
 	char path[256];
-	if (major(pool->node) != 0 || minor(pool->node) != 0) {
-		if (render_node_from_dev_t(path, sizeof(path), pool->node) < 0) {
+	if (major(pool->config.node) != 0 || minor(pool->config.node) != 0) {
+		if (render_node_from_dev_t(path, sizeof(path),
+					pool->config.node) < 0) {
 			nvnc_log(NVNC_LOG_ERROR, "Could not find render node from dev_t");
 			return;
 		}
@@ -472,26 +527,15 @@ static void open_render_node(struct wv_buffer_pool* pool)
 void wv_buffer_pool_reconfig(struct wv_buffer_pool* pool,
 		const struct wv_buffer_config* config)
 {
-	if (pool->type == config->type && pool->width == config->width &&
-			pool->height == config->height &&
-			pool->stride == config->stride &&
-			pool->format == config->format &&
-			pool->node == config->node) {
+	if (buffer_configs_match(&pool->config, config))
 		return;
-	}
 
 	wv_buffer_pool_clear(pool);
-
-	pool->type = config->type;
-	pool->width = config->width;
-	pool->height = config->height;
-	pool->stride = config->stride;
-	pool->format = config->format;
+	dev_t old_node = pool->config.node;
+	copy_buffer_config(&pool->config, config);
 
 #ifdef ENABLE_SCREENCOPY_DMABUF
-	if (pool->node != config->node) {
-		pool->node = config->node;
-
+	if (old_node != config->node) {
 		if (pool->gbm)
 			gbm_device_destroy(pool->gbm);
 		if (pool->gbm_fd > 0)
@@ -501,7 +545,8 @@ void wv_buffer_pool_reconfig(struct wv_buffer_pool* pool,
 		open_render_node(pool);
 	}
 
-	if (major(pool->node) == 0 && minor(pool->node) == 0 && !pool->gbm)
+	if (major(pool->config.node) == 0 && minor(pool->config.node) == 0 &&
+			!pool->gbm)
 		open_render_node(pool);
 
 	assert(pool->gbm);
@@ -511,12 +556,12 @@ void wv_buffer_pool_reconfig(struct wv_buffer_pool* pool,
 static bool wv_buffer_pool_match_buffer(struct wv_buffer_pool* pool,
 		struct wv_buffer* buffer)
 {
-	if (pool->type != buffer->type)
+	if (pool->config.type != buffer->type)
 		return false;
 
-	switch (pool->type) {
+	switch (pool->config.type) {
 	case WV_BUFFER_SHM:
-		if (pool->stride != buffer->stride) {
+		if (pool->config.stride != buffer->stride) {
 			return false;
 		}
 
@@ -524,10 +569,13 @@ static bool wv_buffer_pool_match_buffer(struct wv_buffer_pool* pool,
 		/* fall-through */
 	case WV_BUFFER_DMABUF:
 #endif
-		if (pool->width != buffer->width
-		    || pool->height != buffer->height
-		    || pool->format != buffer->format
-		    || pool->node != buffer->node)
+		if (pool->config.width != buffer->width
+		    || pool->config.height != buffer->height
+		    || pool->config.format != buffer->format
+		    || pool->config.node != buffer->node
+		    || !modifiers_match(pool->config.modifiers,
+			    pool->config.n_modifiers, buffer->modifiers,
+			    buffer->n_modifiers))
 			return false;
 
 		return true;
@@ -555,8 +603,7 @@ struct wv_buffer* wv_buffer_pool_acquire(struct wv_buffer_pool* pool)
 		return buffer;
 	}
 
-	buffer = wv_buffer_create(pool->type, pool->width, pool->height,
-			pool->stride, pool->format, pool->gbm);
+	buffer = wv_buffer_create(&pool->config, pool->gbm);
 	if (buffer)
 		nvnc_fb_set_release_fn(buffer->nvnc_fb,
 				wv_buffer_pool__on_release, pool);

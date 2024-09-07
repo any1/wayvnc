@@ -60,6 +60,8 @@ struct ext_image_copy_capture {
 	bool have_wl_shm;
 	bool have_linux_dmabuf;
 	uint32_t dmabuf_format;
+	int n_dmabuf_modifiers;
+	uint64_t* dmabuf_modifiers;
 	bool have_dmabuf_dev;
 	dev_t dmabuf_dev;
 
@@ -78,6 +80,10 @@ static struct ext_image_copy_capture_cursor_session_v1_listener cursor_listener;
 static void ext_image_copy_capture_deinit_session(struct ext_image_copy_capture* self)
 {
 	nvnc_log(NVNC_LOG_DEBUG, "DEINIT %p", self);
+	free(self->dmabuf_modifiers);
+	self->dmabuf_modifiers = NULL;
+	self->n_dmabuf_modifiers = 0;
+
 	if (self->frame)
 		ext_image_copy_capture_frame_v1_destroy(self->frame);
 	self->frame = NULL;
@@ -211,9 +217,21 @@ static void session_handle_format_drm(void *data,
 	nvnc_log(NVNC_LOG_DEBUG, "DMA-BUF format: %"PRIx32, format);
 
 #ifdef ENABLE_SCREENCOPY_DMABUF
+	// TODO: Select a format that works
+
 	self->have_linux_dmabuf = true;
 	self->dmabuf_format = format;
-	// TODO: Pass modifiers
+
+	if (modifiers->size % 8 != 0) {
+		nvnc_log(NVNC_LOG_WARNING, "DMA-BUF modifier array size is not a multiple of 8");
+	}
+
+	self->n_dmabuf_modifiers = modifiers->size / 8;
+	self->dmabuf_modifiers = realloc(self->dmabuf_modifiers,
+			self->n_dmabuf_modifiers * 8);
+	assert(self->dmabuf_modifiers);
+	memcpy(self->dmabuf_modifiers, modifiers->data,
+			self->n_dmabuf_modifiers * 8);
 #endif
 }
 
