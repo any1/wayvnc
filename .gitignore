@@ -7,3 +7,4 @@ perf.*
 *.pem
 .vimrc
 .cache
+sandbox
