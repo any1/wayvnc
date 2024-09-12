@@ -19,6 +19,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <time.h>
 #include <unistd.h>
 #include <assert.h>
 #include <inttypes.h>
@@ -2004,6 +2005,8 @@ int main(int argc, char* argv[])
 
 	self.disable_input = disable_input;
 	self.use_transient_seat = use_transient_seat;
+
+	srand(time(NULL));
 
 	struct aml* aml = aml_new();
 	if (!aml)

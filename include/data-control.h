@@ -28,7 +28,10 @@ struct data_control {
 	struct zwlr_data_control_source_v1* selection;
 	struct zwlr_data_control_source_v1* primary_selection;
 	struct zwlr_data_control_offer_v1* offer;
+	bool is_own_offer;
 	const char* mime_type;
+	/* x-wayvnc-client-(8 hexadecimal digits) + \0 */
+	char custom_mime_type_name[32];
 	char* cb_data;
 	size_t cb_len;
 };

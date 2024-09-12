@@ -26,6 +26,8 @@
 
 #include "data-control.h"
 
+static const char custom_mime_type_data[] = "wayvnc";
+
 struct receive_context {
 	struct data_control* data_control;
 	struct zwlr_data_control_offer_v1* offer;
@@ -124,11 +126,15 @@ static void data_control_offer(void* data,
 {
 	struct data_control* self = data;
 
-	if (self->offer)
-		return;
-	if (strcmp(mime_type, self->mime_type) != 0) {
+	if (strcmp(mime_type, self->custom_mime_type_name) == 0) {
+		self->is_own_offer = true;
 		return;
 	}
+
+	if (self->offer)
+		return;
+	if (strcmp(mime_type, self->mime_type) != 0)
+		return;
 
 	self->offer = zwlr_data_control_offer_v1;
 }
@@ -153,9 +159,13 @@ static void data_control_device_selection(void* data,
 {
 	struct data_control* self = data;
 	if (id && self->offer == id) {
-		receive_data(data, id);
+		if (!self->is_own_offer)
+			receive_data(data, id);
+		else
+			zwlr_data_control_offer_v1_destroy(self->offer);
 		self->offer = NULL;
 	}
+	self->is_own_offer = false;
 }
 
 static void data_control_device_finished(void* data,
@@ -170,10 +180,13 @@ static void data_control_device_primary_selection(void* data,
 {
 	struct data_control* self = data;
 	if (id && self->offer == id) {
-		receive_data(data, id);
+		if (!self->is_own_offer)
+			receive_data(data, id);
+		else
+			zwlr_data_control_offer_v1_destroy(self->offer);
 		self->offer = NULL;
-		return;
 	}
+	self->is_own_offer = false;
 }
 
 static struct zwlr_data_control_device_v1_listener data_control_device_listener = {
@@ -196,10 +209,15 @@ data_control_source_send(void* data,
 
 	assert(d);
 
-	ret = write(fd, d, len);
-
-	if (ret < (int)len)
-		nvnc_log(NVNC_LOG_ERROR, "write from clipboard incomplete");
+	if (strcmp(mime_type, self->custom_mime_type_name) == 0) {
+		ret = write(fd, custom_mime_type_data, strlen(custom_mime_type_data));
+		if (ret < (int)strlen(custom_mime_type_data))
+			nvnc_log(NVNC_LOG_ERROR, "custom mime type data write incomplete");
+	} else {
+		ret = write(fd, d, len);
+		if (ret < (int)len)
+			nvnc_log(NVNC_LOG_ERROR, "write from clipboard incomplete");
+	}
 
 	close(fd);
 }
@@ -235,6 +253,7 @@ static struct zwlr_data_control_source_v1* set_selection(struct data_control* se
 
 	zwlr_data_control_source_v1_add_listener(selection, &data_control_source_listener, self);
 	zwlr_data_control_source_v1_offer(selection, self->mime_type);
+	zwlr_data_control_source_v1_offer(selection, self->custom_mime_type_name);
 
 	if (primary)
 		zwlr_data_control_device_v1_set_primary_selection(self->device, selection);
@@ -252,9 +271,14 @@ void data_control_init(struct data_control* self, struct wl_display* wl_display,
 	zwlr_data_control_device_v1_add_listener(self->device, &data_control_device_listener, self);
 	self->selection = NULL;
 	self->primary_selection = NULL;
+	self->offer = NULL;
+	self->is_own_offer = false;
 	self->cb_data = NULL;
 	self->cb_len = 0;
 	self->mime_type = "text/plain;charset=utf-8";
+	snprintf(self->custom_mime_type_name,
+			sizeof(self->custom_mime_type_name),
+			"x-wayvnc-client-%08x", (unsigned int)rand());
 }
 
 void data_control_destroy(struct data_control* self)
