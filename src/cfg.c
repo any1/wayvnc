@@ -145,7 +145,6 @@ int cfg_load(struct cfg* self, const char* requested_path)
 failure:
 	cfg_destroy(self);
 	free(line);
-	free(self->directory);
 	fclose(stream);
 	return lineno;
 }
