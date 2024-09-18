@@ -29,7 +29,7 @@
 static const char custom_mime_type_data[] = "wayvnc";
 
 struct receive_context {
-	struct data_control* data_control;
+	struct nvnc* server;
 	struct aml_handler* handler;
 	LIST_ENTRY(receive_context) link;
 	struct zwlr_data_control_offer_v1* offer;
@@ -71,8 +71,7 @@ static void on_receive(void* handler)
 	ctx->mem_fp = NULL;
 
 	if (ctx->mem_size)
-		nvnc_send_cut_text(ctx->data_control->server, ctx->mem_data,
-				ctx->mem_size);
+		nvnc_send_cut_text(ctx->server, ctx->mem_data, ctx->mem_size);
 
 	destroy_receive_context(ctx);
 }
@@ -103,7 +102,7 @@ static void receive_data(void* data,
 	close(pipe_fd[1]);
 
 	ctx->fd = pipe_fd[0];
-	ctx->data_control = self;
+	ctx->server = self->server;
 	ctx->offer = offer;
 	ctx->mem_fp = open_memstream(&ctx->mem_data, &ctx->mem_size);
 	if (!ctx->mem_fp) {
