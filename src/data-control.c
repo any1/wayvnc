@@ -30,6 +30,8 @@ static const char custom_mime_type_data[] = "wayvnc";
 
 struct receive_context {
 	struct data_control* data_control;
+	struct aml_handler* handler;
+	LIST_ENTRY(receive_context) link;
 	struct zwlr_data_control_offer_v1* offer;
 	int fd;
 	FILE* mem_fp;
@@ -37,16 +39,17 @@ struct receive_context {
 	char* mem_data;
 };
 
-static void destroy_receive_context(void* raw_ctx)
+static void destroy_receive_context(struct receive_context* ctx)
 {
-	struct receive_context* ctx = raw_ctx;
-	int fd = ctx->fd;
+	aml_stop(aml_get_default(), ctx->handler);
+	aml_unref(ctx->handler);
 
 	if (ctx->mem_fp)
 		fclose(ctx->mem_fp);
 	free(ctx->mem_data);
 	zwlr_data_control_offer_v1_destroy(ctx->offer);
-	close(fd);
+	close(ctx->fd);
+	LIST_REMOVE(ctx, link);
 	free(ctx);
 }
 
@@ -71,7 +74,7 @@ static void on_receive(void* handler)
 		nvnc_send_cut_text(ctx->data_control->server, ctx->mem_data,
 				ctx->mem_size);
 
-	aml_stop(aml_get_default(), handler);
+	destroy_receive_context(ctx);
 }
 
 static void receive_data(void* data,
@@ -82,6 +85,7 @@ static void receive_data(void* data,
 
 	if (pipe(pipe_fd) == -1) {
 		nvnc_log(NVNC_LOG_ERROR, "pipe() failed: %m");
+		zwlr_data_control_offer_v1_destroy(offer);
 		return;
 	}
 
@@ -90,6 +94,7 @@ static void receive_data(void* data,
 		nvnc_log(NVNC_LOG_ERROR, "OOM");
 		close(pipe_fd[0]);
 		close(pipe_fd[1]);
+		zwlr_data_control_offer_v1_destroy(offer);
 		return;
 	}
 
@@ -102,22 +107,32 @@ static void receive_data(void* data,
 	ctx->offer = offer;
 	ctx->mem_fp = open_memstream(&ctx->mem_data, &ctx->mem_size);
 	if (!ctx->mem_fp) {
+		zwlr_data_control_offer_v1_destroy(ctx->offer);
 		close(ctx->fd);
 		free(ctx);
 		nvnc_log(NVNC_LOG_ERROR, "open_memstream() failed: %m");
 		return;
 	}
 
-	struct aml_handler* handler = aml_handler_new(ctx->fd, on_receive,
-			ctx, destroy_receive_context);
-	if (!handler) {
+	ctx->handler = aml_handler_new(ctx->fd, on_receive, ctx, NULL);
+	if (!ctx->handler) {
+		fclose(ctx->mem_fp);
+		zwlr_data_control_offer_v1_destroy(ctx->offer);
 		close(ctx->fd);
 		free(ctx);
 		return;
 	}
 
-	aml_start(aml_get_default(), handler);
-	aml_unref(handler);
+	if (aml_start(aml_get_default(), ctx->handler) < 0) {
+		aml_unref(ctx->handler);
+		fclose(ctx->mem_fp);
+		zwlr_data_control_offer_v1_destroy(ctx->offer);
+		close(ctx->fd);
+		free(ctx);
+		return;
+	}
+
+	LIST_INSERT_HEAD(&self->receive_contexts, ctx, link);
 }
 
 static void data_control_offer(void* data,
@@ -267,6 +282,7 @@ void data_control_init(struct data_control* self, struct wl_display* wl_display,
 {
 	self->wl_display = wl_display;
 	self->server = server;
+	LIST_INIT(&self->receive_contexts);
 	self->device = zwlr_data_control_manager_v1_get_data_device(self->manager, seat);
 	zwlr_data_control_device_v1_add_listener(self->device, &data_control_device_listener, self);
 	self->selection = NULL;
@@ -283,6 +299,8 @@ void data_control_init(struct data_control* self, struct wl_display* wl_display,
 
 void data_control_destroy(struct data_control* self)
 {
+	while (!LIST_EMPTY(&self->receive_contexts))
+		destroy_receive_context(LIST_FIRST(&self->receive_contexts));
 	if (self->selection) {
 		zwlr_data_control_source_v1_destroy(self->selection);
 		self->selection = NULL;
