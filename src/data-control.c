@@ -16,6 +16,7 @@
  */
 
 #include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -64,6 +65,8 @@ static void on_receive(void* handler)
 
 	ssize_t ret = read(fd, &buf, sizeof(buf));
 	if (ret == -1) {
+		if (errno == EAGAIN || errno == EWOULDBLOCK)
+			return;
 		nvnc_log(NVNC_LOG_ERROR, "Clipboard read failed: %m");
 		destroy_receive_context(ctx);
 	} else if (ret > 0) {
@@ -80,6 +83,34 @@ static void on_receive(void* handler)
 	destroy_receive_context(ctx);
 }
 
+static void on_send(void* handler)
+{
+	struct send_context* ctx = aml_get_userdata(handler);
+	int fd = aml_get_fd(handler);
+	assert(ctx->fd == fd);
+
+	int ret;
+	ret = write(fd, ctx->data + ctx->index, ctx->length - ctx->index);
+	if (ret == -1) {
+		if (errno == EAGAIN || errno == EWOULDBLOCK)
+			return;
+		nvnc_log(NVNC_LOG_ERROR, "Clipboard write failed/incomplete: %m");
+		destroy_send_context(ctx);
+	} else if (ret == (int)(ctx->length - ctx->index)) {
+		destroy_send_context(ctx);
+	} else {
+		ctx->index += ret;
+	}
+}
+
+static int dont_block(int fd)
+{
+	int ret = fcntl(fd, F_GETFL);
+	if (ret == -1)
+		return -1;
+	return fcntl(fd, F_SETFL, ret | O_NONBLOCK);
+}
+
 static void receive_data(void* data,
 	struct zwlr_data_control_offer_v1* offer)
 {
@@ -88,6 +119,14 @@ static void receive_data(void* data,
 
 	if (pipe(pipe_fd) == -1) {
 		nvnc_log(NVNC_LOG_ERROR, "pipe() failed: %m");
+		zwlr_data_control_offer_v1_destroy(offer);
+		return;
+	}
+
+	if (dont_block(pipe_fd[0]) == -1) {
+		nvnc_log(NVNC_LOG_ERROR, "Failed to set O_NONBLOCK on clipbooard receive fd");
+		close(pipe_fd[0]);
+		close(pipe_fd[1]);
 		zwlr_data_control_offer_v1_destroy(offer);
 		return;
 	}
@@ -226,6 +265,12 @@ data_control_source_send(void* data,
 	int ret;
 
 	assert(d);
+
+	if (dont_block(fd) == -1) {
+		nvnc_log(NVNC_LOG_ERROR, "Failed to set O_NONBLOCK on clipbooard send fd");
+		close(fd);
+		return;
+	}
 
 	if (strcmp(mime_type, self->custom_mime_type_name) == 0) {
 		d = custom_mime_type_data;
