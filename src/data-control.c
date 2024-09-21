@@ -15,6 +15,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -62,7 +63,10 @@ static void on_receive(void* handler)
 	char buf[4096];
 
 	ssize_t ret = read(fd, &buf, sizeof(buf));
-	if (ret > 0) {
+	if (ret == -1) {
+		nvnc_log(NVNC_LOG_ERROR, "Clipboard read failed: %m");
+		destroy_receive_context(ctx);
+	} else if (ret > 0) {
 		fwrite(&buf, 1, ret, ctx->mem_fp);
 		return;
 	}
@@ -217,21 +221,22 @@ data_control_source_send(void* data,
 	int32_t fd)
 {
 	struct data_control* self = data;
-	char* d = self->cb_data;
+	const char* d = self->cb_data;
 	size_t len = self->cb_len;
 	int ret;
 
 	assert(d);
 
 	if (strcmp(mime_type, self->custom_mime_type_name) == 0) {
-		ret = write(fd, custom_mime_type_data, strlen(custom_mime_type_data));
-		if (ret < (int)strlen(custom_mime_type_data))
-			nvnc_log(NVNC_LOG_ERROR, "custom mime type data write incomplete");
-	} else {
-		ret = write(fd, d, len);
-		if (ret < (int)len)
-			nvnc_log(NVNC_LOG_ERROR, "write from clipboard incomplete");
+		d = custom_mime_type_data;
+		len = strlen(custom_mime_type_data);
 	}
+
+	ret = write(fd, d, len);
+	if (ret == -1 && errno != EAGAIN && errno != EWOULDBLOCK)
+		nvnc_log(NVNC_LOG_ERROR, "Clipboard write failed: %m");
+	else if (ret < (int)len)
+		nvnc_log(NVNC_LOG_ERROR, "Clipboard write incomplete");
 
 	close(fd);
 }
