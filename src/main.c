@@ -2008,6 +2008,8 @@ int main(int argc, char* argv[])
 
 	srand(time(NULL));
 
+	signal(SIGPIPE, SIG_IGN);
+
 	struct aml* aml = aml_new();
 	if (!aml)
 		goto failure;
