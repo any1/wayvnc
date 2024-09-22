@@ -41,6 +41,15 @@ struct receive_context {
 	char* mem_data;
 };
 
+struct send_context {
+	struct aml_handler* handler;
+	LIST_ENTRY(send_context) link;
+	int fd;
+	char* data;
+	size_t length;
+	size_t index;
+};
+
 static void destroy_receive_context(struct receive_context* ctx)
 {
 	aml_stop(aml_get_default(), ctx->handler);
@@ -51,6 +60,17 @@ static void destroy_receive_context(struct receive_context* ctx)
 	free(ctx->mem_data);
 	zwlr_data_control_offer_v1_destroy(ctx->offer);
 	close(ctx->fd);
+	LIST_REMOVE(ctx, link);
+	free(ctx);
+}
+
+static void destroy_send_context(struct send_context* ctx)
+{
+	aml_stop(aml_get_default(), ctx->handler);
+	aml_unref(ctx->handler);
+
+	close(ctx->fd);
+	free(ctx->data);
 	LIST_REMOVE(ctx, link);
 	free(ctx);
 }
@@ -133,7 +153,7 @@ static void receive_data(void* data,
 
 	struct receive_context* ctx = calloc(1, sizeof(*ctx));
 	if (!ctx) {
-		nvnc_log(NVNC_LOG_ERROR, "OOM");
+		nvnc_log(NVNC_LOG_ERROR, "OOM: %m");
 		close(pipe_fd[0]);
 		close(pipe_fd[1]);
 		zwlr_data_control_offer_v1_destroy(offer);
@@ -265,6 +285,7 @@ data_control_source_send(void* data,
 	int ret;
 
 	assert(d);
+	assert(len);
 
 	if (dont_block(fd) == -1) {
 		nvnc_log(NVNC_LOG_ERROR, "Failed to set O_NONBLOCK on clipbooard send fd");
@@ -278,12 +299,63 @@ data_control_source_send(void* data,
 	}
 
 	ret = write(fd, d, len);
-	if (ret == -1 && errno != EAGAIN && errno != EWOULDBLOCK)
-		nvnc_log(NVNC_LOG_ERROR, "Clipboard write failed: %m");
-	else if (ret < (int)len)
-		nvnc_log(NVNC_LOG_ERROR, "Clipboard write incomplete");
+	if (ret == -1) {
+		if (errno == EAGAIN || errno == EWOULDBLOCK) {
+			ret = 0;
+		} else {
+			nvnc_log(NVNC_LOG_ERROR, "Clipboard write failed: %m");
+			close(fd);
+			return;
+		}
+	} else if (ret == (int)len) {
+		close(fd);
+		return;
+	}
 
-	close(fd);
+	/* we did a partial write, so continue sending data asynchronously */
+
+	struct send_context* ctx = calloc(1, sizeof(*ctx));
+	if (!ctx) {
+		nvnc_log(NVNC_LOG_ERROR, "OOM: %m");
+		nvnc_log(NVNC_LOG_ERROR, "Clipboard write incomplete");
+		close(fd);
+		return;
+	}
+
+	ctx->fd = fd;
+	ctx->length = len - ret;
+	ctx->index = 0;
+	ctx->data = malloc(ctx->length);
+	if (!ctx->data) {
+		nvnc_log(NVNC_LOG_ERROR, "OOM: %m");
+		nvnc_log(NVNC_LOG_ERROR, "Clipboard write incomplete");
+		free(ctx);
+		close(fd);
+		return;
+	}
+	memcpy(ctx->data, d + ret, ctx->length);
+
+	ctx->handler = aml_handler_new(ctx->fd, on_send, ctx, NULL);
+	if (!ctx->handler) {
+		nvnc_log(NVNC_LOG_ERROR, "Clipboard write incomplete");
+		free(ctx->data);
+		free(ctx);
+		close(fd);
+		return;
+	}
+
+	aml_set_event_mask(ctx->handler, AML_EVENT_WRITE);
+
+	if (aml_start(aml_get_default(), ctx->handler) < 0) {
+		nvnc_log(NVNC_LOG_ERROR, "Clipboard write incomplete");
+		aml_unref(ctx->handler);
+		free(ctx->data);
+		free(ctx);
+		close(fd);
+		return;
+	}
+
+	LIST_INSERT_HEAD(&self->send_contexts, ctx, link);
 }
 
 static void data_control_source_cancelled(void* data,
@@ -332,6 +404,7 @@ void data_control_init(struct data_control* self, struct wl_display* wl_display,
 	self->wl_display = wl_display;
 	self->server = server;
 	LIST_INIT(&self->receive_contexts);
+	LIST_INIT(&self->send_contexts);
 	self->device = zwlr_data_control_manager_v1_get_data_device(self->manager, seat);
 	zwlr_data_control_device_v1_add_listener(self->device, &data_control_device_listener, self);
 	self->selection = NULL;
@@ -350,6 +423,10 @@ void data_control_destroy(struct data_control* self)
 {
 	while (!LIST_EMPTY(&self->receive_contexts))
 		destroy_receive_context(LIST_FIRST(&self->receive_contexts));
+	while (!LIST_EMPTY(&self->send_contexts)) {
+		nvnc_log(NVNC_LOG_ERROR, "Clipboard write incomplete due to client disconnection");
+		destroy_send_context(LIST_FIRST(&self->send_contexts));
+	}
 	if (self->selection) {
 		zwlr_data_control_source_v1_destroy(self->selection);
 		self->selection = NULL;

@@ -23,13 +23,16 @@
 #include "sys/queue.h"
 
 struct receive_context;
+struct send_context;
 
 LIST_HEAD(receive_context_list, receive_context);
+LIST_HEAD(send_context_list, send_context);
 
 struct data_control {
 	struct wl_display* wl_display;
 	struct nvnc* server;
 	struct receive_context_list receive_contexts;
+	struct send_context_list send_contexts;
 	struct zwlr_data_control_manager_v1* manager;
 	struct zwlr_data_control_device_v1* device;
 	struct zwlr_data_control_source_v1* selection;
