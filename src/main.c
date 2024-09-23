@@ -1544,7 +1544,7 @@ static void client_init_data_control(struct wayvnc_client* self)
 		return;
 
 	self->data_control.manager = wayvnc->data_control_manager;
-	data_control_init(&self->data_control, wayvnc->display, wayvnc->nvnc,
+	data_control_init(&self->data_control, wayvnc->nvnc,
 			self->seat->wl_seat);
 }
 
