@@ -156,7 +156,6 @@ static void receive_data(void* data,
 	}
 
 	zwlr_data_control_offer_v1_receive(offer, self->mime_type, pipe_fd[1]);
-	wl_display_flush(self->wl_display);
 	close(pipe_fd[1]);
 
 	ctx->fd = pipe_fd[0];
@@ -401,9 +400,8 @@ static struct zwlr_data_control_source_v1* set_selection(struct data_control* se
 	return selection;
 }
 
-void data_control_init(struct data_control* self, struct wl_display* wl_display, struct nvnc* server, struct wl_seat* seat)
+void data_control_init(struct data_control* self, struct nvnc* server, struct wl_seat* seat)
 {
-	self->wl_display = wl_display;
 	self->server = server;
 	LIST_INIT(&self->receive_contexts);
 	LIST_INIT(&self->send_contexts);

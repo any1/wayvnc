@@ -46,6 +46,6 @@ struct data_control {
 	size_t cb_len;
 };
 
-void data_control_init(struct data_control* self, struct wl_display* wl_display, struct nvnc* server, struct wl_seat* seat);
+void data_control_init(struct data_control* self, struct nvnc* server, struct wl_seat* seat);
 void data_control_destroy(struct data_control* self);
 void data_control_to_clipboard(struct data_control* self, const char* text, size_t len);
