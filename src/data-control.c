@@ -163,29 +163,29 @@ static void receive_data(void* data,
 	ctx->server = self->server;
 	ctx->mem_fp = open_memstream(&ctx->mem_data, &ctx->mem_size);
 	if (!ctx->mem_fp) {
-		close(ctx->fd);
-		free(ctx);
 		nvnc_log(NVNC_LOG_ERROR, "open_memstream() failed: %m");
-		return;
+		goto open_memstream_failure;
 	}
 
 	ctx->handler = aml_handler_new(ctx->fd, on_receive, ctx, NULL);
 	if (!ctx->handler) {
-		fclose(ctx->mem_fp);
-		close(ctx->fd);
-		free(ctx);
-		return;
+		goto handler_failure;
 	}
 
 	if (aml_start(aml_get_default(), ctx->handler) < 0) {
-		aml_unref(ctx->handler);
-		fclose(ctx->mem_fp);
-		close(ctx->fd);
-		free(ctx);
-		return;
+		goto poll_start_failure;
 	}
 
 	LIST_INSERT_HEAD(&self->receive_contexts, ctx, link);
+	return;
+
+poll_start_failure:
+	aml_unref(ctx->handler);
+handler_failure:
+	fclose(ctx->mem_fp);
+open_memstream_failure:
+	free(ctx);
+	close(pipe_fd[0]);
 }
 
 static void data_control_offer(void* data,
@@ -293,15 +293,15 @@ data_control_source_send(void* data,
 	assert(d);
 	assert(len);
 
+	if (strcmp(mime_type, self->custom_mime_type_name) == 0) {
+		d = custom_mime_type_data;
+		len = strlen(custom_mime_type_data);
+	}
+
 	if (dont_block(fd) == -1) {
 		nvnc_log(NVNC_LOG_ERROR, "Failed to set O_NONBLOCK on clipbooard send fd");
 		close(fd);
 		return;
-	}
-
-	if (strcmp(mime_type, self->custom_mime_type_name) == 0) {
-		d = custom_mime_type_data;
-		len = strlen(custom_mime_type_data);
 	}
 
 	ret = write(fd, d, len);
@@ -323,8 +323,7 @@ data_control_source_send(void* data,
 	struct send_context* ctx = calloc(1, sizeof(*ctx));
 	if (!ctx) {
 		nvnc_log(NVNC_LOG_ERROR, "OOM: %m");
-		nvnc_log(NVNC_LOG_ERROR, "Clipboard write incomplete");
-		close(fd);
+		goto ctx_alloc_failure;
 		return;
 	}
 
@@ -334,34 +333,31 @@ data_control_source_send(void* data,
 	ctx->data = malloc(ctx->length);
 	if (!ctx->data) {
 		nvnc_log(NVNC_LOG_ERROR, "OOM: %m");
-		nvnc_log(NVNC_LOG_ERROR, "Clipboard write incomplete");
-		free(ctx);
-		close(fd);
-		return;
+		goto ctx_data_alloc_failure;
 	}
 	memcpy(ctx->data, d + ret, ctx->length);
 
 	ctx->handler = aml_handler_new(ctx->fd, on_send, ctx, NULL);
-	if (!ctx->handler) {
-		nvnc_log(NVNC_LOG_ERROR, "Clipboard write incomplete");
-		free(ctx->data);
-		free(ctx);
-		close(fd);
-		return;
-	}
+	if (!ctx->handler)
+		goto handler_failure;
 
 	aml_set_event_mask(ctx->handler, AML_EVENT_WRITE);
 
-	if (aml_start(aml_get_default(), ctx->handler) < 0) {
-		nvnc_log(NVNC_LOG_ERROR, "Clipboard write incomplete");
-		aml_unref(ctx->handler);
-		free(ctx->data);
-		free(ctx);
-		close(fd);
-		return;
-	}
+	if (aml_start(aml_get_default(), ctx->handler) < 0)
+		goto poll_start_failure;
 
 	LIST_INSERT_HEAD(&self->send_contexts, ctx, link);
+	return;
+
+poll_start_failure:
+	aml_unref(ctx->handler);
+handler_failure:
+	free(ctx->data);
+ctx_data_alloc_failure:
+	free(ctx);
+ctx_alloc_failure:
+	close(fd);
+	nvnc_log(NVNC_LOG_ERROR, "Clipboard write incomplete");
 }
 
 static void data_control_source_cancelled(void* data,
