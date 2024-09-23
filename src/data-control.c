@@ -34,7 +34,6 @@ struct receive_context {
 	struct nvnc* server;
 	struct aml_handler* handler;
 	LIST_ENTRY(receive_context) link;
-	struct zwlr_data_control_offer_v1* offer;
 	int fd;
 	FILE* mem_fp;
 	size_t mem_size;
@@ -58,7 +57,6 @@ static void destroy_receive_context(struct receive_context* ctx)
 	if (ctx->mem_fp)
 		fclose(ctx->mem_fp);
 	free(ctx->mem_data);
-	zwlr_data_control_offer_v1_destroy(ctx->offer);
 	close(ctx->fd);
 	LIST_REMOVE(ctx, link);
 	free(ctx);
@@ -139,7 +137,6 @@ static void receive_data(void* data,
 
 	if (pipe(pipe_fd) == -1) {
 		nvnc_log(NVNC_LOG_ERROR, "pipe() failed: %m");
-		zwlr_data_control_offer_v1_destroy(offer);
 		return;
 	}
 
@@ -147,7 +144,6 @@ static void receive_data(void* data,
 		nvnc_log(NVNC_LOG_ERROR, "Failed to set O_NONBLOCK on clipbooard receive fd");
 		close(pipe_fd[0]);
 		close(pipe_fd[1]);
-		zwlr_data_control_offer_v1_destroy(offer);
 		return;
 	}
 
@@ -156,7 +152,6 @@ static void receive_data(void* data,
 		nvnc_log(NVNC_LOG_ERROR, "OOM: %m");
 		close(pipe_fd[0]);
 		close(pipe_fd[1]);
-		zwlr_data_control_offer_v1_destroy(offer);
 		return;
 	}
 
@@ -166,10 +161,8 @@ static void receive_data(void* data,
 
 	ctx->fd = pipe_fd[0];
 	ctx->server = self->server;
-	ctx->offer = offer;
 	ctx->mem_fp = open_memstream(&ctx->mem_data, &ctx->mem_size);
 	if (!ctx->mem_fp) {
-		zwlr_data_control_offer_v1_destroy(ctx->offer);
 		close(ctx->fd);
 		free(ctx);
 		nvnc_log(NVNC_LOG_ERROR, "open_memstream() failed: %m");
@@ -179,7 +172,6 @@ static void receive_data(void* data,
 	ctx->handler = aml_handler_new(ctx->fd, on_receive, ctx, NULL);
 	if (!ctx->handler) {
 		fclose(ctx->mem_fp);
-		zwlr_data_control_offer_v1_destroy(ctx->offer);
 		close(ctx->fd);
 		free(ctx);
 		return;
@@ -188,7 +180,6 @@ static void receive_data(void* data,
 	if (aml_start(aml_get_default(), ctx->handler) < 0) {
 		aml_unref(ctx->handler);
 		fclose(ctx->mem_fp);
-		zwlr_data_control_offer_v1_destroy(ctx->offer);
 		close(ctx->fd);
 		free(ctx);
 		return;
@@ -210,10 +201,9 @@ static void data_control_offer(void* data,
 
 	if (self->offer)
 		return;
-	if (strcmp(mime_type, self->mime_type) != 0)
-		return;
 
-	self->offer = zwlr_data_control_offer_v1;
+	if (strcmp(mime_type, self->mime_type) == 0)
+		self->offer = zwlr_data_control_offer_v1;
 }
 
 struct zwlr_data_control_offer_v1_listener data_control_offer_listener = {
@@ -235,13 +225,21 @@ static void data_control_device_selection(void* data,
 	struct zwlr_data_control_offer_v1* id)
 {
 	struct data_control* self = data;
-	if (id && self->offer == id) {
-		if (!self->is_own_offer)
-			receive_data(data, id);
-		else
+
+	if (!id) {
+		if (self->offer) {
 			zwlr_data_control_offer_v1_destroy(self->offer);
-		self->offer = NULL;
+			self->offer = NULL;
+			self->is_own_offer = false;
+		}
+		return;
 	}
+
+	if (id == self->offer && !self->is_own_offer)
+		receive_data(data, id);
+
+	zwlr_data_control_offer_v1_destroy(id);
+	self->offer = NULL;
 	self->is_own_offer = false;
 }
 
@@ -256,13 +254,21 @@ static void data_control_device_primary_selection(void* data,
 	struct zwlr_data_control_offer_v1* id)
 {
 	struct data_control* self = data;
-	if (id && self->offer == id) {
-		if (!self->is_own_offer)
-			receive_data(data, id);
-		else
+
+	if (!id) {
+		if (self->offer) {
 			zwlr_data_control_offer_v1_destroy(self->offer);
-		self->offer = NULL;
+			self->offer = NULL;
+			self->is_own_offer = false;
+		}
+		return;
 	}
+
+	if (id == self->offer && !self->is_own_offer)
+		receive_data(data, id);
+
+	zwlr_data_control_offer_v1_destroy(id);
+	self->offer = NULL;
 	self->is_own_offer = false;
 }
 
