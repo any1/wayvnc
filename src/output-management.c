@@ -275,6 +275,8 @@ bool wlr_output_manager_resize_output(struct output* output,
 			zwlr_output_configuration_head_v1_set_transform(
 					config_head, WL_OUTPUT_TRANSFORM_NORMAL);
 		}
+
+		zwlr_output_configuration_head_v1_destroy(config_head);
 	}
 
 	nvnc_trace("applying new output config");
