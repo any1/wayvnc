@@ -411,7 +411,12 @@ static void frame_handle_presentation_time(void *data,
 		struct ext_image_copy_capture_frame_v1 *frame,
 		uint32_t sec_hi, uint32_t sec_lo, uint32_t nsec)
 {
-	// TODO
+	struct ext_image_copy_capture* self = data;
+
+	uint64_t sec = (uint64_t)sec_hi << 32 | (uint64_t)sec_lo;
+	uint64_t pts = sec * UINT64_C(1000000) + (uint64_t)nsec / UINT64_C(1000);
+	nvnc_trace("Setting buffer pts: %" PRIu64, pts);
+	nvnc_fb_set_pts(self->buffer->nvnc_fb, pts);
 }
 
 static struct ext_image_copy_capture_session_v1_listener session_listener = {
