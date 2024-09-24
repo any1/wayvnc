@@ -24,6 +24,7 @@
 #include <stdint.h>
 #include <pixman.h>
 #include <sys/types.h>
+#include <stdatomic.h>
 
 struct wl_buffer;
 struct gbm_bo;
@@ -44,6 +45,14 @@ enum wv_buffer_domain {
 	WV_BUFFER_DOMAIN_CURSOR,
 };
 
+#ifdef ENABLE_SCREENCOPY_DMABUF
+struct wv_gbm_device {
+	atomic_int ref;
+	struct gbm_device* dev;
+	int fd;
+};
+#endif
+
 struct wv_buffer {
 	enum wv_buffer_type type;
 	TAILQ_ENTRY(wv_buffer) link;
@@ -63,11 +72,14 @@ struct wv_buffer {
 	struct pixman_region16 frame_damage;
 	struct pixman_region16 buffer_damage;
 
+#ifdef ENABLE_SCREENCOPY_DMABUF
 	/* The following is only applicable to DMABUF */
 	struct gbm_bo* bo;
 	dev_t node;
 	int n_modifiers;
 	uint64_t* modifiers;
+	struct wv_gbm_device* gbm;
+#endif
 
 	/* The following is only applicable to cursors */
 	uint16_t cursor_width;
@@ -92,15 +104,15 @@ struct wv_buffer_config {
 struct wv_buffer_pool {
 	struct wv_buffer_queue queue;
 	struct wv_buffer_config config;
-
-	int gbm_fd;
-	struct gbm_device* gbm;
+#ifdef ENABLE_SCREENCOPY_DMABUF
+	struct wv_gbm_device* gbm;
+#endif
 };
 
 enum wv_buffer_type wv_buffer_get_available_types(void);
 
 struct wv_buffer* wv_buffer_create(const struct wv_buffer_config* config,
-		struct gbm_device* gbm);
+		struct wv_gbm_device* gbm);
 void wv_buffer_destroy(struct wv_buffer* self);
 
 void wv_buffer_damage_rect(struct wv_buffer* self, int x, int y, int width,

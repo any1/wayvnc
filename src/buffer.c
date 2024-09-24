@@ -210,7 +210,7 @@ static int linux_cma_alloc(size_t size)
 
 // Some devices (mostly ARM SBCs) need CMA for hardware encoders.
 static struct gbm_bo* create_cma_gbm_bo(int width, int height, uint32_t fourcc,
-		struct gbm_device* gbm)
+		struct wv_gbm_device* gbm)
 {
 	int bpp = pixel_size_from_fourcc(fourcc);
 	if (!bpp) {
@@ -241,7 +241,8 @@ static struct gbm_bo* create_cma_gbm_bo(int width, int height, uint32_t fourcc,
 		.strides[0] = stride,
 	};
 
-	struct gbm_bo* bo = gbm_bo_import(gbm, GBM_BO_IMPORT_FD_MODIFIER, &d, 0);
+	struct gbm_bo* bo = gbm_bo_import(gbm->dev, GBM_BO_IMPORT_FD_MODIFIER,
+			&d, 0);
 	if (!bo) {
 		nvnc_log(NVNC_LOG_DEBUG, "Failed to import dmabuf: %m");
 		close(fd);
@@ -252,8 +253,30 @@ static struct gbm_bo* create_cma_gbm_bo(int width, int height, uint32_t fourcc,
 }
 #endif // HAVE_LINUX_DMA_HEAP
 
+#ifdef ENABLE_SCREENCOPY_DMABUF
+static void wv_gbm_device_ref(struct wv_gbm_device* dev)
+{
+	++dev->ref;
+}
+
+static void wv_gbm_device_unref(struct wv_gbm_device* dev)
+{
+	if (!dev || --dev->ref != 0)
+		return;
+
+	if (dev->dev)
+		gbm_device_destroy(dev->dev);
+
+	if (dev->fd > 0)
+		close(dev->fd);
+
+	free(dev);
+}
+#endif
+
 static struct wv_buffer* wv_buffer_create_dmabuf(
-		const struct wv_buffer_config* config, struct gbm_device* gbm)
+		const struct wv_buffer_config* config,
+		struct wv_gbm_device* gbm)
 {
 	assert(zwp_linux_dmabuf);
 
@@ -278,7 +301,7 @@ static struct wv_buffer* wv_buffer_create_dmabuf(
 	self->bo = have_linux_cma() ?
 		create_cma_gbm_bo(config->width, config->height,
 				config->format, gbm) :
-		gbm_bo_create_with_modifiers2(gbm, config->width,
+		gbm_bo_create_with_modifiers2(gbm->dev, config->width,
 				config->height, config->format,
 				config->modifiers, config->n_modifiers,
 				GBM_BO_USE_RENDERING);
@@ -325,6 +348,9 @@ static struct wv_buffer* wv_buffer_create_dmabuf(
 	pixman_region_init_rect(&self->buffer_damage, 0, 0, config->width,
 			config->height);
 
+	self->gbm = gbm;
+	wv_gbm_device_ref(gbm);
+
 	LIST_INSERT_HEAD(&buffer_registry, self, registry_link);
 
 	return self;
@@ -343,7 +369,7 @@ bo_failure:
 #endif
 
 struct wv_buffer* wv_buffer_create(const struct wv_buffer_config* config,
-		struct gbm_device* gbm)
+		struct wv_gbm_device* gbm)
 {
 	nvnc_trace("wv_buffer_create: %dx%d, stride: %d, format: %"PRIu32" gbm: %p",
 			config->width, config->height, config->stride,
@@ -378,6 +404,7 @@ static void wv_buffer_destroy_dmabuf(struct wv_buffer* self)
 	wl_buffer_destroy(self->wl_buffer);
 	free(self->modifiers);
 	gbm_bo_destroy(self->bo);
+	wv_gbm_device_unref(self->gbm);
 	free(self);
 }
 #endif
@@ -428,7 +455,6 @@ struct wv_buffer_pool* wv_buffer_pool_create(
 		return NULL;
 
 	TAILQ_INIT(&self->queue);
-	self->gbm_fd = -1;
 
 	if (config)
 		wv_buffer_pool_reconfig(self, config);
@@ -450,10 +476,7 @@ void wv_buffer_pool_destroy(struct wv_buffer_pool* pool)
 	wv_buffer_pool_clear(pool);
 	free(pool->config.modifiers);
 #ifdef ENABLE_SCREENCOPY_DMABUF
-	if (pool->gbm)
-		gbm_device_destroy(pool->gbm);
-	if (pool->gbm_fd > 0)
-		close(pool->gbm_fd);
+	wv_gbm_device_unref(pool->gbm);
 #endif
 	free(pool);
 }
@@ -509,16 +532,26 @@ static void open_render_node(struct wv_buffer_pool* pool)
 
 	nvnc_log(NVNC_LOG_DEBUG, "Using render node: %s", path);
 
-	pool->gbm_fd = open(path, O_RDWR);
-	if (pool->gbm_fd < 0) {
+	pool->gbm = calloc(1, sizeof(*pool->gbm));
+	assert(pool->gbm);
+
+	pool->gbm->ref = 1;
+
+	pool->gbm->fd = open(path, O_RDWR);
+	if (pool->gbm->fd < 0) {
 		nvnc_log(NVNC_LOG_ERROR, "Failed to open render node %s: %m",
 				path);
+		free(pool->gbm);
+		pool->gbm = NULL;
 		return;
 	}
 
-	pool->gbm = gbm_create_device(pool->gbm_fd);
+	pool->gbm->dev = gbm_create_device(pool->gbm->fd);
 	if (!pool->gbm) {
 		nvnc_log(NVNC_LOG_ERROR, "Failed to create a GBM device");
+		close(pool->gbm->fd);
+		free(pool->gbm);
+		pool->gbm = NULL;
 	}
 }
 #endif // ENABLE_SCREENCOPY_DMABUF
@@ -535,12 +568,8 @@ void wv_buffer_pool_reconfig(struct wv_buffer_pool* pool,
 
 #ifdef ENABLE_SCREENCOPY_DMABUF
 	if (old_node != config->node) {
-		if (pool->gbm)
-			gbm_device_destroy(pool->gbm);
+		wv_gbm_device_unref(pool->gbm);
 		pool->gbm = NULL;
-		if (pool->gbm_fd > 0)
-			close(pool->gbm_fd);
-		pool->gbm_fd = -1;
 
 		open_render_node(pool);
 	}
