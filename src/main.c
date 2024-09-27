@@ -2064,11 +2064,13 @@ int main(int argc, char* argv[])
 	else if (use_external_fd)
 		socket_type = SOCKET_TYPE_FROM_FD;
 
-	if (!start_detached && !configure_screencopy(&self))
-		goto screencopy_failure;
+	if (!start_detached) {
+		if (!configure_screencopy(&self))
+			goto screencopy_failure;
 
-	self.screencopy->on_done = on_capture_done;
-	self.screencopy->userdata = &self;
+		self.screencopy->on_done = on_capture_done;
+		self.screencopy->userdata = &self;
+	}
 
 	if (show_performance)
 		self.performance_ticker = aml_ticker_new(1000000, on_perf_tick,
