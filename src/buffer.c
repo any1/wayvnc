@@ -598,13 +598,17 @@ static bool wv_buffer_pool_match_buffer(struct wv_buffer_pool* pool,
 	case WV_BUFFER_DMABUF:
 #endif
 		if (pool->config.width != buffer->width
-		    || pool->config.height != buffer->height
-		    || pool->config.format != buffer->format
-		    || pool->config.node != buffer->node
-		    || !modifiers_match(pool->config.modifiers,
-			    pool->config.n_modifiers, buffer->modifiers,
-			    buffer->n_modifiers))
+			|| pool->config.height != buffer->height
+			|| pool->config.format != buffer->format)
 			return false;
+
+#ifdef ENABLE_SCREENCOPY_DMABUF
+		if (pool->config.node != buffer->node
+			|| !modifiers_match(pool->config.modifiers,
+				pool->config.n_modifiers, buffer->modifiers,
+				buffer->n_modifiers))
+			return false;
+#endif
 
 		return true;
 	case WV_BUFFER_UNSPEC:
