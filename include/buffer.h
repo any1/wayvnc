@@ -111,10 +111,6 @@ struct wv_buffer_pool {
 
 enum wv_buffer_type wv_buffer_get_available_types(void);
 
-struct wv_buffer* wv_buffer_create(const struct wv_buffer_config* config,
-		struct wv_gbm_device* gbm);
-void wv_buffer_destroy(struct wv_buffer* self);
-
 void wv_buffer_damage_rect(struct wv_buffer* self, int x, int y, int width,
 		int height);
 void wv_buffer_damage_whole(struct wv_buffer* self);

@@ -368,12 +368,16 @@ bo_failure:
 }
 #endif
 
-struct wv_buffer* wv_buffer_create(const struct wv_buffer_config* config,
+#ifdef ENABLE_SCREENCOPY_DMABUF
+static struct wv_buffer* wv_buffer_create(const struct wv_buffer_config* config,
 		struct wv_gbm_device* gbm)
+#else
+static struct wv_buffer* wv_buffer_create(const struct wv_buffer_config* config)
+#endif
 {
-	nvnc_trace("wv_buffer_create: %dx%d, stride: %d, format: %"PRIu32" gbm: %p",
+	nvnc_trace("wv_buffer_create: %dx%d, stride: %d, format: %"PRIu32,
 			config->width, config->height, config->stride,
-			config->format, gbm);
+			config->format);
 
 	switch (config->type) {
 	case WV_BUFFER_SHM:
@@ -409,7 +413,7 @@ static void wv_buffer_destroy_dmabuf(struct wv_buffer* self)
 }
 #endif
 
-void wv_buffer_destroy(struct wv_buffer* self)
+static void wv_buffer_destroy(struct wv_buffer* self)
 {
 	pixman_region_fini(&self->buffer_damage);
 	pixman_region_fini(&self->frame_damage);
@@ -563,7 +567,7 @@ void wv_buffer_pool_reconfig(struct wv_buffer_pool* pool,
 		return;
 
 	wv_buffer_pool_clear(pool);
-	dev_t old_node = pool->config.node;
+	dev_t old_node __attribute__((unused)) = pool->config.node;
 	copy_buffer_config(&pool->config, config);
 
 #ifdef ENABLE_SCREENCOPY_DMABUF
@@ -589,24 +593,20 @@ static bool wv_buffer_pool_match_buffer(struct wv_buffer_pool* pool,
 
 	switch (pool->config.type) {
 	case WV_BUFFER_SHM:
-		if (pool->config.stride != buffer->stride) {
-			return false;
-		}
-
+		return pool->config.stride == buffer->stride
+			&& pool->config.width == buffer->width
+			&& pool->config.height == buffer->height
+			&& pool->config.format == buffer->format;
 #ifdef ENABLE_SCREENCOPY_DMABUF
-		/* fall-through */
 	case WV_BUFFER_DMABUF:
+		return pool->config.width == buffer->width
+			&& pool->config.height == buffer->height
+			&& pool->config.format == buffer->format
+			&& pool->config.node == buffer->node
+			&& modifiers_match(pool->config.modifiers,
+					pool->config.n_modifiers,
+					buffer->modifiers, buffer->n_modifiers);
 #endif
-		if (pool->config.width != buffer->width
-		    || pool->config.height != buffer->height
-		    || pool->config.format != buffer->format
-		    || pool->config.node != buffer->node
-		    || !modifiers_match(pool->config.modifiers,
-			    pool->config.n_modifiers, buffer->modifiers,
-			    buffer->n_modifiers))
-			return false;
-
-		return true;
 	case WV_BUFFER_UNSPEC:
 		abort();
 	}
@@ -631,7 +631,11 @@ struct wv_buffer* wv_buffer_pool_acquire(struct wv_buffer_pool* pool)
 		return buffer;
 	}
 
+#ifdef ENABLE_SCREENCOPY_DMABUF
 	buffer = wv_buffer_create(&pool->config, pool->gbm);
+#else
+	buffer = wv_buffer_create(&pool->config);
+#endif
 	if (buffer)
 		nvnc_fb_set_release_fn(buffer->nvnc_fb,
 				wv_buffer_pool__on_release, pool);
