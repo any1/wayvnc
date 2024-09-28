@@ -217,11 +217,11 @@ static void session_handle_format_drm(void *data,
 		struct ext_image_copy_capture_session_v1 *session,
 		uint32_t format, struct wl_array* modifiers)
 {
+#ifdef ENABLE_SCREENCOPY_DMABUF
 	struct ext_image_copy_capture* self = data;
 
 	nvnc_log(NVNC_LOG_DEBUG, "DMA-BUF format: %"PRIx32, format);
 
-#ifdef ENABLE_SCREENCOPY_DMABUF
 	// TODO: Select a format that works
 
 	self->have_linux_dmabuf = true;
