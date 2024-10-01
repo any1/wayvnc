@@ -926,7 +926,7 @@ static int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port,
 
 	self->nvnc_display = nvnc_display_new(0, 0);
 	if (!self->nvnc_display)
-		goto failure;
+		goto display_failure;
 
 	nvnc_add_display(self->nvnc, self->nvnc_display);
 
@@ -947,7 +947,7 @@ static int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port,
 	if (self->cfg.enable_auth) {
 		if (nvnc_enable_auth(self->nvnc, auth_flags, on_auth, self) < 0) {
 			nvnc_log(NVNC_LOG_ERROR, "Failed to enable authentication");
-			goto failure;
+			goto auth_failure;
 		}
 
 		if (self->cfg.rsa_private_key_file) {
@@ -956,7 +956,7 @@ static int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port,
 					self->cfg.rsa_private_key_file);
 			if (nvnc_set_rsa_creds(self->nvnc, key_file) < 0) {
 				nvnc_log(NVNC_LOG_ERROR, "Failed to load RSA credentials");
-				goto failure;
+				goto auth_failure;
 			}
 		}
 
@@ -972,7 +972,7 @@ static int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port,
 					cert_file);
 			if (r < 0) {
 				nvnc_log(NVNC_LOG_ERROR, "Failed to enable TLS authentication");
-				goto failure;
+				goto auth_failure;
 			}
 		}
 	}
@@ -986,11 +986,14 @@ static int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port,
 	nvnc_set_cut_text_fn(self->nvnc, on_client_cut_text);
 
 	if (blank_screen(self) != 0)
-		goto failure;
+		goto blank_screen_failure;
 
 	return 0;
 
-failure:
+blank_screen_failure:
+auth_failure:
+	nvnc_display_unref(self->nvnc_display);
+display_failure:
 	nvnc_close(self->nvnc);
 	return -1;
 }
@@ -2130,8 +2133,6 @@ nvnc_failure:
 	ctl_server_destroy(self.ctl);
 ctl_server_failure:
 screencopy_failure:
-	nvnc_display_unref(self.nvnc_display);
-	nvnc_close(self.nvnc);
 wayland_failure:
 	aml_unref(aml);
 failure:
