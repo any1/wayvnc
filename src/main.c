@@ -1851,8 +1851,6 @@ int main(int argc, char* argv[])
 	bool disable_input = false;
 	bool use_transient_seat = false;
 
-	int drm_fd MAYBE_UNUSED = -1;
-
 	int log_level = NVNC_LOG_WARNING;
 
 	static const struct wv_option opts[] = {
