@@ -22,6 +22,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/types.h>
+#include <sys/param.h>
 #include <wayland-client.h>
 #include <libdrm/drm_fourcc.h>
 #include <aml.h>
@@ -40,6 +41,12 @@
 extern struct ext_output_image_capture_source_manager_v1* ext_output_image_capture_source_manager;
 extern struct ext_image_copy_capture_manager_v1* ext_image_copy_capture_manager;
 
+struct dmabuf_format {
+	uint32_t format;
+	uint64_t* modifiers;
+	int n_modifiers;
+};
+
 struct ext_image_copy_capture {
 	struct screencopy parent;
 	struct wl_output* wl_output;
@@ -50,18 +57,21 @@ struct ext_image_copy_capture {
 	bool render_cursors;
 	struct wv_buffer_pool* pool;
 	struct wv_buffer* buffer;
-	bool have_buffer_info;
+	bool have_constraints;
 	bool should_start;
 	uint32_t frame_count;
 
-	uint32_t width, height;
-	uint32_t wl_shm_stride, wl_shm_format;
+	uint32_t* wl_shm_formats;
+	int n_wl_shm_formats;
+	int wl_shm_formats_capacity;
 
-	bool have_wl_shm;
-	bool have_linux_dmabuf;
-	uint32_t dmabuf_format;
-	int n_dmabuf_modifiers;
-	uint64_t* dmabuf_modifiers;
+	uint32_t width, height;
+	uint32_t wl_shm_stride;
+
+	struct dmabuf_format* dmabuf_formats;
+	int n_dmabuf_formats;
+	int dmabuf_formats_capacity;
+
 	bool have_dmabuf_dev;
 	dev_t dmabuf_dev;
 
@@ -77,12 +87,29 @@ static struct ext_image_copy_capture_session_v1_listener session_listener;
 static struct ext_image_copy_capture_frame_v1_listener frame_listener;
 static struct ext_image_copy_capture_cursor_session_v1_listener cursor_listener;
 
+static void clear_dmabuf_formats(struct ext_image_copy_capture* self)
+{
+	for (int i = 0; i < self->n_dmabuf_formats; ++i)
+		free(self->dmabuf_formats[i].modifiers);
+	self->n_dmabuf_formats = 0;
+}
+
+static void clear_constraints(struct ext_image_copy_capture* self)
+{
+	if (!self->have_constraints)
+		return;
+
+	clear_dmabuf_formats(self);
+	self->n_dmabuf_formats = 0;
+	self->n_wl_shm_formats = 0;
+	self->have_constraints = false;
+}
+
 static void ext_image_copy_capture_deinit_session(struct ext_image_copy_capture* self)
 {
 	nvnc_log(NVNC_LOG_DEBUG, "DEINIT %p", self);
-	free(self->dmabuf_modifiers);
-	self->dmabuf_modifiers = NULL;
-	self->n_dmabuf_modifiers = 0;
+
+	clear_constraints(self);
 
 	if (self->frame)
 		ext_image_copy_capture_frame_v1_destroy(self->frame);
@@ -202,13 +229,25 @@ static void ext_image_copy_capture_schedule_from_timer(void* obj)
 }
 
 static void session_handle_format_shm(void *data,
-		struct ext_image_copy_capture_session_v1 *session,
+		struct ext_image_copy_capture_session_v1* session,
 		uint32_t format)
 {
 	struct ext_image_copy_capture* self = data;
 
-	self->have_wl_shm = true;
-	self->wl_shm_format = fourcc_from_wl_shm(format);
+	clear_constraints(self);
+
+	if (self->wl_shm_formats_capacity <= self->n_wl_shm_formats) {
+		int next_cap = MIN(256, self->wl_shm_formats_capacity * 2);
+		uint32_t* formats = realloc(self->wl_shm_formats,
+				sizeof(*formats) * next_cap);
+		assert(formats);
+
+		self->wl_shm_formats = formats;
+		self->wl_shm_formats_capacity = next_cap;
+	}
+
+	self->wl_shm_formats[self->n_wl_shm_formats++] =
+		fourcc_from_wl_shm(format);
 
 	nvnc_log(NVNC_LOG_DEBUG, "shm format: %"PRIx32, format);
 }
@@ -220,23 +259,33 @@ static void session_handle_format_drm(void *data,
 #ifdef ENABLE_SCREENCOPY_DMABUF
 	struct ext_image_copy_capture* self = data;
 
+	clear_constraints(self);
+
 	nvnc_log(NVNC_LOG_DEBUG, "DMA-BUF format: %"PRIx32, format);
 
-	// TODO: Select a format that works
+	if (self->dmabuf_formats_capacity <= self->n_dmabuf_formats) {
+		int next_cap = MIN(256, self->dmabuf_formats_capacity * 2);
+		struct dmabuf_format* formats = realloc(self->dmabuf_formats,
+				sizeof(*formats) * next_cap);
+		assert(formats);
 
-	self->have_linux_dmabuf = true;
-	self->dmabuf_format = format;
+		self->dmabuf_formats = formats;
+		self->dmabuf_formats_capacity = next_cap;
+	}
+
+	struct dmabuf_format* entry =
+		&self->dmabuf_formats[self->n_dmabuf_formats++];
+
+	entry->format = format;
 
 	if (modifiers->size % 8 != 0) {
 		nvnc_log(NVNC_LOG_WARNING, "DMA-BUF modifier array size is not a multiple of 8");
 	}
 
-	self->n_dmabuf_modifiers = modifiers->size / 8;
-	self->dmabuf_modifiers = realloc(self->dmabuf_modifiers,
-			self->n_dmabuf_modifiers * 8);
-	assert(self->dmabuf_modifiers);
-	memcpy(self->dmabuf_modifiers, modifiers->data,
-			self->n_dmabuf_modifiers * 8);
+	entry->n_modifiers = modifiers->size / 8;
+	entry->modifiers = realloc(entry->modifiers, entry->n_modifiers * 8);
+	assert(entry->modifiers);
+	memcpy(entry->modifiers, modifiers->data, entry->n_modifiers * 8);
 #endif
 }
 
@@ -245,6 +294,8 @@ static void session_handle_dmabuf_device(void* data,
 		struct wl_array *device)
 {
 	struct ext_image_copy_capture* self = data;
+
+	clear_constraints(self);
 
 	if (device->size != sizeof(self->dmabuf_dev)) {
 		nvnc_log(NVNC_LOG_ERROR, "array size != sizeof(dev_t)");
@@ -260,6 +311,8 @@ static void session_handle_dimensions(void *data,
 		uint32_t height)
 {
 	struct ext_image_copy_capture* self = data;
+
+	clear_constraints(self);
 
 	nvnc_log(NVNC_LOG_DEBUG, "Buffer dimensions: %"PRIu32"x%"PRIu32,
 			width, height);
@@ -279,8 +332,9 @@ static void session_handle_constraints_done(void *data,
 	config.height = self->height;
 
 #ifdef ENABLE_SCREENCOPY_DMABUF
-	if (self->have_linux_dmabuf && self->parent.enable_linux_dmabuf) {
-		config.format = self->dmabuf_format;
+	if (self->n_dmabuf_formats && self->parent.enable_linux_dmabuf) {
+		// TODO: Select "best" format
+		config.format = self->dmabuf_formats[0].format;
 		config.stride = 0;
 		config.type = WV_BUFFER_DMABUF;
 
@@ -288,8 +342,9 @@ static void session_handle_constraints_done(void *data,
 			config.node = self->dmabuf_dev;
 	} else
 #endif
-	if (self->have_wl_shm) {
-		config.format = self->wl_shm_format;
+	if (self->n_wl_shm_formats > 0) {
+		// TODO: Select "best" format
+		config.format = self->wl_shm_formats[0];
 		config.stride = self->wl_shm_stride;
 		config.type = WV_BUFFER_SHM;
 	} else {
@@ -304,7 +359,7 @@ static void session_handle_constraints_done(void *data,
 		self->should_start = false;
 	}
 
-	self->have_buffer_info = true;
+	self->have_constraints = true;
 
 	nvnc_log(NVNC_LOG_DEBUG, "Init done");
 }
@@ -492,7 +547,7 @@ static int ext_image_copy_capture_start(struct screencopy* ptr, bool immediate)
 		return 0;
 	}
 
-	if (!self->have_buffer_info) {
+	if (!self->have_constraints) {
 		self->should_start = true;
 		return 0;
 	}
@@ -603,6 +658,10 @@ void ext_image_copy_capture_destroy(struct screencopy* ptr)
 	ext_image_copy_capture_deinit_session(self);
 
 	wv_buffer_pool_destroy(self->pool);
+
+	clear_dmabuf_formats(self);
+	free(self->dmabuf_formats);
+	free(self->wl_shm_formats);
 	free(self);
 }
 
