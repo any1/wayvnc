@@ -22,6 +22,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/types.h>
+#include <sys/param.h>
 #include <wayland-client.h>
 #include <libdrm/drm_fourcc.h>
 #include <aml.h>
@@ -40,6 +41,18 @@
 extern struct ext_output_image_capture_source_manager_v1* ext_output_image_capture_source_manager;
 extern struct ext_image_copy_capture_manager_v1* ext_image_copy_capture_manager;
 
+struct format_entry {
+	double score;
+	uint32_t format;
+	uint64_t modifier;
+};
+
+struct format_array {
+	int len;
+	int cap;
+	struct format_entry *entries;
+};
+
 struct ext_image_copy_capture {
 	struct screencopy parent;
 	struct wl_output* wl_output;
@@ -50,18 +63,16 @@ struct ext_image_copy_capture {
 	bool render_cursors;
 	struct wv_buffer_pool* pool;
 	struct wv_buffer* buffer;
-	bool have_buffer_info;
+	bool have_constraints;
 	bool should_start;
 	uint32_t frame_count;
 
 	uint32_t width, height;
-	uint32_t wl_shm_stride, wl_shm_format;
+	uint32_t wl_shm_stride;
 
-	bool have_wl_shm;
-	bool have_linux_dmabuf;
-	uint32_t dmabuf_format;
-	int n_dmabuf_modifiers;
-	uint64_t* dmabuf_modifiers;
+	struct format_array wl_shm_formats;
+	struct format_array dmabuf_formats;
+
 	bool have_dmabuf_dev;
 	dev_t dmabuf_dev;
 
@@ -77,12 +88,21 @@ static struct ext_image_copy_capture_session_v1_listener session_listener;
 static struct ext_image_copy_capture_frame_v1_listener frame_listener;
 static struct ext_image_copy_capture_cursor_session_v1_listener cursor_listener;
 
+static void clear_constraints(struct ext_image_copy_capture* self)
+{
+	if (!self->have_constraints)
+		return;
+
+	self->dmabuf_formats.len = 0;
+	self->wl_shm_formats.len = 0;
+	self->have_constraints = false;
+}
+
 static void ext_image_copy_capture_deinit_session(struct ext_image_copy_capture* self)
 {
 	nvnc_log(NVNC_LOG_DEBUG, "DEINIT %p", self);
-	free(self->dmabuf_modifiers);
-	self->dmabuf_modifiers = NULL;
-	self->n_dmabuf_modifiers = 0;
+
+	clear_constraints(self);
 
 	if (self->frame)
 		ext_image_copy_capture_frame_v1_destroy(self->frame);
@@ -201,14 +221,49 @@ static void ext_image_copy_capture_schedule_from_timer(void* obj)
 	ext_image_copy_capture_schedule_capture(self);
 }
 
+static void format_array_append(struct format_array* self,
+		uint32_t format, uint64_t modifier)
+{
+	if (self->cap <= self->len) {
+		int next_cap = MAX(256, self->cap * 2);
+		struct format_entry* formats = realloc(self->entries,
+				sizeof(*formats) * next_cap);
+		assert(formats);
+
+		self->entries = formats;
+		self->cap = next_cap;
+	}
+
+	struct format_entry* entry = &self->entries[self->len++];
+
+	entry->format = format;
+	entry->modifier = modifier;
+}
+
+static int cmp_format_entries(const void* a, const void* b)
+{
+	const struct format_entry* entry_a = a;
+	const struct format_entry* entry_b = b;
+
+	return entry_a->score > entry_b->score ?
+		-1 : entry_a->score < entry_b->score;
+}
+
+static void format_array_sort_by_score(struct format_array* self)
+{
+	qsort(self->entries, self->len, sizeof(*self->entries),
+			cmp_format_entries);
+}
+
 static void session_handle_format_shm(void *data,
-		struct ext_image_copy_capture_session_v1 *session,
+		struct ext_image_copy_capture_session_v1* session,
 		uint32_t format)
 {
 	struct ext_image_copy_capture* self = data;
 
-	self->have_wl_shm = true;
-	self->wl_shm_format = fourcc_from_wl_shm(format);
+	clear_constraints(self);
+
+	format_array_append(&self->wl_shm_formats, fourcc_from_wl_shm(format), 0);
 
 	nvnc_log(NVNC_LOG_DEBUG, "shm format: %"PRIx32, format);
 }
@@ -220,23 +275,24 @@ static void session_handle_format_drm(void *data,
 #ifdef ENABLE_SCREENCOPY_DMABUF
 	struct ext_image_copy_capture* self = data;
 
+	clear_constraints(self);
+
 	nvnc_log(NVNC_LOG_DEBUG, "DMA-BUF format: %"PRIx32, format);
-
-	// TODO: Select a format that works
-
-	self->have_linux_dmabuf = true;
-	self->dmabuf_format = format;
 
 	if (modifiers->size % 8 != 0) {
 		nvnc_log(NVNC_LOG_WARNING, "DMA-BUF modifier array size is not a multiple of 8");
 	}
 
-	self->n_dmabuf_modifiers = modifiers->size / 8;
-	self->dmabuf_modifiers = realloc(self->dmabuf_modifiers,
-			self->n_dmabuf_modifiers * 8);
-	assert(self->dmabuf_modifiers);
-	memcpy(self->dmabuf_modifiers, modifiers->data,
-			self->n_dmabuf_modifiers * 8);
+	int n_modifiers = modifiers->size / 8;
+	for (int i = 0; i < n_modifiers; ++i) {
+		uint64_t modifier = 0;
+
+		// Not sure if modifier data is aligned. Let's just memcpy it.
+		const uint64_t* data = modifiers->data;
+		memcpy(&modifier, &data[i], sizeof(modifier));
+
+		format_array_append(&self->dmabuf_formats, format, modifier);
+	}
 #endif
 }
 
@@ -245,6 +301,8 @@ static void session_handle_dmabuf_device(void* data,
 		struct wl_array *device)
 {
 	struct ext_image_copy_capture* self = data;
+
+	clear_constraints(self);
 
 	if (device->size != sizeof(self->dmabuf_dev)) {
 		nvnc_log(NVNC_LOG_ERROR, "array size != sizeof(dev_t)");
@@ -261,12 +319,63 @@ static void session_handle_dimensions(void *data,
 {
 	struct ext_image_copy_capture* self = data;
 
+	clear_constraints(self);
+
 	nvnc_log(NVNC_LOG_DEBUG, "Buffer dimensions: %"PRIu32"x%"PRIu32,
 			width, height);
 
 	self->width = width;
 	self->height = height;
 	self->wl_shm_stride = width * 4;
+}
+
+static double rate_format(const struct ext_image_copy_capture* self,
+		enum wv_buffer_type type, enum wv_buffer_domain domain,
+		uint32_t format, uint64_t modifier)
+{
+	if (type == WV_BUFFER_DMABUF && !self->parent.enable_linux_dmabuf) {
+		return 0;
+	}
+	return self->parent.rate_format(self->parent.userdata, type, domain,
+			format, modifier);
+}
+
+static void rate_formats_in_array(const struct ext_image_copy_capture* self,
+		struct format_array* array, enum wv_buffer_type type)
+{
+	enum wv_buffer_domain domain = WV_BUFFER_DOMAIN_OUTPUT;
+	if (self->cursor)
+		domain = WV_BUFFER_DOMAIN_CURSOR;
+
+	for (int i = 0; i < array->len; ++i) {
+		struct format_entry* entry = &array->entries[i];
+		entry->score = rate_format(self, type, domain, entry->format,
+				entry->modifier);
+
+		nvnc_trace("Format:modifier %.4s:%"PRIx64" score: %f",
+				(const char*)&entry->format, entry->modifier,
+				entry->score);
+	}
+}
+
+static void select_modifiers_for_top_format(struct wv_buffer_config* config,
+		const struct format_array* formats)
+{
+	// Let's just make it big enough; no point in counting.
+	config->modifiers = malloc(8 * formats->len);
+	assert(config->modifiers);
+
+	struct format_entry* top_entry = formats->entries;
+
+	for (int i = 0; i < formats->len; ++i) {
+		struct format_entry* entry = &formats->entries[i];
+		if (entry->format != top_entry->format ||
+				entry->score != top_entry->score)
+			break;
+
+		nvnc_trace("Adding modifier: %"PRIx64, entry->modifier);
+		config->modifiers[config->n_modifiers++] = entry->modifier;
+	}
 }
 
 static void session_handle_constraints_done(void *data,
@@ -279,32 +388,53 @@ static void session_handle_constraints_done(void *data,
 	config.height = self->height;
 
 #ifdef ENABLE_SCREENCOPY_DMABUF
-	if (self->have_linux_dmabuf && self->parent.enable_linux_dmabuf) {
-		config.format = self->dmabuf_format;
+	rate_formats_in_array(self, &self->dmabuf_formats, WV_BUFFER_DMABUF);
+	format_array_sort_by_score(&self->dmabuf_formats);
+
+	if (self->dmabuf_formats.len > 0 &&
+			self->dmabuf_formats.entries[0].score != 0) {
+		config.format = self->dmabuf_formats.entries[0].format;
+		select_modifiers_for_top_format(&config, &self->dmabuf_formats);
+
 		config.stride = 0;
 		config.type = WV_BUFFER_DMABUF;
 
 		if (self->have_dmabuf_dev)
 			config.node = self->dmabuf_dev;
+
+		nvnc_log(NVNC_LOG_DEBUG, "Choosing DMA-BUF format \"%.4s\" with %d modifiers",
+				(const char*)&config.format, config.n_modifiers);
 	} else
 #endif
-	if (self->have_wl_shm) {
-		config.format = self->wl_shm_format;
-		config.stride = self->wl_shm_stride;
-		config.type = WV_BUFFER_SHM;
-	} else {
-		nvnc_log(NVNC_LOG_DEBUG, "No buffer formats supplied");
-		return;
+	{
+		rate_formats_in_array(self, &self->wl_shm_formats,
+				WV_BUFFER_SHM);
+		format_array_sort_by_score(&self->wl_shm_formats);
+
+		if (self->wl_shm_formats.len > 0 &&
+				self->wl_shm_formats.entries[0].score != 0) {
+			config.format = self->wl_shm_formats.entries[0].format;
+			config.stride = self->wl_shm_stride;
+			config.type = WV_BUFFER_SHM;
+
+			nvnc_log(NVNC_LOG_DEBUG, "Choosing SHM format \"%.4s\"",
+					(const char*)&config.format);
+		} else {
+			nvnc_log(NVNC_LOG_ERROR, "No supported buffer formats were found");
+			return;
+		}
 	}
 
+
 	wv_buffer_pool_reconfig(self->pool, &config);
+	free(config.modifiers);
 
 	if (self->should_start) {
 		ext_image_copy_capture_schedule_capture(self);
 		self->should_start = false;
 	}
 
-	self->have_buffer_info = true;
+	self->have_constraints = true;
 
 	nvnc_log(NVNC_LOG_DEBUG, "Init done");
 }
@@ -492,7 +622,7 @@ static int ext_image_copy_capture_start(struct screencopy* ptr, bool immediate)
 		return 0;
 	}
 
-	if (!self->have_buffer_info) {
+	if (!self->have_constraints) {
 		self->should_start = true;
 		return 0;
 	}
@@ -603,6 +733,9 @@ void ext_image_copy_capture_destroy(struct screencopy* ptr)
 	ext_image_copy_capture_deinit_session(self);
 
 	wv_buffer_pool_destroy(self->pool);
+
+	free(self->dmabuf_formats.entries);
+	free(self->wl_shm_formats.entries);
 	free(self);
 }
 

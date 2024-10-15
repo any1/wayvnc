@@ -16,11 +16,13 @@
 
 #pragma once
 
+#include "buffer.h"
+
 #include <stdbool.h>
+#include <stdint.h>
 
 struct wl_output;
 struct wl_seat;
-struct wv_buffer;
 
 enum screencopy_result {
 	SCREENCOPY_DONE,
@@ -55,6 +57,10 @@ struct screencopy {
 	void (*cursor_enter)(void* userdata);
 	void (*cursor_leave)(void* userdata);
 	void (*cursor_hotspot)(int x, int y, void* userdata);
+
+	double (*rate_format)(const void* userdata, enum wv_buffer_type type,
+			enum wv_buffer_domain domain, uint32_t format,
+			uint64_t modifier);
 
 	void* userdata;
 };

@@ -1598,6 +1598,38 @@ static void on_cursor_capture_done(enum screencopy_result result,
 	}
 }
 
+static double rate_format(const void* userdata, enum wv_buffer_type type,
+		enum wv_buffer_domain domain, uint32_t format,
+		uint64_t modifier)
+{
+	const struct wayvnc* self = userdata;
+
+	enum nvnc_fb_type fb_type = NVNC_FB_UNSPEC;
+	switch (type) {
+	case WV_BUFFER_SHM:
+		fb_type = NVNC_FB_SIMPLE;
+		break;
+	case WV_BUFFER_DMABUF:
+		fb_type = NVNC_FB_GBM_BO;
+		break;
+	case WV_BUFFER_UNSPEC:;
+	}
+	assert(fb_type != NVNC_FB_UNSPEC);
+
+	switch (domain) {
+	case WV_BUFFER_DOMAIN_OUTPUT:
+		return nvnc_rate_pixel_format(self->nvnc, fb_type, format,
+				modifier);
+	case WV_BUFFER_DOMAIN_CURSOR:
+		return nvnc_rate_cursor_pixel_format(self->nvnc, fb_type, format,
+				modifier);
+	case WV_BUFFER_DOMAIN_UNSPEC:;
+	}
+
+	abort();
+	return -1;
+}
+
 static bool configure_cursor_sc(struct wayvnc* self,
 		struct wayvnc_client* client)
 {
@@ -1622,6 +1654,7 @@ static bool configure_cursor_sc(struct wayvnc* self,
 	}
 
 	self->cursor_sc->on_done = on_cursor_capture_done;
+	self->cursor_sc->rate_format = rate_format;
 	self->cursor_sc->userdata = self;
 
 	self->cursor_sc->rate_limit = self->max_rate;
@@ -1644,6 +1677,7 @@ bool configure_screencopy(struct wayvnc* self)
 	}
 
 	self->screencopy->on_done = on_capture_done;
+	self->screencopy->rate_format = rate_format;
 	self->screencopy->userdata = self;
 
 	self->screencopy->rate_limit = self->max_rate;
@@ -2071,13 +2105,8 @@ int main(int argc, char* argv[])
 	else if (use_external_fd)
 		socket_type = SOCKET_TYPE_FROM_FD;
 
-	if (!start_detached) {
-		if (!configure_screencopy(&self))
-			goto screencopy_failure;
-
-		self.screencopy->on_done = on_capture_done;
-		self.screencopy->userdata = &self;
-	}
+	if (!start_detached && !configure_screencopy(&self))
+		goto screencopy_failure;
 
 	if (show_performance)
 		self.performance_ticker = aml_ticker_new(1000000, on_perf_tick,
