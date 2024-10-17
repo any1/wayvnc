@@ -43,8 +43,7 @@ extern struct ext_image_copy_capture_manager_v1* ext_image_copy_capture_manager;
 
 struct dmabuf_format {
 	uint32_t format;
-	uint64_t* modifiers;
-	int n_modifiers;
+	uint64_t modifier;
 };
 
 struct ext_image_copy_capture {
@@ -87,19 +86,11 @@ static struct ext_image_copy_capture_session_v1_listener session_listener;
 static struct ext_image_copy_capture_frame_v1_listener frame_listener;
 static struct ext_image_copy_capture_cursor_session_v1_listener cursor_listener;
 
-static void clear_dmabuf_formats(struct ext_image_copy_capture* self)
-{
-	for (int i = 0; i < self->n_dmabuf_formats; ++i)
-		free(self->dmabuf_formats[i].modifiers);
-	self->n_dmabuf_formats = 0;
-}
-
 static void clear_constraints(struct ext_image_copy_capture* self)
 {
 	if (!self->have_constraints)
 		return;
 
-	clear_dmabuf_formats(self);
 	self->n_dmabuf_formats = 0;
 	self->n_wl_shm_formats = 0;
 	self->have_constraints = false;
@@ -252,17 +243,9 @@ static void session_handle_format_shm(void *data,
 	nvnc_log(NVNC_LOG_DEBUG, "shm format: %"PRIx32, format);
 }
 
-static void session_handle_format_drm(void *data,
-		struct ext_image_copy_capture_session_v1 *session,
-		uint32_t format, struct wl_array* modifiers)
+static void add_dmabuf_format(struct ext_image_copy_capture* self,
+		uint32_t format, uint64_t modifier)
 {
-#ifdef ENABLE_SCREENCOPY_DMABUF
-	struct ext_image_copy_capture* self = data;
-
-	clear_constraints(self);
-
-	nvnc_log(NVNC_LOG_DEBUG, "DMA-BUF format: %"PRIx32, format);
-
 	if (self->dmabuf_formats_capacity <= self->n_dmabuf_formats) {
 		int next_cap = MIN(256, self->dmabuf_formats_capacity * 2);
 		struct dmabuf_format* formats = realloc(self->dmabuf_formats,
@@ -277,15 +260,34 @@ static void session_handle_format_drm(void *data,
 		&self->dmabuf_formats[self->n_dmabuf_formats++];
 
 	entry->format = format;
+	entry->modifier = modifier;
+}
+
+static void session_handle_format_drm(void *data,
+		struct ext_image_copy_capture_session_v1 *session,
+		uint32_t format, struct wl_array* modifiers)
+{
+#ifdef ENABLE_SCREENCOPY_DMABUF
+	struct ext_image_copy_capture* self = data;
+
+	clear_constraints(self);
+
+	nvnc_log(NVNC_LOG_DEBUG, "DMA-BUF format: %"PRIx32, format);
 
 	if (modifiers->size % 8 != 0) {
 		nvnc_log(NVNC_LOG_WARNING, "DMA-BUF modifier array size is not a multiple of 8");
 	}
 
-	entry->n_modifiers = modifiers->size / 8;
-	entry->modifiers = realloc(entry->modifiers, entry->n_modifiers * 8);
-	assert(entry->modifiers);
-	memcpy(entry->modifiers, modifiers->data, entry->n_modifiers * 8);
+	int n_modifiers = modifiers->size / 8;
+	for (int i = 0; i < n_modifiers; ++i) {
+		uint64_t modifier = 0;
+
+		// Not sure if modifier data is aligned. Let's just memcpy it.
+		const uint64_t* data = modifiers->data;
+		memcpy(&modifiers, &data[i], sizeof(modifier));
+
+		add_dmabuf_format(self, format, modifier);
+	}
 #endif
 }
 
@@ -659,7 +661,6 @@ void ext_image_copy_capture_destroy(struct screencopy* ptr)
 
 	wv_buffer_pool_destroy(self->pool);
 
-	clear_dmabuf_formats(self);
 	free(self->dmabuf_formats);
 	free(self->wl_shm_formats);
 	free(self);
