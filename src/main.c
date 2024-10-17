@@ -1598,6 +1598,88 @@ static void on_cursor_capture_done(enum screencopy_result result,
 	}
 }
 
+static int select_screencopy_cursor_format(void* userdata,
+		const uint32_t* formats, int n_formats)
+{
+	struct wayvnc* self = userdata;
+
+	int best_index = -1;
+	double top_score = 0;
+
+	for (int i = 0; i < n_formats; ++i) {
+		double score = nvnc_rate_cursor_pixel_format(self->nvnc,
+				NVNC_FB_SIMPLE, formats[i], 0);
+		if (score > top_score) {
+			top_score = score;
+			best_index = i;
+		}
+	}
+
+	return best_index;
+}
+
+static int select_screencopy_cursor_dmabuf_format(void* userdata,
+		const struct screencopy_dmabuf_format* formats, int n_formats)
+{
+	struct wayvnc* self = userdata;
+
+	int best_index = -1;
+	double top_score = 0;
+
+	for (int i = 0; i < n_formats; ++i) {
+		double score = nvnc_rate_cursor_pixel_format(self->nvnc,
+				NVNC_FB_GBM_BO, formats[i].format,
+				formats[i].modifier);
+		if (score > top_score) {
+			top_score = score;
+			best_index = i;
+		}
+	}
+
+	return best_index;
+}
+
+static int select_screencopy_format(void* userdata, const uint32_t* formats,
+		int n_formats)
+{
+	struct wayvnc* self = userdata;
+
+	int best_index = -1;
+	double top_score = 0;
+
+	for (int i = 0; i < n_formats; ++i) {
+		double score = nvnc_rate_pixel_format(self->nvnc,
+				NVNC_FB_SIMPLE, formats[i], 0);
+		if (score > top_score) {
+			top_score = score;
+			best_index = i;
+		}
+	}
+
+	return best_index;
+}
+
+static int select_screencopy_dmabuf_format(void* userdata,
+		const struct screencopy_dmabuf_format* formats, int n_formats)
+{
+	struct wayvnc* self = userdata;
+
+	int best_index = -1;
+	double top_score = 0;
+
+	for (int i = 0; i < n_formats; ++i) {
+		double score = nvnc_rate_pixel_format(self->nvnc,
+				NVNC_FB_GBM_BO, formats[i].format,
+				formats[i].modifier);
+		if (score > top_score) {
+			top_score = score;
+			best_index = i;
+		}
+	}
+
+	return best_index;
+}
+
 static bool configure_cursor_sc(struct wayvnc* self,
 		struct wayvnc_client* client)
 {
@@ -1622,6 +1704,9 @@ static bool configure_cursor_sc(struct wayvnc* self,
 	}
 
 	self->cursor_sc->on_done = on_cursor_capture_done;
+	self->cursor_sc->select_format = select_screencopy_cursor_format;
+	self->cursor_sc->select_dmabuf_format =
+		select_screencopy_cursor_dmabuf_format;
 	self->cursor_sc->userdata = self;
 
 	self->cursor_sc->rate_limit = self->max_rate;
@@ -1644,6 +1729,8 @@ bool configure_screencopy(struct wayvnc* self)
 	}
 
 	self->screencopy->on_done = on_capture_done;
+	self->screencopy->select_format = select_screencopy_format;
+	self->screencopy->select_dmabuf_format = select_screencopy_dmabuf_format;
 	self->screencopy->userdata = self;
 
 	self->screencopy->rate_limit = self->max_rate;
@@ -2071,13 +2158,8 @@ int main(int argc, char* argv[])
 	else if (use_external_fd)
 		socket_type = SOCKET_TYPE_FROM_FD;
 
-	if (!start_detached) {
-		if (!configure_screencopy(&self))
-			goto screencopy_failure;
-
-		self.screencopy->on_done = on_capture_done;
-		self.screencopy->userdata = &self;
-	}
+	if (!start_detached && !configure_screencopy(&self))
+		goto screencopy_failure;
 
 	if (show_performance)
 		self.performance_ticker = aml_ticker_new(1000000, on_perf_tick,

@@ -17,6 +17,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stdint.h>
 
 struct wl_output;
 struct wl_seat;
@@ -31,6 +32,11 @@ enum screencopy_result {
 enum screencopy_capabilitites {
 	SCREENCOPY_CAP_CURSOR = 1 << 0,
 	SCREENCOPY_CAP_TRANSFORM = 1 << 1,
+};
+
+struct screencopy_dmabuf_format {
+	uint32_t format;
+	uint64_t modifier;
 };
 
 typedef void (*screencopy_done_fn)(enum screencopy_result,
@@ -55,6 +61,12 @@ struct screencopy {
 	void (*cursor_enter)(void* userdata);
 	void (*cursor_leave)(void* userdata);
 	void (*cursor_hotspot)(int x, int y, void* userdata);
+
+	int (*select_format)(void* userdata, const uint32_t* formats,
+			int n_formats);
+	int (*select_dmabuf_format)(void* userdata,
+			const struct screencopy_dmabuf_format* formats,
+			int n_formats);
 
 	void* userdata;
 };

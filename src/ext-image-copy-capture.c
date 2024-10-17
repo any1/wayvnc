@@ -41,11 +41,6 @@
 extern struct ext_output_image_capture_source_manager_v1* ext_output_image_capture_source_manager;
 extern struct ext_image_copy_capture_manager_v1* ext_image_copy_capture_manager;
 
-struct dmabuf_format {
-	uint32_t format;
-	uint64_t modifier;
-};
-
 struct ext_image_copy_capture {
 	struct screencopy parent;
 	struct wl_output* wl_output;
@@ -67,7 +62,7 @@ struct ext_image_copy_capture {
 	uint32_t width, height;
 	uint32_t wl_shm_stride;
 
-	struct dmabuf_format* dmabuf_formats;
+	struct screencopy_dmabuf_format* dmabuf_formats;
 	int n_dmabuf_formats;
 	int dmabuf_formats_capacity;
 
@@ -248,7 +243,8 @@ static void add_dmabuf_format(struct ext_image_copy_capture* self,
 {
 	if (self->dmabuf_formats_capacity <= self->n_dmabuf_formats) {
 		int next_cap = MIN(256, self->dmabuf_formats_capacity * 2);
-		struct dmabuf_format* formats = realloc(self->dmabuf_formats,
+		struct screencopy_dmabuf_format* formats =
+			realloc(self->dmabuf_formats,
 				sizeof(*formats) * next_cap);
 		assert(formats);
 
@@ -256,7 +252,7 @@ static void add_dmabuf_format(struct ext_image_copy_capture* self,
 		self->dmabuf_formats_capacity = next_cap;
 	}
 
-	struct dmabuf_format* entry =
+	struct screencopy_dmabuf_format* entry =
 		&self->dmabuf_formats[self->n_dmabuf_formats++];
 
 	entry->format = format;
@@ -324,6 +320,21 @@ static void session_handle_dimensions(void *data,
 	self->wl_shm_stride = width * 4;
 }
 
+static int select_dmabuf_format(const struct ext_image_copy_capture* self)
+{
+	if (self->parent.enable_linux_dmabuf) {
+		return -1;
+	}
+	return self->parent.select_dmabuf_format(self->parent.userdata,
+			self->dmabuf_formats, self->n_dmabuf_formats);
+}
+
+static int select_wl_shm_format(const struct ext_image_copy_capture* self)
+{
+	return self->parent.select_format(self->parent.userdata,
+			self->wl_shm_formats, self->n_wl_shm_formats);
+}
+
 static void session_handle_constraints_done(void *data,
 		struct ext_image_copy_capture_session_v1 *session)
 {
@@ -334,9 +345,9 @@ static void session_handle_constraints_done(void *data,
 	config.height = self->height;
 
 #ifdef ENABLE_SCREENCOPY_DMABUF
-	if (self->n_dmabuf_formats && self->parent.enable_linux_dmabuf) {
-		// TODO: Select "best" format
-		config.format = self->dmabuf_formats[0].format;
+	int dmabuf_format_index = select_dmabuf_format(self);
+	if (dmabuf_format_index != -1) {
+		config.format = self->dmabuf_formats[dmabuf_format_index].format;
 		config.stride = 0;
 		config.type = WV_BUFFER_DMABUF;
 
@@ -344,14 +355,16 @@ static void session_handle_constraints_done(void *data,
 			config.node = self->dmabuf_dev;
 	} else
 #endif
-	if (self->n_wl_shm_formats > 0) {
-		// TODO: Select "best" format
-		config.format = self->wl_shm_formats[0];
-		config.stride = self->wl_shm_stride;
-		config.type = WV_BUFFER_SHM;
-	} else {
-		nvnc_log(NVNC_LOG_DEBUG, "No buffer formats supplied");
-		return;
+	{
+		int wl_shm_format_index = select_wl_shm_format(self);
+		if (wl_shm_format_index != -1) {
+			config.format = self->wl_shm_formats[wl_shm_format_index];
+			config.stride = self->wl_shm_stride;
+			config.type = WV_BUFFER_SHM;
+		} else {
+			nvnc_log(NVNC_LOG_ERROR, "No supported buffer formats were found");
+			return;
+		}
 	}
 
 	wv_buffer_pool_reconfig(self->pool, &config);
