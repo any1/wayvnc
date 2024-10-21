@@ -10,14 +10,14 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: checkout aml
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         repository: any1/aml
         path: subprojects/aml
     - name: checkout neatvnc
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         repository: any1/neatvnc
         path: subprojects/neatvnc
