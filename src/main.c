@@ -1598,86 +1598,36 @@ static void on_cursor_capture_done(enum screencopy_result result,
 	}
 }
 
-static int select_screencopy_cursor_format(void* userdata,
-		const uint32_t* formats, int n_formats)
+static double rate_format(const void* userdata, enum wv_buffer_type type,
+		enum wv_buffer_domain domain, uint32_t format,
+		uint64_t modifier)
 {
-	struct wayvnc* self = userdata;
+	const struct wayvnc* self = userdata;
 
-	int best_index = -1;
-	double top_score = 0;
+	enum nvnc_fb_type fb_type = NVNC_FB_UNSPEC;
+	switch (type) {
+	case WV_BUFFER_SHM:
+		fb_type = NVNC_FB_SIMPLE;
+		break;
+	case WV_BUFFER_DMABUF:
+		fb_type = NVNC_FB_GBM_BO;
+		break;
+	case WV_BUFFER_UNSPEC:;
+	}
+	assert(fb_type != NVNC_FB_UNSPEC);
 
-	for (int i = 0; i < n_formats; ++i) {
-		double score = nvnc_rate_cursor_pixel_format(self->nvnc,
-				NVNC_FB_SIMPLE, formats[i], 0);
-		if (score > top_score) {
-			top_score = score;
-			best_index = i;
-		}
+	switch (domain) {
+	case WV_BUFFER_DOMAIN_OUTPUT:
+		return nvnc_rate_pixel_format(self->nvnc, fb_type, format,
+				modifier);
+	case WV_BUFFER_DOMAIN_CURSOR:
+		return nvnc_rate_cursor_pixel_format(self->nvnc, fb_type, format,
+				modifier);
+	case WV_BUFFER_DOMAIN_UNSPEC:;
 	}
 
-	return best_index;
-}
-
-static int select_screencopy_cursor_dmabuf_format(void* userdata,
-		const struct screencopy_dmabuf_format* formats, int n_formats)
-{
-	struct wayvnc* self = userdata;
-
-	int best_index = -1;
-	double top_score = 0;
-
-	for (int i = 0; i < n_formats; ++i) {
-		double score = nvnc_rate_cursor_pixel_format(self->nvnc,
-				NVNC_FB_GBM_BO, formats[i].format,
-				formats[i].modifier);
-		if (score > top_score) {
-			top_score = score;
-			best_index = i;
-		}
-	}
-
-	return best_index;
-}
-
-static int select_screencopy_format(void* userdata, const uint32_t* formats,
-		int n_formats)
-{
-	struct wayvnc* self = userdata;
-
-	int best_index = -1;
-	double top_score = 0;
-
-	for (int i = 0; i < n_formats; ++i) {
-		double score = nvnc_rate_pixel_format(self->nvnc,
-				NVNC_FB_SIMPLE, formats[i], 0);
-		if (score > top_score) {
-			top_score = score;
-			best_index = i;
-		}
-	}
-
-	return best_index;
-}
-
-static int select_screencopy_dmabuf_format(void* userdata,
-		const struct screencopy_dmabuf_format* formats, int n_formats)
-{
-	struct wayvnc* self = userdata;
-
-	int best_index = -1;
-	double top_score = 0;
-
-	for (int i = 0; i < n_formats; ++i) {
-		double score = nvnc_rate_pixel_format(self->nvnc,
-				NVNC_FB_GBM_BO, formats[i].format,
-				formats[i].modifier);
-		if (score > top_score) {
-			top_score = score;
-			best_index = i;
-		}
-	}
-
-	return best_index;
+	abort();
+	return -1;
 }
 
 static bool configure_cursor_sc(struct wayvnc* self,
@@ -1704,9 +1654,7 @@ static bool configure_cursor_sc(struct wayvnc* self,
 	}
 
 	self->cursor_sc->on_done = on_cursor_capture_done;
-	self->cursor_sc->select_format = select_screencopy_cursor_format;
-	self->cursor_sc->select_dmabuf_format =
-		select_screencopy_cursor_dmabuf_format;
+	self->cursor_sc->rate_format = rate_format;
 	self->cursor_sc->userdata = self;
 
 	self->cursor_sc->rate_limit = self->max_rate;
@@ -1729,8 +1677,7 @@ bool configure_screencopy(struct wayvnc* self)
 	}
 
 	self->screencopy->on_done = on_capture_done;
-	self->screencopy->select_format = select_screencopy_format;
-	self->screencopy->select_dmabuf_format = select_screencopy_dmabuf_format;
+	self->screencopy->rate_format = rate_format;
 	self->screencopy->userdata = self;
 
 	self->screencopy->rate_limit = self->max_rate;
