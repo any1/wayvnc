@@ -1879,7 +1879,7 @@ int main(int argc, char* argv[])
 		{ 'f', "max-fps", "<fps>",
 		  "Set rate limit.",
 		  .default_ = "30" },
-		{ 'p', "performance", NULL,
+		{ 'p', "show-performance", NULL,
 		  "Show performance counters." },
 		{ 'u', "unix-socket", NULL,
 		  "Create unix domain socket." },
