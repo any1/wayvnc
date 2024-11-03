@@ -130,6 +130,7 @@ struct wayvnc {
 	bool overlay_cursor;
 	int max_rate;
 	bool enable_gpu_features;
+	bool enable_resizing;
 
 	struct wayvnc_client* master_layout_client;
 
@@ -934,7 +935,8 @@ static int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port,
 
 	nvnc_set_name(self->nvnc, "WayVNC");
 
-	nvnc_set_desktop_layout_fn(self->nvnc, on_client_resize);
+	if (self->enable_resizing)
+		nvnc_set_desktop_layout_fn(self->nvnc, on_client_resize);
 
 	enum nvnc_auth_flags auth_flags = 0;
 	if (self->cfg.enable_auth) {
@@ -1884,6 +1886,8 @@ int main(int argc, char* argv[])
 		  "Show performance counters." },
 		{ 'r', "render-cursor", NULL,
 		  "Enable overlay cursor rendering." },
+		{ 'R', "disable-resizing", NULL,
+		  "Disable automatic resizing." },
 		{ 's', "seat", "<name>",
 		  "Select seat by name." },
 		{ 'S', "socket", "<path>",
@@ -1939,6 +1943,8 @@ int main(int argc, char* argv[])
 	use_transient_seat = !!option_parser_get_value(&option_parser,
 				"transient-seat");
 	start_detached = !!option_parser_get_value(&option_parser, "detached");
+	self.enable_resizing = !option_parser_get_value(&option_parser,
+			"disable-resizing");
 
 	self.start_detached = start_detached;
 	self.overlay_cursor = overlay_cursor;
