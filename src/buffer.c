@@ -95,6 +95,7 @@ static void copy_buffer_config(struct wv_buffer_config* dst,
 		dst->modifiers = malloc(src->n_modifiers * 8);
 		assert(dst->modifiers);
 		memcpy(dst->modifiers, src->modifiers, src->n_modifiers * 8);
+		dst->n_modifiers = src->n_modifiers;
 	}
 }
 
