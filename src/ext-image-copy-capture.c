@@ -37,6 +37,7 @@
 #include "usdt.h"
 #include "pixels.h"
 #include "config.h"
+#include "mergesort.h"
 
 extern struct ext_output_image_capture_source_manager_v1* ext_output_image_capture_source_manager;
 extern struct ext_image_copy_capture_manager_v1* ext_image_copy_capture_manager;
@@ -251,7 +252,7 @@ static int cmp_format_entries(const void* a, const void* b)
 
 static void format_array_sort_by_score(struct format_array* self)
 {
-	qsort(self->entries, self->len, sizeof(*self->entries),
+	mergesort(self->entries, self->len, sizeof(*self->entries),
 			cmp_format_entries);
 }
 
