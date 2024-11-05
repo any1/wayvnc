@@ -320,20 +320,31 @@ static struct wv_buffer* wv_buffer_create_dmabuf(
 	if (!params)
 		goto params_failure;
 
-	uint32_t offset = gbm_bo_get_offset(self->bo, 0);
-	uint32_t stride = gbm_bo_get_stride(self->bo);
-	uint64_t mod = gbm_bo_get_modifier(self->bo);
-	int fd = gbm_bo_get_fd(self->bo);
-	if (fd < 0)
-		goto fd_failure;
+	int n_planes = gbm_bo_get_plane_count(self->bo);
+	assert(n_planes <= 4);
 
-	zwp_linux_buffer_params_v1_add(params, fd, 0, offset, stride,
-			mod >> 32, mod & 0xffffffff);
+	uint64_t mod = gbm_bo_get_modifier(self->bo);
+
+	int fds[4] = { -1, -1, -1, -1 };
+
+	for (int i = 0; i < n_planes; ++i) {
+		uint32_t offset = gbm_bo_get_offset(self->bo, i);
+		uint32_t stride = gbm_bo_get_stride_for_plane(self->bo, i);
+		fds[i] = gbm_bo_get_fd_for_plane(self->bo, i);
+		if (fds[i] < 0)
+			goto fd_failure;
+
+		zwp_linux_buffer_params_v1_add(params, fds[i], i, offset, stride,
+				mod >> 32, mod & 0xffffffff);
+	}
 	self->wl_buffer = zwp_linux_buffer_params_v1_create_immed(params,
 			config->width, config->height, config->format,
 			/* flags */ 0);
 	zwp_linux_buffer_params_v1_destroy(params);
-	close(fd);
+
+	for (int i = 0; i < 4; ++i)
+		if (fds[i] >= 0)
+			close(fds[i]);
 
 	if (!self->wl_buffer)
 		goto buffer_failure;
@@ -360,6 +371,9 @@ nvnc_fb_failure:
 	wl_buffer_destroy(self->wl_buffer);
 buffer_failure:
 fd_failure:
+	for (int i = 0; i < 4; ++i)
+		if (fds[i] >= 0)
+			close(fds[i]);
 	zwp_linux_buffer_params_v1_destroy(params);
 params_failure:
 	gbm_bo_destroy(self->bo);
