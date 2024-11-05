@@ -566,7 +566,7 @@ static void open_render_node(struct wv_buffer_pool* pool)
 	}
 
 	pool->gbm->dev = gbm_create_device(pool->gbm->fd);
-	if (!pool->gbm) {
+	if (!pool->gbm->dev) {
 		nvnc_log(NVNC_LOG_ERROR, "Failed to create a GBM device");
 		close(pool->gbm->fd);
 		free(pool->gbm);
