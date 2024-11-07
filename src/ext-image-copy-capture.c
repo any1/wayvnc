@@ -246,8 +246,8 @@ static int cmp_format_entries(const void* a, const void* b)
 	const struct format_entry* entry_a = a;
 	const struct format_entry* entry_b = b;
 
-	return entry_a->score < entry_b->score ?
-		-1 : entry_a->score > entry_b->score;
+	return entry_a->score > entry_b->score ?
+		-1 : entry_a->score < entry_b->score;
 }
 
 static void format_array_sort_by_score(struct format_array* self)
