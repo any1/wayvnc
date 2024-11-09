@@ -88,6 +88,8 @@ static struct ext_image_copy_capture_session_v1_listener session_listener;
 static struct ext_image_copy_capture_frame_v1_listener frame_listener;
 static struct ext_image_copy_capture_cursor_session_v1_listener cursor_listener;
 
+static bool config_buffers(struct ext_image_copy_capture* self);
+
 static void clear_constraints(struct ext_image_copy_capture* self)
 {
 	if (!self->have_constraints)
@@ -176,6 +178,11 @@ static int ext_image_copy_capture_init_cursor_session(struct ext_image_copy_capt
 static void ext_image_copy_capture_schedule_capture(struct ext_image_copy_capture* self)
 {
 	assert(!self->frame);
+
+	/* This is done to check if pixel format ratings have changed since
+	 * last time.
+	 */
+	config_buffers(self);
 
 	self->buffer = wv_buffer_pool_acquire(self->pool);
 	self->buffer->domain = self->cursor ? WV_BUFFER_DOMAIN_CURSOR :
