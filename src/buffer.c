@@ -581,6 +581,8 @@ void wv_buffer_pool_reconfig(struct wv_buffer_pool* pool,
 	if (buffer_configs_match(&pool->config, config))
 		return;
 
+	nvnc_log(NVNC_LOG_DEBUG, "Reconfiguring buffer pool");
+
 	wv_buffer_pool_clear(pool);
 	dev_t old_node __attribute__((unused)) = pool->config.node;
 	copy_buffer_config(&pool->config, config);
