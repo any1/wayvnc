@@ -102,8 +102,6 @@ static void clear_constraints(struct ext_image_copy_capture* self)
 
 static void ext_image_copy_capture_deinit_session(struct ext_image_copy_capture* self)
 {
-	nvnc_log(NVNC_LOG_DEBUG, "DEINIT %p", self);
-
 	clear_constraints(self);
 
 	if (self->frame)
@@ -271,8 +269,6 @@ static void session_handle_format_shm(void *data,
 	clear_constraints(self);
 
 	format_array_append(&self->wl_shm_formats, fourcc_from_wl_shm(format), 0);
-
-	nvnc_log(NVNC_LOG_DEBUG, "shm format: %"PRIx32, format);
 }
 
 static void session_handle_format_drm(void *data,
@@ -283,8 +279,6 @@ static void session_handle_format_drm(void *data,
 	struct ext_image_copy_capture* self = data;
 
 	clear_constraints(self);
-
-	nvnc_log(NVNC_LOG_DEBUG, "DMA-BUF format: %"PRIx32, format);
 
 	if (modifiers->size % 8 != 0) {
 		nvnc_log(NVNC_LOG_WARNING, "DMA-BUF modifier array size is not a multiple of 8");
