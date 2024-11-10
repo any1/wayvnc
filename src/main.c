@@ -1609,9 +1609,11 @@ static double rate_format(const void* userdata, enum wv_buffer_type type,
 	case WV_BUFFER_SHM:
 		fb_type = NVNC_FB_SIMPLE;
 		break;
+#ifdef ENABLE_SCREENCOPY_DMABUF
 	case WV_BUFFER_DMABUF:
 		fb_type = NVNC_FB_GBM_BO;
 		break;
+#endif
 	case WV_BUFFER_UNSPEC:;
 	}
 	assert(fb_type != NVNC_FB_UNSPEC);

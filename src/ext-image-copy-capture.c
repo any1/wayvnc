@@ -334,9 +334,11 @@ static double rate_format(const struct ext_image_copy_capture* self,
 		enum wv_buffer_type type, enum wv_buffer_domain domain,
 		uint32_t format, uint64_t modifier)
 {
+#ifdef ENABLE_SCREENCOPY_DMABUF
 	if (type == WV_BUFFER_DMABUF && !self->parent.enable_linux_dmabuf) {
 		return 0;
 	}
+#endif
 	return self->parent.rate_format(self->parent.userdata, type, domain,
 			format, modifier);
 }
@@ -359,6 +361,7 @@ static void rate_formats_in_array(const struct ext_image_copy_capture* self,
 	}
 }
 
+#ifdef ENABLE_SCREENCOPY_DMABUF
 static void select_modifiers_for_top_format(struct wv_buffer_config* config,
 		const struct format_array* formats)
 {
@@ -378,6 +381,7 @@ static void select_modifiers_for_top_format(struct wv_buffer_config* config,
 		config->modifiers[config->n_modifiers++] = entry->modifier;
 	}
 }
+#endif
 
 static bool config_dma_buffers(struct ext_image_copy_capture* self,
 		struct wv_buffer_config* config)
