@@ -19,7 +19,7 @@ wayvnc - A VNC server for wlroots based Wayland compositors.
 
 *-D, --detached*
 	Start detached from a compositor. Run *wayvncctl attach* to attach to
-	attach to a compositor.
+	a compositor.
 
 *-f, --max-fps=<fps>*
 	Set the rate limit (default 30).
