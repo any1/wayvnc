@@ -17,6 +17,10 @@ wayvnc - A VNC server for wlroots based Wayland compositors.
 	Disable all remote input. This allows using wayvnc without compositor
 	support of virtual mouse / keyboard protocols.
 
+*-D, --detached*
+	Start detached from a compositor. Run *wayvncctl attach* to attach to
+	attach to a compositor.
+
 *-f, --max-fps=<fps>*
 	Set the rate limit (default 30).
 
@@ -42,8 +46,14 @@ wayvnc - A VNC server for wlroots based Wayland compositors.
 *-r, --render-cursor*
 	Enable overlay cursor rendering.
 
+*-R, --disable-resizing*
+	Disable automatic desktop resizing.
+
 *-s, --seat=<name>*
 	Select seat by name.
+
+*-t, --transient-seat*
+	Create a transient seat for each client session.
 
 *-S, --socket=<path>*
 	Set wayvnc control socket path. Default: $XDG_RUNTIME_DIR/wayvncctl
@@ -62,10 +72,10 @@ wayvnc - A VNC server for wlroots based Wayland compositors.
 *-w, --websocket*
 	Create a websocket.
 
-*-x, --external-listener-fd=<fd>*
-	Have the VNC server listen on an already bound socket at this file
-	descriptor which should be inherited from wayvnc's parent process.
-	This is incompatible with all other server socket-related options.
+*-x, --external-listener-fd*
+	Have the VNC server listen on an already bound socket. The address
+	argument becomes a file descriptor which should be inherited from
+	wayvnc's parent process.
 
 # DESCRIPTION
 
