@@ -210,12 +210,13 @@ static void ext_image_copy_capture_schedule_capture(struct ext_image_copy_captur
 
 	ext_image_copy_capture_frame_v1_capture(self->frame);
 
+#ifndef NDEBUG
 	float damage_area = calculate_region_area(&self->buffer->buffer_damage);
 	float pixel_area = self->buffer->width * self->buffer->height;
-
 	nvnc_trace("Committed %sbuffer: %p with %.02f %% damage",
 			self->cursor ? "cursor " : "", self->buffer,
 			100.0 * damage_area / pixel_area);
+#endif
 }
 
 static void ext_image_copy_capture_schedule_from_timer(void* obj)
@@ -506,10 +507,12 @@ static void frame_handle_ready(void *data,
 	ext_image_copy_capture_frame_v1_destroy(self->frame);
 	self->frame = NULL;
 
+#ifndef NDEBUG
 	float damage_area = calculate_region_area(&self->buffer->frame_damage);
 	float pixel_area = self->buffer->width * self->buffer->height;
 	nvnc_trace("Frame ready with damage: %.02f %", 100.0 * damage_area /
 			pixel_area);
+#endif
 
 	assert(self->buffer);
 
