@@ -13,14 +13,34 @@ wayvnc - A VNC server for wlroots based Wayland compositors.
 *-C, --config=<path>*
 	Select a config file.
 
+*-d, --disable-input*
+	Disable all remote input. This allows using wayvnc without compositor
+	support of virtual mouse / keyboard protocols.
+
+*-f, --max-fps=<fps>*
+	Set the rate limit (default 30).
+
 *-g, --gpu*
 	Enable features that require GPU.
+
+*-h, --help*
+	Get help.
+
+*-k, --keyboard=<layout>[-variant]*
+	Select keyboard layout. The variant can be appended if needed.
+
+*-L, --log-level*
+	Set log level. The levels are: error, warning, info, debug, trace and
+	quiet.
 
 *-o, --output=<name>*
 	Select output to capture.
 
-*-k, --keyboard=<layout>[-variant]*
-	Select keyboard layout. The variant can be appended if needed.
+*-p, --show-performance*
+	Show performance counters.
+
+*-r, --render-cursor*
+	Enable overlay cursor rendering.
 
 *-s, --seat=<name>*
 	Select seat by name.
@@ -29,28 +49,15 @@ wayvnc - A VNC server for wlroots based Wayland compositors.
 	Set wayvnc control socket path. Default: $XDG_RUNTIME_DIR/wayvncctl
 	or /tmp/wayvncctl-$UID
 
-*-r, --render-cursor*
-	Enable overlay cursor rendering.
-
-*-f, --max-fps=<fps>*
-	Set the rate limit (default 30).
-
-*-p, --show-performance*
-	Show performance counters.
-
 *-u, --unix-socket*
 	Create a UNIX domain socket instead of TCP, treating the address as a
 	path.
 
-*-d, --disable-input*
-	Disable all remote input. This allows using wayvnc without compositor
-	support of virtual mouse / keyboard protocols.
+*-v, --verbose*
+	Be more verbose. Same as setting `--log-level=info`.
 
 *-V, --version*
 	Show version info.
-
-*-v, --verbose*
-	Be more verbose. Same as setting `--log-level=info`.
 
 *-w, --websocket*
 	Create a websocket.
@@ -59,13 +66,6 @@ wayvnc - A VNC server for wlroots based Wayland compositors.
 	Have the VNC server listen on an already bound socket at this file
 	descriptor which should be inherited from wayvnc's parent process.
 	This is incompatible with all other server socket-related options.
-
-*-L, --log-level*
-	Set log level. The levels are: error, warning, info, debug, trace and
-	quiet.
-
-*-h, --help*
-	Get help.
 
 # DESCRIPTION
 
