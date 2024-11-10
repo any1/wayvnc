@@ -95,8 +95,10 @@ static void output_head_transform(void* data,
 static void output_head_scale(void* data,
 		struct zwlr_output_head_v1* output_head, wl_fixed_t scale_f)
 {
+#ifndef NDEBUG
 	double scale = wl_fixed_to_double(scale_f);
 	nvnc_trace("Got head scale: %.2f", scale);
+#endif
 }
 
 static void output_head_finished(void* data,
