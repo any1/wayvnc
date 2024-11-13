@@ -384,10 +384,16 @@ static void select_modifiers_for_top_format(struct wv_buffer_config* config,
 }
 #endif
 
-static bool config_dma_buffers(struct ext_image_copy_capture* self,
-		struct wv_buffer_config* config)
+static bool config_dma_buffers(struct ext_image_copy_capture* self)
 {
 #ifdef ENABLE_SCREENCOPY_DMABUF
+	struct wv_buffer_config config = {
+		.width = self->width,
+		.height = self->height,
+		.stride = 0,
+		.type = WV_BUFFER_DMABUF,
+	};
+
 	rate_formats_in_array(self, &self->dmabuf_formats, WV_BUFFER_DMABUF);
 	format_array_sort_by_score(&self->dmabuf_formats);
 
@@ -395,27 +401,32 @@ static bool config_dma_buffers(struct ext_image_copy_capture* self,
 			self->dmabuf_formats.entries[0].score == 0)
 		return false;
 
-	config->format = self->dmabuf_formats.entries[0].format;
-	select_modifiers_for_top_format(config, &self->dmabuf_formats);
-
-	config->stride = 0;
-	config->type = WV_BUFFER_DMABUF;
+	config.format = self->dmabuf_formats.entries[0].format;
+	select_modifiers_for_top_format(&config, &self->dmabuf_formats);
 
 	if (self->have_dmabuf_dev)
-		config->node = self->dmabuf_dev;
+		config.node = self->dmabuf_dev;
 
-	nvnc_log(NVNC_LOG_DEBUG, "Choosing DMA-BUF format \"%.4s\" with %d modifiers",
-			(const char*)&config->format, config->n_modifiers);
+	nvnc_trace("Choosing DMA-BUF format \"%.4s\" with %d modifiers",
+			(const char*)&config.format, config.n_modifiers);
 
-	return true;
+	bool ok = wv_buffer_pool_reconfig(self->pool, &config);
+	free(config.modifiers);
+	return ok;
 #else
 	return false;
 #endif
 }
 
-static bool config_shm_buffers(struct ext_image_copy_capture* self,
-		struct wv_buffer_config* config)
+static bool config_shm_buffers(struct ext_image_copy_capture* self)
 {
+	struct wv_buffer_config config = {
+		.width = self->width,
+		.height = self->height,
+		.type = WV_BUFFER_SHM,
+		.stride = self->wl_shm_stride,
+	};
+
 	rate_formats_in_array(self, &self->wl_shm_formats,
 			WV_BUFFER_SHM);
 	format_array_sort_by_score(&self->wl_shm_formats);
@@ -424,31 +435,19 @@ static bool config_shm_buffers(struct ext_image_copy_capture* self,
 			self->wl_shm_formats.entries[0].score == 0)
 		return false;
 
-	config->format = self->wl_shm_formats.entries[0].format;
-	config->stride = self->wl_shm_stride;
-	config->type = WV_BUFFER_SHM;
+	config.format = self->wl_shm_formats.entries[0].format;
 
-	nvnc_log(NVNC_LOG_DEBUG, "Choosing SHM format \"%.4s\"",
-			(const char*)&config->format);
+	nvnc_trace("Choosing SHM format \"%.4s\"", (const char*)&config.format);
 
-	return true;
+	return wv_buffer_pool_reconfig(self->pool, &config);
 }
 
 static bool config_buffers(struct ext_image_copy_capture* self)
 {
-	struct wv_buffer_config config = {};
-
-	config.width = self->width;
-	config.height = self->height;
-
-	if (!config_dma_buffers(self, &config) &&
-			!config_shm_buffers(self, &config)) {
+	if (!config_dma_buffers(self) && !config_shm_buffers(self)) {
 		nvnc_log(NVNC_LOG_ERROR, "No supported buffer formats were found");
 		return false;
 	}
-
-	wv_buffer_pool_reconfig(self->pool, &config);
-	free(config.modifiers);
 
 	return true;
 }
@@ -458,7 +457,8 @@ static void session_handle_constraints_done(void *data,
 {
 	struct ext_image_copy_capture* self = data;
 
-	config_buffers(self);
+	if (!config_buffers(self))
+		return;
 
 	if (self->should_start) {
 		ext_image_copy_capture_schedule_capture(self);
