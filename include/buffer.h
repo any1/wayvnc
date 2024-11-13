@@ -119,7 +119,7 @@ void wv_buffer_damage_clear(struct wv_buffer* self);
 struct wv_buffer_pool* wv_buffer_pool_create(
 		const struct wv_buffer_config* config);
 void wv_buffer_pool_destroy(struct wv_buffer_pool* pool);
-void wv_buffer_pool_reconfig(struct wv_buffer_pool* pool,
+bool wv_buffer_pool_reconfig(struct wv_buffer_pool* pool,
 		const struct wv_buffer_config* config);
 struct wv_buffer* wv_buffer_pool_acquire(struct wv_buffer_pool* pool);
 void wv_buffer_pool_release(struct wv_buffer_pool* pool,

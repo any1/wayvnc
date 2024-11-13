@@ -573,21 +573,16 @@ static void open_render_node(struct wv_buffer_pool* pool)
 		pool->gbm = NULL;
 	}
 }
-#endif // ENABLE_SCREENCOPY_DMABUF
 
-void wv_buffer_pool_reconfig(struct wv_buffer_pool* pool,
-		const struct wv_buffer_config* config)
+bool reconfig_render_node(struct wv_buffer_pool* pool,
+		const struct wv_buffer_config* config, dev_t old_node)
 {
-	if (buffer_configs_match(&pool->config, config))
-		return;
+	if (config->type != WV_BUFFER_DMABUF) {
+		wv_gbm_device_unref(pool->gbm);
+		pool->gbm = NULL;
+		return true;
+	}
 
-	nvnc_log(NVNC_LOG_DEBUG, "Reconfiguring buffer pool");
-
-	wv_buffer_pool_clear(pool);
-	dev_t old_node __attribute__((unused)) = pool->config.node;
-	copy_buffer_config(&pool->config, config);
-
-#ifdef ENABLE_SCREENCOPY_DMABUF
 	if (old_node != config->node) {
 		wv_gbm_device_unref(pool->gbm);
 		pool->gbm = NULL;
@@ -598,7 +593,30 @@ void wv_buffer_pool_reconfig(struct wv_buffer_pool* pool,
 	if (!pool->config.node && !pool->gbm)
 		open_render_node(pool);
 
-	assert(pool->gbm);
+	return !!pool->gbm;
+}
+#endif // ENABLE_SCREENCOPY_DMABUF
+
+bool wv_buffer_pool_reconfig(struct wv_buffer_pool* pool,
+		const struct wv_buffer_config* config)
+{
+	if (buffer_configs_match(&pool->config, config))
+		return true;
+
+	nvnc_log(NVNC_LOG_DEBUG, "Reconfiguring buffer pool");
+
+	wv_buffer_pool_clear(pool);
+
+#ifdef ENABLE_SCREENCOPY_DMABUF
+	dev_t old_node  = pool->config.node;
+#endif
+
+	copy_buffer_config(&pool->config, config);
+
+#ifdef ENABLE_SCREENCOPY_DMABUF
+	return reconfig_render_node(pool, config, old_node);
+#else
+	return true;
 #endif
 }
 
