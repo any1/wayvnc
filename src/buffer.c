@@ -517,7 +517,7 @@ static int render_node_from_dev_t(char* node, size_t maxlen, dev_t device)
 }
 
 static int find_render_node(char *node, size_t maxlen) {
-	bool r = -1;
+	int r = -1;
 	drmDevice *devices[64];
 
 	int n = drmGetDevices2(0, devices, sizeof(devices) / sizeof(devices[0]));
