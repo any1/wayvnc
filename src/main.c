@@ -472,8 +472,10 @@ static void wayland_detach(struct wayvnc* self)
 		ext_image_copy_capture_manager_v1_destroy(ext_image_copy_capture_manager);
 	ext_image_copy_capture_manager = NULL;
 
-	if (self->capture_retry_timer)
+	if (self->capture_retry_timer) {
+		aml_stop(aml_get_default(), self->capture_retry_timer);
 		aml_unref(self->capture_retry_timer);
+	}
 	self->capture_retry_timer = NULL;
 
 	if (self->transient_seat_manager)
