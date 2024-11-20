@@ -307,7 +307,7 @@ static struct wv_buffer* wv_buffer_create_dmabuf(
 				config->modifiers, config->n_modifiers,
 				GBM_BO_USE_RENDERING);
 #else
-	self->bo = gbm_bo_create_with_modifiers2(gbm, config->width,
+	self->bo = gbm_bo_create_with_modifiers2(gbm->dev, config->width,
 			config->height, config->format, config->modifiers,
 			config->n_modifiers, GBM_BO_USE_RENDERING);
 #endif
