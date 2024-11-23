@@ -894,12 +894,87 @@ static char* get_cfg_path(const struct cfg* cfg, char* dst, const char* src)
 	return dst;
 }
 
-static int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port,
-		enum socket_type socket_type)
+static bool is_prefix(const char* prefix, const char* str)
 {
-	self->nvnc = nvnc_new();
-	if (!self->nvnc)
-		return -1;
+	return strncmp(str, prefix, strlen(prefix)) == 0;
+}
+
+static int count_colons_in_string(const char* str)
+{
+	int n = 0;
+	for (int i = 0; str[i]; ++i)
+		if (str[i] == ':')
+			++n;
+	return n;
+}
+
+static char* parse_address_prefix(char* addr, enum socket_type* socket_type)
+{
+	if (is_prefix("tcp:", addr)) {
+		*socket_type = SOCKET_TYPE_TCP;
+		addr += 4;
+	} else if (is_prefix("unix:", addr)) {
+		*socket_type = SOCKET_TYPE_UNIX;
+		addr += 5;
+	} else if (is_prefix("ws:", addr)) {
+		*socket_type = SOCKET_TYPE_WEBSOCKET;
+		addr += 3;
+	} else if (is_prefix("fd:", addr)) {
+		*socket_type = SOCKET_TYPE_FROM_FD;
+		addr += 3;
+	}
+	return addr;
+}
+
+static char* parse_address_port(char* addr, uint16_t* port)
+{
+	// IPv6 addresses with port need to look like: [::]:5900
+	if (addr[0] == '[') {
+		char* end = strchr(addr, ']');
+		if (!end)
+			return addr;
+
+		*end++ = '\0';
+
+		if (*end == ':')
+			*port = atoi(end + 1);
+
+		return addr + 1;
+	}
+
+	if (count_colons_in_string(addr) > 1) {
+		// This is most likely IPv6, so let's leave it alone
+		return addr;
+	}
+
+	char* p = NULL;
+	p = strrchr(addr, ':');
+	if (!p)
+		return addr;
+
+	*p++ = '\0';
+
+	*port = atoi(p);
+
+	return addr;
+}
+
+static int add_listening_address(struct wayvnc* self, const char* address,
+		uint16_t port, enum socket_type socket_type)
+{
+	char buffer[256];
+	char* addr = buffer;
+	strlcpy(buffer, address, sizeof(buffer));
+
+	addr = parse_address_prefix(addr, &socket_type);
+
+	if (socket_type == SOCKET_TYPE_TCP ||
+			socket_type == SOCKET_TYPE_WEBSOCKET) {
+		uint16_t parsed_port = 0;
+		addr = parse_address_port(addr, &parsed_port);
+		if (parsed_port)
+			port = parsed_port;
+	}
 
 	int rc = -1;
 	switch (socket_type) {
@@ -922,6 +997,7 @@ static int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port,
 		default:
 			abort();
 	}
+
 	if (rc < 0) {
 		nvnc_log(NVNC_LOG_ERROR, "Failed to listen on socket or bind to its address. Add -Ldebug to the argument list for more info.");
 		return -1;
@@ -934,6 +1010,15 @@ static int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port,
 	else
 		nvnc_log(NVNC_LOG_INFO, "Listening for connections on %s:%d",
 				addr, port);
+
+	return 0;
+}
+
+static int init_nvnc(struct wayvnc* self)
+{
+	self->nvnc = nvnc_new();
+	if (!self->nvnc)
+		return -1;
 
 	self->nvnc_display = nvnc_display_new(0, 0);
 	if (!self->nvnc_display)
@@ -1903,11 +1988,9 @@ int main(int argc, char* argv[])
 
 	static const struct wv_option opts[] = {
 		{ .positional = "address",
-		  .help = "The IP address or unix socket path to listen on.",
-		  .default_ = DEFAULT_ADDRESS},
-		{ .positional = "port",
-		  .help = "The TCP port to listen on.",
-		  .default_ = XSTR(DEFAULT_PORT)},
+		  .help = "An address to listen on.",
+		  .default_ = "localhost",
+		  .is_repeating = true },
 		{ 'C', "config", "<path>",
 		  "Select a config file." },
 		{ 'd', "disable-input", NULL,
@@ -2003,13 +2086,6 @@ int main(int argc, char* argv[])
 
 	nvnc_set_log_level(log_level);
 
-	// Only check for explicitly-set values here (defaults applied below)
-	address = option_parser_get_value_no_default(&option_parser, "address");
-	const char* port_str = option_parser_get_value_no_default(&option_parser,
-			"port");
-	if (port_str)
-		port = atoi(port_str);
-
 	if (seat_name && disable_input) {
 		nvnc_log(NVNC_LOG_ERROR, "seat and disable-input are conflicting options");
 		return 1;
@@ -2047,14 +2123,6 @@ int main(int argc, char* argv[])
 
 	if (check_cfg_sanity(&self.cfg) < 0)
 		return 1;
-
-	if (cfg_rc == 0) {
-		if (!address) address = self.cfg.address;
-		if (!port) port = self.cfg.port;
-	}
-
-	if (!address) address = DEFAULT_ADDRESS;
-	if (!port) port = DEFAULT_PORT;
 
 	self.disable_input = disable_input;
 	self.use_transient_seat = use_transient_seat;
@@ -2109,13 +2177,13 @@ int main(int argc, char* argv[])
 	if (aml_unstable_abi_version != AML_UNSTABLE_API)
 		nvnc_log(NVNC_LOG_PANIC, "libaml is incompatible with this build of wayvnc!");
 
-	enum socket_type socket_type = SOCKET_TYPE_TCP;
+	enum socket_type default_socket_type = SOCKET_TYPE_TCP;
 	if (use_unix_socket)
-		socket_type = SOCKET_TYPE_UNIX;
+		default_socket_type = SOCKET_TYPE_UNIX;
 	else if (use_websocket)
-		socket_type = SOCKET_TYPE_WEBSOCKET;
+		default_socket_type = SOCKET_TYPE_WEBSOCKET;
 	else if (use_external_fd)
-		socket_type = SOCKET_TYPE_FROM_FD;
+		default_socket_type = SOCKET_TYPE_FROM_FD;
 
 	if (!start_detached && !configure_screencopy(&self))
 		goto screencopy_failure;
@@ -2140,8 +2208,48 @@ int main(int argc, char* argv[])
 	if (!self.ctl)
 		goto ctl_server_failure;
 
-	if (init_nvnc(&self, address, port, socket_type) < 0)
+	if (init_nvnc(&self) < 0)
 		goto nvnc_failure;
+
+	address = option_parser_get_value_with_offset(&option_parser,
+			"address", 0);
+
+	// If the second address argument is a number, we will assume it to be a
+	// port for historical reasons.
+	const char* port_str = option_parser_get_value_with_offset(
+			&option_parser, "address", 1);
+	if (port_str) {
+		char* endptr;
+		port = strtoul(port_str, &endptr, 0);
+		if (!port_str[0] || endptr[0])
+			port = 0;
+	}
+
+	if (port) {
+		if (add_listening_address(&self, address, port,
+				default_socket_type) < 0)
+			goto nvnc_failure;
+	} else if (!option_parser_get_value_with_offset(&option_parser,
+				"address", 0)) {
+		address = self.cfg.address ? self.cfg.address : DEFAULT_ADDRESS;
+		port = self.cfg.port ? self.cfg.port : DEFAULT_PORT;
+
+		if (add_listening_address(&self, address, port,
+				default_socket_type))
+			goto nvnc_failure;
+	} else {
+		for (int i = 0;; ++i) {
+			const char* address;
+			address = option_parser_get_value_with_offset(
+					&option_parser, "address", i);
+			if (!address)
+				break;
+
+			if (add_listening_address(&self, address, DEFAULT_PORT,
+					default_socket_type) < 0)
+				goto nvnc_failure;
+		}
+	}
 
 	if (self.display)
 		wl_display_dispatch_pending(self.display);
