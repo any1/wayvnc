@@ -1014,6 +1014,34 @@ static int add_listening_address(struct wayvnc* self, const char* address,
 	return 0;
 }
 
+static int apply_addresses_from_config(struct wayvnc* self,
+		enum socket_type default_socket_type)
+{
+	uint16_t port = self->cfg.port ? self->cfg.port : DEFAULT_PORT;
+
+	if (!self->cfg.address)
+		return add_listening_address(self, DEFAULT_ADDRESS, port,
+					default_socket_type);
+
+	char *addresses = strdup(self->cfg.address);
+	assert(addresses);
+
+	int rc = -1;
+
+	const char* delim = " ";
+	char* tok = strtok(addresses, delim);
+	while (tok) {
+		if (add_listening_address(self, tok, port, default_socket_type) < 0)
+			goto out;
+		tok = strtok(NULL, delim);
+	}
+
+	rc = 0;
+out:
+	free(addresses);
+	return rc;
+}
+
 static int init_nvnc(struct wayvnc* self)
 {
 	self->nvnc = nvnc_new();
@@ -2231,13 +2259,10 @@ int main(int argc, char* argv[])
 			goto nvnc_failure;
 	} else if (!option_parser_get_value_with_offset(&option_parser,
 				"address", 0)) {
-		address = self.cfg.address ? self.cfg.address : DEFAULT_ADDRESS;
-		port = self.cfg.port ? self.cfg.port : DEFAULT_PORT;
-
-		if (add_listening_address(&self, address, port,
-				default_socket_type))
+		if (apply_addresses_from_config(&self, default_socket_type) < 0)
 			goto nvnc_failure;
 	} else {
+		port = self.cfg.port ? self.cfg.port : DEFAULT_PORT;
 		for (int i = 0;; ++i) {
 			const char* address;
 			address = option_parser_get_value_with_offset(
@@ -2245,7 +2270,7 @@ int main(int argc, char* argv[])
 			if (!address)
 				break;
 
-			if (add_listening_address(&self, address, DEFAULT_PORT,
+			if (add_listening_address(&self, address, port,
 					default_socket_type) < 0)
 				goto nvnc_failure;
 		}
