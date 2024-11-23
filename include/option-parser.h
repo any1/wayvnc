@@ -27,6 +27,7 @@ struct wv_option {
 	const char* default_;
 	const char* positional;
 	bool is_subcommand;
+	bool is_repeating;
 };
 
 struct wv_option_value {
@@ -63,5 +64,8 @@ const char* option_parser_get_value(const struct option_parser* self,
 		const char* name);
 const char* option_parser_get_value_no_default(const struct option_parser* self,
 		const char* name);
+
+const char* option_parser_get_value_with_offset(const struct option_parser* self,
+		const char* name, int index);
 
 void option_parser_print_cmd_summary(const char* summary, FILE* stream);

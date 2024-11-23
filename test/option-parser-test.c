@@ -289,6 +289,46 @@ static int test_defaults_overridden(void)
 	return 0;
 }
 
+static int test_repeating_positional_option(void)
+{
+	static const struct wv_option options[] = {
+		{ .positional = "first" },
+		{ .positional = "second", .is_repeating = true },
+		{ 'a', "option-a", NULL, "Description of a" },
+		{ },
+	};
+
+	struct option_parser parser;
+	option_parser_init(&parser, options);
+
+	const char* argv[] = {
+		"executable",
+		"non-repeating",
+		"one",
+		"-a",
+		"two",
+		"three",
+	};
+
+	ASSERT_INT_EQ(0, option_parser_parse(&parser, ARRAY_SIZE(argv), argv));
+
+	ASSERT_STR_EQ("non-repeating", option_parser_get_value(&parser,
+				"first"));
+	ASSERT_STR_EQ("one", option_parser_get_value_with_offset(&parser,
+				"second", 0));
+	ASSERT_STR_EQ("two", option_parser_get_value_with_offset(&parser,
+				"second", 1));
+	ASSERT_STR_EQ("three", option_parser_get_value_with_offset(&parser,
+				"second", 2));
+	ASSERT_FALSE(option_parser_get_value_with_offset(&parser, "second", 3));
+
+	ASSERT_TRUE(option_parser_get_value(&parser, "a"));
+
+	ASSERT_INT_EQ(0, parser.remaining_argc);
+
+	return 0;
+}
+
 int main()
 {
 	int r = 0;
@@ -310,5 +350,6 @@ int main()
 	RUN_TEST(test_subcommand_with_arguments);
 	RUN_TEST(test_defaults_not_set);
 	RUN_TEST(test_defaults_overridden);
+	RUN_TEST(test_repeating_positional_option);
 	return r;
 }

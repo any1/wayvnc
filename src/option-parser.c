@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Andri Yngvason
+ * Copyright (c) 2022 - 2024 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -97,10 +97,15 @@ void option_parser_print_usage(struct option_parser* self, FILE* stream)
 	print_string_tolower(stream, self->name);
 	fprintf(stream, "]");
 	int optional_paren_count = 0;
+	int end = self->n_opts;
 	for (int i = 0; i < self->n_opts; ++i) {
 		const struct wv_option* opt = &self->options[i];
 		if (!opt->positional)
 			continue;
+		if (opt->is_repeating) {
+			end = i;
+			break;
+		}
 		const char* open = "<";
 		const char* close = ">";
 		if (opt->default_) {
@@ -116,6 +121,15 @@ void option_parser_print_usage(struct option_parser* self, FILE* stream)
 	}
 	for (int i = 0; i < optional_paren_count; ++i)
 		fprintf(stream, "]");
+
+	for (int i = end; i < self->n_opts; ++i) {
+		const struct wv_option* opt = &self->options[i];
+		if (!opt->positional)
+			continue;
+		assert(opt->is_repeating);
+
+		fprintf(stream, " [%s...]", opt->positional);
+	}
 }
 
 int option_parser_print_arguments(struct option_parser* self, FILE* stream)
@@ -301,7 +315,8 @@ static int parse_positional_arg(struct option_parser* self, char argc,
 	if (append_value(self, opt, argv[i]) < 0)
 		return -1;
 
-	self->position += 1;
+	if (!opt->is_repeating)
+		self->position += 1;
 
 	return opt->is_subcommand ? 0 : 1;
 }
@@ -389,6 +404,30 @@ const char* option_parser_get_value(const struct option_parser* self,
 		opt = find_positional_option_by_name(self, name);
 		if (opt)
 			return opt->default_;
+	}
+
+	return NULL;
+}
+
+const char* option_parser_get_value_with_offset(const struct option_parser* self,
+		const char* name, int index)
+{
+	const struct wv_option* opt;
+
+	for (int i = 0; i < self->n_values; ++i) {
+		const struct wv_option_value* value = &self->values[i];
+		opt = value->option;
+
+		if (!opt->positional || !opt->is_repeating)
+			continue;
+
+		if (strcmp(opt->positional, name) != 0)
+			continue;
+
+		if (index-- > 0)
+			continue;
+
+		return value->value;
 	}
 
 	return NULL;
