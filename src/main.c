@@ -897,24 +897,32 @@ static char* get_cfg_path(const struct cfg* cfg, char* dst, const char* src)
 static int init_nvnc(struct wayvnc* self, const char* addr, uint16_t port,
 		enum socket_type socket_type)
 {
+	self->nvnc = nvnc_new();
+	if (!self->nvnc)
+		return -1;
+
+	int rc = -1;
 	switch (socket_type) {
 		case SOCKET_TYPE_TCP:
-			self->nvnc = nvnc_open(addr, port);
+			rc = nvnc_listen_tcp(self->nvnc, addr, port,
+					NVNC_STREAM_NORMAL);
 			break;
 		case SOCKET_TYPE_UNIX:
-			self->nvnc = nvnc_open_unix(addr);
+			rc = nvnc_listen_unix(self->nvnc, addr,
+					NVNC_STREAM_NORMAL);
 			break;
 		case SOCKET_TYPE_WEBSOCKET:
-			self->nvnc = nvnc_open_websocket(addr, port);
+			rc = nvnc_listen_tcp(self->nvnc, addr, port,
+					NVNC_STREAM_WEBSOCKET);
 			break;
 		case SOCKET_TYPE_FROM_FD:;
 			int fd = atoi(addr);
-			self->nvnc = nvnc_open_from_fd(fd);
+			rc = nvnc_listen(self->nvnc, fd, NVNC_STREAM_NORMAL);
 			break;
 		default:
 			abort();
 	}
-	if (!self->nvnc) {
+	if (rc < 0) {
 		nvnc_log(NVNC_LOG_ERROR, "Failed to listen on socket or bind to its address. Add -Ldebug to the argument list for more info.");
 		return -1;
 	}
@@ -998,7 +1006,7 @@ blank_screen_failure:
 auth_failure:
 	nvnc_display_unref(self->nvnc_display);
 display_failure:
-	nvnc_close(self->nvnc);
+	nvnc_del(self->nvnc);
 	return -1;
 }
 
@@ -2155,7 +2163,7 @@ int main(int argc, char* argv[])
 	self.ctl = NULL;
 
 	nvnc_display_unref(self.nvnc_display);
-	nvnc_close(self.nvnc);
+	nvnc_del(self.nvnc);
 	self.nvnc = NULL;
 	wayvnc_destroy(&self);
 	if (zwp_linux_dmabuf)
