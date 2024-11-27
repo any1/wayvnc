@@ -1,0 +1,17 @@
+[Unit]
+Description=VNC Server
+Documentation=man:wayvnc
+After=network.target wayvnc-generate-keys.service
+Requires=wayvnc-generate-keys.service
+ConditionPathExists=/etc/wayvnc/config
+
+[Service]
+ExecStart=/bin/sh /usr/sbin/wayvnc-run.sh
+Type=notify
+NotifyAccess=all
+Restart=always
+User=vnc
+KillSignal=INT
+
+[Install]
+WantedBy=multi-user.target
