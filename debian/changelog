@@ -4,7 +4,19 @@ wayvnc (0.9.1~rpt3) bookworm; urgency=medium
 
  -- Andri Yngvason <andri@yngvason.is>  Wed, 27 Nov 2024 21:00:00 +0000
 
-wayvnc (0.9.0~dev) bookworm; urgency=medium
+wayvnc (0.9.0~dev-1+rpt2) bookworm; urgency=medium
+
+  * Add power management patch from upstream
+
+ -- Simon Long <simon@raspberrypi.com>  Thu, 31 Oct 2024 13:06:35 +0000
+
+wayvnc (0.9.0~dev-1+rpt1) bookworm; urgency=medium
+
+  * Add vnc user to video group
+
+ -- Serge Schneider <serge@raspberrypi.com>  Sat, 28 Sep 2024 15:04:59 +0100
+
+wayvnc (0.9.0~dev-1) bookworm; urgency=medium
 
   * Upgrade to v0.9.0-dev
   * This adds aligned CMA buffer allocation which is required for h264 encoding
