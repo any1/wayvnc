@@ -1,0 +1,100 @@
+wayvnc (0.9.1~rpt3) bookworm; urgency=medium
+
+  * Upgrade to v0.9.1
+
+ -- Andri Yngvason <andri@yngvason.is>  Wed, 27 Nov 2024 21:00:00 +0000
+
+wayvnc (0.9.0~dev-1+rpt2) bookworm; urgency=medium
+
+  * Add power management patch from upstream
+
+ -- Simon Long <simon@raspberrypi.com>  Thu, 31 Oct 2024 13:06:35 +0000
+
+wayvnc (0.9.0~dev-1+rpt1) bookworm; urgency=medium
+
+  * Add vnc user to video group
+
+ -- Serge Schneider <serge@raspberrypi.com>  Sat, 28 Sep 2024 15:04:59 +0100
+
+wayvnc (0.9.0~dev-1) bookworm; urgency=medium
+
+  * Upgrade to v0.9.0-dev
+  * This adds aligned CMA buffer allocation which is required for h264 encoding
+    on the Raspberry Pi 4.
+
+ -- Andri Yngvason <andri@yngvason.is>  Tue, 26 Mar 2024 11:00:00 +0000
+
+wayvnc (0.8.0-rel-1) bookworm; urgency=medium
+
+  * Upgrade to v0.8.0
+  * The rel bit is there for sake of the new version being greater than the
+    previous one. Remove later.
+
+ -- Andri Yngvason <andri@yngvason.is>  Sun, 25 Feb 2024 13:00:00 +0000
+
+wayvnc (0.8.0-rc0-2) bookworm; urgency=medium
+
+  * Removed IP and added local domain to TLS
+  * Using ECDSA instead of RSA for TLS
+
+ -- Andri Yngvason <andri@yngvason.is>  Tue, 23 Jan 2024 23:00:00 +0000
+
+wayvnc (0.8.0-rc0-1) bookworm; urgency=medium
+
+  * Upgrade to v0.8-rc0
+
+ -- Andri Yngvason <andri@yngvason.is>  Sun, 10 Dec 2023 20:00:00 +0000
+
+wayvnc (0.7.1-1~bpo12+rpt2) bookworm; urgency=medium
+
+  * Add unreleased 0.7.2 changes
+
+ -- Simon Long <simon@raspberrypi.com>  Mon, 06 Nov 2023 09:44:26 +0000
+
+wayvnc (0.7.1-1~bpo12+rpt1) bookworm; urgency=medium
+
+  * Backport from Trixie
+
+ -- Simon Long <simon@raspberrypi.com>  Tue, 31 Oct 2023 07:10:38 +0000
+
+wayvnc (0.7.1-1) unstable; urgency=medium
+
+  * Upload to unstable.
+
+ -- Boyuan Yang <byang@debian.org>  Tue, 24 Oct 2023 12:54:24 -0400
+
+wayvnc (0.7.1-1~exp1) experimental; urgency=medium
+
+  * New upstream release.
+  * debian/copyright: Update Unlicense license.
+
+ -- Boyuan Yang <byang@debian.org>  Sun, 15 Oct 2023 16:10:45 -0400
+
+wayvnc (0.6.2-1) unstable; urgency=medium
+
+  * New upstream version. (Closes: #1041895)
+  * debian/wayvnc.examples: Install example files.
+  * debian/copyright: Update information.
+  * debian/control:
+    + Add new build-dep libjansson-dev.
+    + Further limit version requirement for libaml-dev, libneatvnc-dev.
+    + Add myself into Uploaders list.
+    + Bump Standards-Version to 4.6.2.
+
+ -- Boyuan Yang <byang@debian.org>  Tue, 25 Jul 2023 14:01:01 -0400
+
+wayvnc (0.5.0-1) unstable; urgency=medium
+
+  * New upstream version
+      - Use new NeatVNC buffer submission API (closes: #1015099)
+  * debian/control: add minimum version for libneatvnc-dev (>= 0.5.1)
+  * debian/copyright: murmurhash was moved to neatvnc
+  * debian/copyright: bump year
+
+ -- Johannes Schauer Marin Rodrigues <josch@debian.org>  Sat, 16 Jul 2022 22:50:17 +0200
+
+wayvnc (0.4.1-1) unstable; urgency=medium
+
+  * Initial release. (Closes: #1002590)
+
+ -- Johannes Schauer Marin Rodrigues <josch@debian.org>  Tue, 28 Dec 2021 11:34:53 +0100
