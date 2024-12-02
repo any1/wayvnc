@@ -183,6 +183,11 @@ static void ext_image_copy_capture_schedule_capture(struct ext_image_copy_captur
 	config_buffers(self);
 
 	self->buffer = wv_buffer_pool_acquire(self->pool);
+	if (!self->buffer) {
+		self->parent.on_done(SCREENCOPY_FATAL, NULL, self->parent.userdata);
+		return;
+	}
+
 	self->buffer->domain = self->cursor ? WV_BUFFER_DOMAIN_CURSOR :
 		WV_BUFFER_DOMAIN_OUTPUT;
 
