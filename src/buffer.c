@@ -45,8 +45,6 @@
 #ifdef HAVE_LINUX_DMA_HEAP
 #include <linux/dma-buf.h>
 #include <linux/dma-heap.h>
-
-#define LINUX_CMA_PATH "/dev/dma_heap/linux,cma"
 #endif // HAVE_LINUX_DMA_HEAP
 #endif // ENABLE_SCREENCOPY_DMABUF
 
@@ -181,14 +179,18 @@ failure:
 
 #ifdef ENABLE_SCREENCOPY_DMABUF
 #ifdef HAVE_LINUX_DMA_HEAP
-static bool have_linux_cma(void)
+static const char *get_cma_path(void)
 {
-	return access(LINUX_CMA_PATH, R_OK | W_OK) == 0;
+	static const char *path;
+	if (path)
+		return path;
+	path = getenv("WAYVNC_CMA");
+	return path;
 }
 
 static int linux_cma_alloc(size_t size)
 {
-	int fd = open(LINUX_CMA_PATH, O_RDWR | O_CLOEXEC, 0);
+	int fd = open(get_cma_path(), O_RDWR | O_CLOEXEC, 0);
 	if (fd < 0) {
 		nvnc_log(NVNC_LOG_ERROR, "Failed to open CMA device: %m");
 		return -1;
@@ -299,18 +301,17 @@ static struct wv_buffer* wv_buffer_create_dmabuf(
 	}
 
 #ifdef HAVE_LINUX_DMA_HEAP
-	self->bo = have_linux_cma() ?
-		create_cma_gbm_bo(config->width, config->height,
-				config->format, gbm) :
-		gbm_bo_create_with_modifiers2(gbm->dev, config->width,
-				config->height, config->format,
+	if (get_cma_path()) {
+		self->bo = create_cma_gbm_bo(config->width, config->height,
+					config->format, gbm);
+	} else
+#endif
+	{
+		self->bo = gbm_bo_create_with_modifiers2(gbm->dev,
+				config->width, config->height, config->format,
 				config->modifiers, config->n_modifiers,
 				GBM_BO_USE_RENDERING);
-#else
-	self->bo = gbm_bo_create_with_modifiers2(gbm->dev, config->width,
-			config->height, config->format, config->modifiers,
-			config->n_modifiers, GBM_BO_USE_RENDERING);
-#endif
+	}
 
 	if (!self->bo)
 		goto bo_failure;
