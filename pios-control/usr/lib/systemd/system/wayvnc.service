@@ -12,6 +12,7 @@ NotifyAccess=all
 Restart=always
 User=vnc
 KillSignal=INT
+SyslogIdentifier=wayvnc
 
 [Install]
 WantedBy=multi-user.target
