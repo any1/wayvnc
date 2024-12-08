@@ -21,8 +21,7 @@ if ! raspi-config nonint is_pifive ; then
 	export WAYVNC_CMA=/dev/dma_heap/linux,cma
 fi
 
-wayvnc --render-cursor \
-	--detached \
+wayvnc --detached \
 	--gpu \
 	--config /etc/wayvnc/config \
 	--socket /tmp/wayvnc/wayvncctl.sock
