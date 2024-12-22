@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 Andri Yngvason
+ * Copyright (c) 2019 - 2024 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -49,6 +49,14 @@ static void pointer_set_button_mask(struct pointer* self, uint32_t t,
 	if (diff & NVNC_BUTTON_RIGHT)
 		zwlr_virtual_pointer_v1_button(self->pointer, t, BTN_RIGHT,
 					       !!(mask & NVNC_BUTTON_RIGHT));
+
+	if (diff & NVNC_BUTTON_BACK)
+		zwlr_virtual_pointer_v1_button(self->pointer, t, BTN_BACK,
+					       !!(mask & NVNC_BUTTON_BACK));
+
+	if (diff & NVNC_BUTTON_FORWARD)
+		zwlr_virtual_pointer_v1_button(self->pointer, t, BTN_FORWARD,
+					       !!(mask & NVNC_BUTTON_FORWARD));
 
 	int vaxis = WL_POINTER_AXIS_VERTICAL_SCROLL;
 	int haxis = WL_POINTER_AXIS_HORIZONTAL_SCROLL;
