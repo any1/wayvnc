@@ -15,7 +15,7 @@ these instructions:
 - Provide context, including but not limited to
   - Command line arguments
   - Special environment variables, if any
-  - jhich wayland compositor are you using? Which version?
+  - Which wayland compositor are you using? Which version?
   - What VNC client are you using?
   - Did you configure your VNC client in a specific manner?
   - Linux distro/operating system
