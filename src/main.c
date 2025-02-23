@@ -491,12 +491,6 @@ static void wayland_detach(struct wayvnc* self)
 		ctl_server_event_detached(self->ctl);
 }
 
-void wayvnc_destroy(struct wayvnc* self)
-{
-	cfg_destroy(&self->cfg);
-	wayland_detach(self);
-}
-
 void on_wayland_event(void* obj)
 {
 	struct wayvnc* self = aml_get_userdata(obj);
@@ -2298,23 +2292,30 @@ int main(int argc, char* argv[])
 	nvnc_display_unref(self.nvnc_display);
 	nvnc_del(self.nvnc);
 	self.nvnc = NULL;
-	wayvnc_destroy(&self);
+	wayland_detach(&self);
+
 	if (zwp_linux_dmabuf)
 		zwp_linux_dmabuf_v1_destroy(zwp_linux_dmabuf);
 	if (self.screencopy)
 		screencopy_destroy(self.screencopy);
 	aml_unref(aml);
 
+	cfg_destroy(&self.cfg);
+
 	return 0;
 
 nvnc_failure:
 	ctl_server_destroy(self.ctl);
+	self.ctl = NULL;
+	nvnc_display_unref(self.nvnc_display);
+	nvnc_del(self.nvnc);
+	self.nvnc = NULL;
 ctl_server_failure:
 screencopy_failure:
+	wayland_detach(&self);
 wayland_failure:
 	aml_unref(aml);
 failure:
-	self.nvnc = NULL;
-	wayvnc_destroy(&self);
+	cfg_destroy(&self.cfg);
 	return 1;
 }
