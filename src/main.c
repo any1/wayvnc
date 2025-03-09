@@ -614,6 +614,8 @@ struct cmd_response* on_output_cycle(struct ctl* ctl, enum output_cycle_directio
 	struct wayvnc* self = ctl_server_userdata(ctl);
 	nvnc_log(NVNC_LOG_INFO, "ctl command: Rotating to %s output",
 			direction == OUTPUT_CYCLE_FORWARD ? "next" : "previous");
+	if (!self->display)
+		return cmd_failed("Not attached!");
 	struct output* next = output_cycle(&self->outputs,
 			self->selected_output, direction);
 	switch_to_output(self, next);
@@ -624,7 +626,10 @@ struct cmd_response* on_output_switch(struct ctl* ctl,
 			const char* output_name)
 {
 	nvnc_log(NVNC_LOG_INFO, "ctl command: Switch to output \"%s\"", output_name);
+
 	struct wayvnc* self = ctl_server_userdata(ctl);
+	if (!self->display)
+		return cmd_failed("Not attached!");
 	if (!output_name || output_name[0] == '\0')
 		return cmd_failed("Output name is required");
 	struct output* output = output_find_by_name(&self->outputs, output_name);
@@ -669,6 +674,10 @@ static int get_output_list(struct ctl* ctl,
 		struct ctl_server_output** outputs)
 {
 	struct wayvnc* self = ctl_server_userdata(ctl);
+	if (!self->display) {
+		*outputs = NULL;
+		return 0;
+	}
 	int n = wl_list_length(&self->outputs);
 	if (n == 0) {
 		*outputs = NULL;
