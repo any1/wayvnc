@@ -73,7 +73,7 @@ static void destroy_send_context(struct send_context* ctx)
 	free(ctx);
 }
 
-static void on_receive(void* handler)
+static void on_receive(struct aml_handler* handler)
 {
 	struct receive_context* ctx = aml_get_userdata(handler);
 	int fd = aml_get_fd(handler);
@@ -101,7 +101,7 @@ static void on_receive(void* handler)
 	destroy_receive_context(ctx);
 }
 
-static void on_send(void* handler)
+static void on_send(struct aml_handler* handler)
 {
 	struct send_context* ctx = aml_get_userdata(handler);
 	int fd = aml_get_fd(handler);

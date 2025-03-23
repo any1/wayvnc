@@ -224,11 +224,10 @@ static void ext_image_copy_capture_schedule_capture(struct ext_image_copy_captur
 #endif
 }
 
-static void ext_image_copy_capture_schedule_from_timer(void* obj)
+static void ext_image_copy_capture_schedule_from_timer(struct aml_timer* timer)
 {
-	struct ext_image_copy_capture* self = aml_get_userdata(obj);
+	struct ext_image_copy_capture* self = aml_get_userdata(timer);
 	assert(self);
-
 	ext_image_copy_capture_schedule_capture(self);
 }
 
@@ -708,8 +707,8 @@ static struct screencopy* ext_image_copy_capture_create(struct wl_output* output
 	self->wl_output = output;
 	self->render_cursors = render_cursor;
 
-	self->timer = aml_timer_new(0, ext_image_copy_capture_schedule_from_timer, self,
-			NULL);
+	self->timer = aml_timer_new(0,
+			ext_image_copy_capture_schedule_from_timer, self, NULL);
 	assert(self->timer);
 
 	self->pool = wv_buffer_pool_create(NULL);
@@ -741,8 +740,8 @@ static struct screencopy* ext_image_copy_capture_create_cursor(struct wl_output*
 	self->wl_output = output;
 	self->wl_seat = seat;
 
-	self->timer = aml_timer_new(0, ext_image_copy_capture_schedule_from_timer, self,
-			NULL);
+	self->timer = aml_timer_new(0,
+			ext_image_copy_capture_schedule_from_timer, self, NULL);
 	assert(self->timer);
 
 	self->pool = wv_buffer_pool_create(NULL);

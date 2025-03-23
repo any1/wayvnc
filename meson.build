@@ -56,7 +56,7 @@ xkbcommon = dependency('xkbcommon', version: '>=1.0.0')
 wayland_client = dependency('wayland-client')
 jansson = dependency('jansson')
 
-aml_version = ['>=0.3.0', '<0.4.0']
+aml_version = ['>=1.0.0', '<2.0.0']
 neatvnc_version = ['>=0.10', '<1.0.0']
 
 neatvnc_project = subproject(

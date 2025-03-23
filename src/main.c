@@ -491,9 +491,9 @@ static void wayland_detach(struct wayvnc* self)
 		ctl_server_event_detached(self->ctl);
 }
 
-void on_wayland_event(void* obj)
+void on_wayland_event(struct aml_handler* handler)
 {
-	struct wayvnc* self = aml_get_userdata(obj);
+	struct wayvnc* self = aml_get_userdata(handler);
 
 	int rc MAYBE_UNUSED = wl_display_prepare_read(self->display);
 	assert(rc == 0);
@@ -602,7 +602,7 @@ void wayvnc_exit(struct wayvnc* self)
 	self->do_exit = true;
 }
 
-void on_signal(void* obj)
+void on_signal(struct aml_signal* obj)
 {
 	nvnc_log(NVNC_LOG_INFO, "Received termination signal.");
 	struct wayvnc* self = aml_get_userdata(obj);
@@ -1168,7 +1168,7 @@ int wayvnc_start_capture_immediate(struct wayvnc* self)
 	return rc;
 }
 
-static void on_capture_restart_timer(void* obj)
+static void on_capture_restart_timer(struct aml_timer* obj)
 {
 	struct wayvnc* self = aml_get_userdata(obj);
 	aml_unref(self->capture_retry_timer);
@@ -1345,7 +1345,7 @@ int check_cfg_sanity(struct cfg* cfg)
 	return 0;
 }
 
-static void on_perf_tick(void* obj)
+static void on_perf_tick(struct aml_ticker* obj)
 {
 	struct wayvnc* self = aml_get_userdata(obj);
 
@@ -2204,9 +2204,6 @@ int main(int argc, char* argv[])
 
 		self.selected_seat = seat;
 	}
-
-	if (aml_unstable_abi_version != AML_UNSTABLE_API)
-		nvnc_log(NVNC_LOG_PANIC, "libaml is incompatible with this build of wayvnc!");
 
 	enum socket_type default_socket_type = SOCKET_TYPE_TCP;
 	if (use_unix_socket)

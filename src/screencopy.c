@@ -287,10 +287,9 @@ static int screencopy__start_capture(struct wlr_screencopy* self)
 	return 0;
 }
 
-static void screencopy__poll(void* obj)
+static void screencopy__poll(struct aml_timer* handler)
 {
-	struct wlr_screencopy* self = aml_get_userdata(obj);
-
+	struct wlr_screencopy* self = aml_get_userdata(handler);
 	screencopy__start_capture(self);
 }
 

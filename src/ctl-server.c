@@ -700,10 +700,10 @@ request_parse_failed:
 		client_enqueue_internal_error(client, details);
 }
 
-static void on_ready(void* obj)
+static void on_ready(struct aml_handler* handler)
 {
-	struct ctl_client* client = aml_get_userdata(obj);
-	uint32_t events = aml_get_revents(obj);
+	struct ctl_client* client = aml_get_userdata(handler);
+	uint32_t events = aml_get_revents(handler);
 	nvnc_trace("Client %p ready: 0x%x", client, events);
 
 	if (events & AML_EVENT_WRITE)
@@ -712,10 +712,10 @@ static void on_ready(void* obj)
 		recv_ready(client);
 }
 
-static void on_connection(void* obj)
+static void on_connection(struct aml_handler* handler)
 {
 	nvnc_log(NVNC_LOG_DEBUG, "New connection");
-	struct ctl* server = aml_get_userdata(obj);
+	struct ctl* server = aml_get_userdata(handler);
 
 	struct ctl_client* client = calloc(1, sizeof(*client));
 	if (!client) {
