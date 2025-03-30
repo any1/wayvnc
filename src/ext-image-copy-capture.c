@@ -65,6 +65,7 @@ struct ext_image_copy_capture {
 	struct wv_buffer* buffer;
 	bool have_constraints;
 	bool should_start;
+	bool is_cursor_session;
 	uint32_t frame_count;
 
 	uint32_t width, height;
@@ -188,7 +189,7 @@ static void ext_image_copy_capture_schedule_capture(struct ext_image_copy_captur
 		return;
 	}
 
-	self->buffer->domain = self->cursor ? WV_BUFFER_DOMAIN_CURSOR :
+	self->buffer->domain = self->is_cursor_session ? WV_BUFFER_DOMAIN_CURSOR :
 		WV_BUFFER_DOMAIN_OUTPUT;
 
 	self->frame = ext_image_copy_capture_session_v1_create_frame(self->session);
@@ -219,7 +220,7 @@ static void ext_image_copy_capture_schedule_capture(struct ext_image_copy_captur
 	float damage_area = calculate_region_area(&self->buffer->buffer_damage);
 	float pixel_area = self->buffer->width * self->buffer->height;
 	nvnc_trace("Committed %sbuffer: %p with %.02f %% damage",
-			self->cursor ? "cursor " : "", self->buffer,
+			self->is_cursor_session ? "cursor " : "", self->buffer,
 			100.0 * damage_area / pixel_area);
 #endif
 }
@@ -352,7 +353,7 @@ static void rate_formats_in_array(const struct ext_image_copy_capture* self,
 		struct format_array* array, enum wv_buffer_type type)
 {
 	enum wv_buffer_domain domain = WV_BUFFER_DOMAIN_OUTPUT;
-	if (self->cursor)
+	if (self->is_cursor_session)
 		domain = WV_BUFFER_DOMAIN_CURSOR;
 
 	for (int i = 0; i < array->len; ++i) {
@@ -476,9 +477,8 @@ static void session_handle_constraints_done(void *data,
 
 static void restart_session(struct ext_image_copy_capture* self)
 {
-	bool is_cursor_session = self->cursor;
 	ext_image_copy_capture_deinit_session(self);
-	if (is_cursor_session)
+	if (self->is_cursor_session)
 		ext_image_copy_capture_init_cursor_session(self);
 	else
 		ext_image_copy_capture_init_session(self);
@@ -520,7 +520,7 @@ static void frame_handle_ready(void *data,
 
 	assert(self->buffer);
 
-	enum wv_buffer_domain domain = self->cursor ?
+	enum wv_buffer_domain domain = self->is_cursor_session ?
 		WV_BUFFER_DOMAIN_CURSOR : WV_BUFFER_DOMAIN_OUTPUT;
 	wv_buffer_registry_damage_all(&self->buffer->frame_damage, domain);
 	pixman_region_clear(&self->buffer->buffer_damage);
@@ -652,7 +652,7 @@ static int ext_image_copy_capture_start(struct screencopy* ptr, bool immediate)
 		return -1;
 	}
 
-	if (immediate && self->frame_count != 0) {
+	if (immediate || self->frame_count == 0) {
 		// Flush state:
 		restart_session(self);
 		self->should_start = true;
@@ -674,7 +674,7 @@ static int ext_image_copy_capture_start(struct screencopy* ptr, bool immediate)
 		ext_image_copy_capture_schedule_capture(self);
 	} else {
 		nvnc_trace("Scheduling %scapture after %"PRIu64" µs",
-				self->cursor ? "cursor " : "", next_time - now);
+				self->is_cursor_session ? "cursor " : "", next_time - now);
 		aml_set_duration(self->timer, next_time - now);
 		aml_start(aml_get_default(), self->timer);
 	}
@@ -688,10 +688,8 @@ static void ext_image_copy_capture_stop(struct screencopy* base)
 
 	aml_stop(aml_get_default(), self->timer);
 
-	if (self->frame) {
-		ext_image_copy_capture_frame_v1_destroy(self->frame);
-		self->frame = NULL;
-	}
+	ext_image_copy_capture_deinit_session(self);
+	self->frame_count = 0;
 }
 
 static struct screencopy* ext_image_copy_capture_create(struct wl_output* output,
@@ -715,13 +713,8 @@ static struct screencopy* ext_image_copy_capture_create(struct wl_output* output
 	if (!self->pool)
 		goto failure;
 
-	if (ext_image_copy_capture_init_session(self) < 0)
-		goto session_failure;
-
 	return (struct screencopy*)self;
 
-session_failure:
-	wv_buffer_pool_destroy(self->pool);
 failure:
 	free(self);
 	return NULL;
@@ -742,19 +735,16 @@ static struct screencopy* ext_image_copy_capture_create_cursor(struct wl_output*
 
 	self->timer = aml_timer_new(0,
 			ext_image_copy_capture_schedule_from_timer, self, NULL);
+	self->is_cursor_session = true;
+
 	assert(self->timer);
 
 	self->pool = wv_buffer_pool_create(NULL);
 	if (!self->pool)
 		goto failure;
 
-	if (ext_image_copy_capture_init_cursor_session(self) < 0)
-		goto session_failure;
-
 	return (struct screencopy*)self;
 
-session_failure:
-	wv_buffer_pool_destroy(self->pool);
 failure:
 	free(self);
 	return NULL;
