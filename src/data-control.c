@@ -442,7 +442,7 @@ void data_control_destroy(struct data_control* self)
 void data_control_to_clipboard(struct data_control* self, const char* text, size_t len)
 {
 	if (!len) {
-		nvnc_log(NVNC_LOG_ERROR, "%s called with 0 length", __func__);
+		nvnc_log(NVNC_LOG_DEBUG, "Ignoring empty clipboard from VNC client");
 		return;
 	}
 	free(self->cb_data);
