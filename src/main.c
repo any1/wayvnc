@@ -2015,6 +2015,8 @@ int main(int argc, char* argv[])
 	bool disable_input = false;
 	bool use_transient_seat = false;
 
+	const char* log_level_name = NULL;
+	bool is_verbose = false;
 	int log_level = NVNC_LOG_WARNING;
 
 	static const struct wv_option opts[] = {
@@ -2095,10 +2097,8 @@ int main(int argc, char* argv[])
 	use_external_fd = !!option_parser_get_value(&option_parser,
 			"external-listener-fd");
 	disable_input = !!option_parser_get_value(&option_parser, "disable-input");
-	log_level = option_parser_get_value(&option_parser, "verbose")
-		? NVNC_LOG_INFO : NVNC_LOG_WARNING;
-	log_level = log_level_from_string(
-			option_parser_get_value(&option_parser, "log-level"));
+	is_verbose = option_parser_get_value(&option_parser, "verbose");
+	log_level_name = option_parser_get_value(&option_parser, "log-level");
 	max_rate = atoi(option_parser_get_value(&option_parser, "max-fps"));
 	use_transient_seat = !!option_parser_get_value(&option_parser,
 				"transient-seat");
@@ -2114,6 +2114,15 @@ int main(int argc, char* argv[])
 	keyboard_options = option_parser_get_value(&option_parser, "keyboard");
 	if (keyboard_options)
 		parse_keyboard_option(&self, keyboard_options);
+
+	log_level = log_level_from_string(log_level_name);
+	if (log_level < 0) {
+		nvnc_log(NVNC_LOG_ERROR, "Invalid log level: %s", log_level_name);
+		return 1;
+	}
+
+	if (is_verbose && log_level < NVNC_LOG_INFO)
+		log_level = NVNC_LOG_INFO;
 
 	nvnc_set_log_level(log_level);
 
