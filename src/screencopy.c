@@ -28,13 +28,10 @@
 #include "buffer.h"
 #include "shm.h"
 #include "screencopy-interface.h"
-#include "smooth.h"
 #include "time-util.h"
 #include "usdt.h"
 #include "pixels.h"
 #include "config.h"
-
-#define DELAY_SMOOTHER_TIME_CONSTANT 0.5 // s
 
 extern struct zwlr_screencopy_manager_v1* screencopy_manager;
 
@@ -58,11 +55,8 @@ struct wlr_screencopy {
 	struct zwlr_screencopy_frame_v1* frame;
 
 	uint64_t last_time;
-	uint64_t start_time;
 	struct aml_timer* timer;
 
-	struct smooth delay_smoother;
-	double delay;
 	bool is_immediate_copy;
 	bool overlay_cursor;
 	struct wl_output* wl_output;
@@ -211,9 +205,6 @@ static void screencopy_ready(void* data,
 
 	self->last_time = gettime_us();
 
-	double delay = (self->last_time - self->start_time) * 1.0e-6;
-	self->delay = smooth(&self->delay_smoother, delay);
-
 	if (self->is_immediate_copy)
 		wv_buffer_damage_whole(self->front);
 
@@ -273,8 +264,6 @@ static int screencopy__start_capture(struct wlr_screencopy* self)
 		.damage = screencopy_damage,
 	};
 
-	self->start_time = gettime_us();
-
 	self->frame = zwlr_screencopy_manager_v1_capture_output(
 			screencopy_manager, self->overlay_cursor,
 			self->wl_output);
@@ -304,7 +293,7 @@ static int wlr_screencopy_start(struct screencopy* ptr, bool is_immediate_copy)
 
 	uint64_t now = gettime_us();
 	double dt = (now - self->last_time) * 1.0e-6;
-	int32_t time_left = (1.0 / ptr->rate_limit - dt - self->delay) * 1.0e6;
+	int32_t time_left = (1.0 / ptr->rate_limit - dt) * 1.0e6;
 
 	self->status = WLR_SCREENCOPY_IN_PROGRESS;
 
@@ -334,8 +323,6 @@ static struct screencopy* wlr_screencopy_create(struct wl_output* output,
 
 	self->timer = aml_timer_new(0, screencopy__poll, self, NULL);
 	assert(self->timer);
-
-	self->delay_smoother.time_constant = DELAY_SMOOTHER_TIME_CONSTANT;
 
 	return (struct screencopy*)self;
 }
