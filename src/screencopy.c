@@ -203,8 +203,6 @@ static void screencopy_ready(void* data,
 
 	screencopy__stop(self);
 
-	self->last_time = gettime_us();
-
 	if (self->is_immediate_copy)
 		wv_buffer_damage_whole(self->front);
 
@@ -250,7 +248,7 @@ static void screencopy_damage(void* data,
 	wv_buffer_damage_rect(self->front, x, y, width, height);
 }
 
-static int screencopy__start_capture(struct wlr_screencopy* self)
+static int screencopy__start_capture(struct wlr_screencopy* self, uint64_t now)
 {
 	DTRACE_PROBE1(wayvnc, screencopy_start, self);
 
@@ -273,13 +271,16 @@ static int screencopy__start_capture(struct wlr_screencopy* self)
 	zwlr_screencopy_frame_v1_add_listener(self->frame, &frame_listener,
 					      self);
 
+	self->last_time = now;
+
 	return 0;
 }
 
 static void screencopy__poll(struct aml_timer* handler)
 {
 	struct wlr_screencopy* self = aml_get_userdata(handler);
-	screencopy__start_capture(self);
+	uint64_t now = gettime_us();
+	screencopy__start_capture(self, now);
 }
 
 static int wlr_screencopy_start(struct screencopy* ptr, bool is_immediate_copy)
@@ -302,7 +303,7 @@ static int wlr_screencopy_start(struct screencopy* ptr, bool is_immediate_copy)
 		return aml_start(aml_get_default(), self->timer);
 	}
 
-	return screencopy__start_capture(self);
+	return screencopy__start_capture(self, now);
 }
 
 static struct screencopy* wlr_screencopy_create(struct wl_output* output,
