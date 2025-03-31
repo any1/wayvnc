@@ -95,7 +95,6 @@ sources = [
 	'src/pointer.c',
 	'src/keyboard.c',
 	'src/seat.c',
-	'src/smooth.c',
 	'src/cfg.c',
 	'src/intset.c',
 	'src/buffer.c',
