@@ -174,7 +174,8 @@ static int ext_image_copy_capture_init_cursor_session(struct ext_image_copy_capt
 	return 0;
 }
 
-static void ext_image_copy_capture_schedule_capture(struct ext_image_copy_capture* self)
+static void ext_image_copy_capture_schedule_capture(
+		struct ext_image_copy_capture* self, uint64_t now)
 {
 	assert(!self->frame);
 
@@ -223,13 +224,16 @@ static void ext_image_copy_capture_schedule_capture(struct ext_image_copy_captur
 			self->is_cursor_session ? "cursor " : "", self->buffer,
 			100.0 * damage_area / pixel_area);
 #endif
+
+	self->last_time = now;
 }
 
 static void ext_image_copy_capture_schedule_from_timer(struct aml_timer* timer)
 {
 	struct ext_image_copy_capture* self = aml_get_userdata(timer);
 	assert(self);
-	ext_image_copy_capture_schedule_capture(self);
+	uint64_t now = gettime_us();
+	ext_image_copy_capture_schedule_capture(self, now);
 }
 
 static void format_array_append(struct format_array* self,
@@ -466,7 +470,8 @@ static void session_handle_constraints_done(void *data,
 		return;
 
 	if (self->should_start) {
-		ext_image_copy_capture_schedule_capture(self);
+		uint64_t now = gettime_us();
+		ext_image_copy_capture_schedule_capture(self, now);
 		self->should_start = false;
 	}
 
@@ -532,9 +537,6 @@ static void frame_handle_ready(void *data,
 	buffer->y_hotspot = self->hotspot.y;
 
 	self->frame_count++;
-
-	// TODO: Use presentation time somehow?
-	self->last_time = gettime_us();
 
 	self->parent.on_done(SCREENCOPY_DONE, buffer, self->parent.userdata);
 }
@@ -664,21 +666,20 @@ static int ext_image_copy_capture_start(struct screencopy* ptr, bool immediate)
 		return 0;
 	}
 
-	uint64_t eps = 4000; // µs
-	uint64_t period = round(1e6 / self->parent.rate_limit);
-	uint64_t next_time = self->last_time + period - eps;
 	uint64_t now = gettime_us();
+	double dt = (now - self->last_time) * 1.0e-6;
+	int32_t time_left = (1.0 / ptr->rate_limit - dt) * 1.0e6;
 
-	if (now >= next_time) {
-		aml_stop(aml_get_default(), self->timer);
-		ext_image_copy_capture_schedule_capture(self);
-	} else {
+	if (time_left > 0) {
 		nvnc_trace("Scheduling %scapture after %"PRIu64" µs",
-				self->is_cursor_session ? "cursor " : "", next_time - now);
-		aml_set_duration(self->timer, next_time - now);
-		aml_start(aml_get_default(), self->timer);
+				self->is_cursor_session ? "cursor " : "",
+				time_left);
+		aml_set_duration(self->timer, time_left);
+		return aml_start(aml_get_default(), self->timer);
 	}
 
+	aml_stop(aml_get_default(), self->timer);
+	ext_image_copy_capture_schedule_capture(self, now);
 	return 0;
 }
 
