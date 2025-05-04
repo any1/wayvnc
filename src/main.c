@@ -61,6 +61,7 @@
 #include "option-parser.h"
 #include "pixels.h"
 #include "buffer.h"
+#include "time-util.h"
 
 #ifdef ENABLE_PAM
 #include "pam_auth.h"
@@ -114,6 +115,7 @@ struct wayvnc {
 
 	uint32_t damage_area_sum;
 	uint32_t n_frames_captured;
+	uint32_t n_frames_sent;
 
 	bool disable_input;
 	bool use_transient_seat;
@@ -136,6 +138,10 @@ struct wayvnc {
 
 	struct wayvnc_client* cursor_master;
 	struct screencopy* cursor_sc;
+
+	uint64_t last_send_time;
+	struct aml_timer* rate_limiter;
+	struct wv_buffer* next_frame;
 };
 
 struct wayvnc_client {
@@ -1249,16 +1255,13 @@ static void apply_output_transform(const struct wayvnc* self,
 			(enum nvnc_transform)buffer_transform);
 }
 
-void wayvnc_process_frame(struct wayvnc* self, struct wv_buffer* buffer)
+static void wayvnc_send_next_frame(struct wayvnc* self, uint64_t now)
 {
-	nvnc_trace("Passing on buffer: %p", buffer);
-
-	self->n_frames_captured++;
-	self->damage_area_sum +=
-		calculate_region_area(&buffer->frame_damage);
-
 	struct pixman_region16 damage;
 	pixman_region_init(&damage);
+
+	struct wv_buffer* buffer = self->next_frame;
+	self->next_frame = NULL;
 
 	if (self->screencopy->impl->caps & SCREENCOPY_CAP_TRANSFORM) {
 		pixman_region_copy(&damage, &buffer->frame_damage);
@@ -1271,10 +1274,56 @@ void wayvnc_process_frame(struct wayvnc* self, struct wv_buffer* buffer)
 
 	nvnc_display_feed_buffer(self->nvnc_display, buffer->nvnc_fb,
 			&damage);
+	self->n_frames_sent++;
 
 	pixman_region_fini(&damage);
 
 	wayvnc_start_capture(self);
+
+	nvnc_fb_unref(buffer->nvnc_fb);
+
+	self->last_send_time = now;
+}
+
+static void wayvnc_handle_rate_limit_timeout(struct aml_timer* timer)
+{
+	struct wayvnc* self = aml_get_userdata(timer);
+	uint64_t now = gettime_us();
+	assert(self->next_frame);
+	wayvnc_send_next_frame(self, now);
+}
+
+static void wayvnc_process_frame(struct wayvnc* self, struct wv_buffer* buffer)
+{
+	nvnc_trace("Processing buffer: %p", buffer);
+
+	self->n_frames_captured++;
+	self->damage_area_sum += calculate_region_area(&buffer->frame_damage);
+
+	bool have_pending_frame = false;
+	if (self->next_frame) {
+		pixman_region_union(&buffer->frame_damage,
+				&buffer->frame_damage,
+				&self->next_frame->frame_damage);
+		nvnc_fb_unref(self->next_frame->nvnc_fb);
+		have_pending_frame = true;
+	}
+	self->next_frame = buffer;
+	nvnc_fb_ref(buffer->nvnc_fb);
+
+	if (have_pending_frame)
+		return;
+
+	uint64_t now = gettime_us();
+	double dt = (now - self->last_send_time) * 1.0e-6;
+	int32_t time_left = (1.0 / self->max_rate - dt) * 1.0e6;
+
+	if (time_left > 0) {
+		aml_set_duration(self->rate_limiter, time_left);
+		aml_start(aml_get_default(), self->rate_limiter);
+	} else {
+		wayvnc_send_next_frame(self, now);
+	}
 }
 
 void on_capture_done(enum screencopy_result result, struct wv_buffer* buffer,
@@ -1353,10 +1402,11 @@ static void on_perf_tick(struct aml_ticker* obj)
 	double area_avg = (double)self->damage_area_sum / (double)self->n_frames_captured;
 	double relative_area_avg = 100.0 * area_avg / total_area;
 
-	nvnc_log(NVNC_LOG_INFO, "Frames captured: %"PRIu32", average reported frame damage: %.1f %%",
-			self->n_frames_captured, relative_area_avg);
+	nvnc_log(NVNC_LOG_INFO, "Frames captured: %"PRIu32", frames sent: %"PRIu32" average reported frame damage: %.1f %%",
+			self->n_frames_captured, self->n_frames_sent, relative_area_avg);
 
 	self->n_frames_captured = 0;
+	self->n_frames_sent = 0;
 	self->damage_area_sum = 0;
 }
 
@@ -1785,7 +1835,7 @@ static bool configure_cursor_sc(struct wayvnc* self,
 	self->cursor_sc->rate_format = rate_format;
 	self->cursor_sc->userdata = self;
 
-	self->cursor_sc->rate_limit = self->max_rate;
+	self->cursor_sc->rate_limit = self->max_rate * 2;
 	self->cursor_sc->enable_linux_dmabuf = false;
 
 	nvnc_log(NVNC_LOG_DEBUG, "Configured cursor capturing");
@@ -1808,7 +1858,7 @@ bool configure_screencopy(struct wayvnc* self)
 	self->screencopy->rate_format = rate_format;
 	self->screencopy->userdata = self;
 
-	self->screencopy->rate_limit = self->max_rate;
+	self->screencopy->rate_limit = self->max_rate * 2;
 	self->screencopy->enable_linux_dmabuf = self->enable_gpu_features;
 
 	return true;
@@ -2180,6 +2230,11 @@ int main(int argc, char* argv[])
 	if (init_main_loop(&self) < 0)
 		goto failure;
 
+	self.rate_limiter = aml_timer_new(0, wayvnc_handle_rate_limit_timeout,
+			&self, NULL);
+	if (!self.rate_limiter)
+		goto rate_limiter_failure;
+
 	if (!start_detached) {
 		if (init_wayland(&self, NULL) < 0) {
 			nvnc_log(NVNC_LOG_ERROR, "Failed to initialise wayland");
@@ -2313,6 +2368,8 @@ int main(int argc, char* argv[])
 		zwp_linux_dmabuf_v1_destroy(zwp_linux_dmabuf);
 	if (self.screencopy)
 		screencopy_destroy(self.screencopy);
+	aml_stop(aml, self.rate_limiter);
+	aml_unref(self.rate_limiter);
 	aml_unref(aml);
 
 	cfg_destroy(&self.cfg);
@@ -2329,6 +2386,9 @@ ctl_server_failure:
 screencopy_failure:
 	wayland_detach(&self);
 wayland_failure:
+rate_limiter_failure:
+	aml_stop(aml, self.rate_limiter);
+	aml_unref(self.rate_limiter);
 	aml_unref(aml);
 failure:
 	cfg_destroy(&self.cfg);
