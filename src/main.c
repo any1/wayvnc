@@ -1858,6 +1858,14 @@ bool configure_screencopy(struct wayvnc* self)
 	self->screencopy->rate_format = rate_format;
 	self->screencopy->userdata = self;
 
+	/* Because screencopy (at least the way it's implemented in wlroots),
+	 * does not capture immediately, but rather schedules a frame to be
+	 * captured on next output commit event, if we use the exact rate limit,
+	 * we'll sometimes hit the frame before commit and sometimes after.
+	 *
+	 * This is why we multiply the capture rate limit by 2 here and have a
+	 * secondary rate limiter for frames sent to VNC.
+	 */
 	self->screencopy->rate_limit = self->max_rate * 2;
 	self->screencopy->enable_linux_dmabuf = self->enable_gpu_features;
 
