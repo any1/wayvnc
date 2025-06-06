@@ -110,6 +110,8 @@ struct wayvnc {
 	struct nvnc* nvnc;
 	struct nvnc_display* nvnc_display;
 
+	const char* desktop_name;
+
 	const char* kb_layout;
 	const char* kb_variant;
 
@@ -1065,7 +1067,7 @@ static int init_nvnc(struct wayvnc* self)
 
 	nvnc_set_userdata(self->nvnc, self, NULL);
 
-	nvnc_set_name(self->nvnc, "WayVNC");
+	nvnc_set_name(self->nvnc, self->desktop_name);
 
 	if (self->enable_resizing)
 		nvnc_set_desktop_layout_fn(self->nvnc, on_client_resize);
@@ -2100,6 +2102,9 @@ int main(int argc, char* argv[])
 		{ 'L', "log-level", "<level>",
 		  "Set log level. The levels are: error, warning, info, debug trace and quiet.",
 		  .default_ = "warning" },
+		{ 'n', "name", "<name>",
+		  "Set the desktop name.",
+		  .default_ = "WayVNC" },
 		{ 'o', "output", "<name>",
 		  "Select output to capture." },
 		{ 'p', "show-performance", NULL,
@@ -2144,6 +2149,7 @@ int main(int argc, char* argv[])
 
 	cfg_file = option_parser_get_value(&option_parser, "config");
 	enable_gpu_features = !!option_parser_get_value(&option_parser, "gpu");
+	self.desktop_name = option_parser_get_value(&option_parser, "name");
 	output_name = option_parser_get_value(&option_parser, "output");
 	seat_name = option_parser_get_value(&option_parser, "seat");
 	socket_path = option_parser_get_value(&option_parser, "socket");
