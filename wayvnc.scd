@@ -37,6 +37,9 @@ wayvnc - A VNC server for wlroots based Wayland compositors.
 	Set log level. The levels are: error, warning, info, debug, trace and
 	quiet.
 
+*-n, --name=<name>*
+	Set the desktop name. Default: WayVNC
+
 *-o, --output=<name>*
 	Select output to capture.
 
