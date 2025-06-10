@@ -407,6 +407,7 @@ static void pretty_print(json_t* data,
 	case CMD_ATTACH:
 	case CMD_DETACH:
 	case CMD_CLIENT_DISCONNECT:
+	case CMD_SET_DESKTOP_NAME:
 	case CMD_OUTPUT_SET:
 	case CMD_OUTPUT_CYCLE:
 	case CMD_WAYVNC_EXIT:
