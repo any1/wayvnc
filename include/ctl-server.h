@@ -55,6 +55,8 @@ struct ctl_server_actions {
 			const char* output_name);
 	struct cmd_response* (*on_disconnect_client)(struct ctl*,
 			const char* id);
+	struct cmd_response* (*on_set_desktop_name)(struct ctl*,
+			const char* desktop_name);
 	struct cmd_response* (*on_wayvnc_exit)(struct ctl*);
 
 	struct ctl_server_client *(*client_next)(struct ctl*,

@@ -68,6 +68,15 @@ struct cmd_info ctl_command_list[] = {
 			{},
 		}
 	},
+	[CMD_SET_DESKTOP_NAME] = { "set-desktop-name",
+		"Update the desktop name",
+		{
+			{ "desktop-name",
+				"The desktop name",
+				"<string>", true },
+			{},
+		}
+	},
 	[CMD_OUTPUT_LIST] = { "output-list",
 		"Return a list of all currently detected Wayland outputs",
 		{{}}
