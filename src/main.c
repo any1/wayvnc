@@ -678,6 +678,16 @@ static void client_info(const struct ctl_server_client* client_handle,
 	compose_client_info(client, info);
 }
 
+static struct cmd_response* on_set_desktop_name(struct ctl* ctl,
+		const char* name)
+{
+	nvnc_log(NVNC_LOG_INFO, "ctl command: Setting desktop name to \"%s\"", name);
+
+	struct wayvnc* self = ctl_server_userdata(ctl);
+	nvnc_set_name(self->nvnc, name);
+	return cmd_ok();
+}
+
 static int get_output_list(struct ctl* ctl,
 		struct ctl_server_output** outputs)
 {
@@ -2333,6 +2343,7 @@ int main(int argc, char* argv[])
 		.on_output_switch = on_output_switch,
 		.client_next = client_next,
 		.client_info = client_info,
+		.on_set_desktop_name = on_set_desktop_name,
 		.get_output_list = get_output_list,
 		.on_disconnect_client = on_disconnect_client,
 		.on_wayvnc_exit = on_wayvnc_exit,

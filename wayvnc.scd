@@ -232,6 +232,16 @@ Parameters:
 	Required: The ID of the client to disconnect.  This ID can be found from the
 	_GET-CLIENTS_ command or receipt of a _CLIENT-CONNECTED_ event.
 
+_SET-DESKTOP-NAME_
+
+The *set-desktop-name* command changes the desktop name sent to new clients and
+updates the name for connected clients that support updating the desktop name.
+
+Parameters:
+
+*desktop-name*
+	Required: The desktop name.
+
 _OUTPUT-LIST_
 
 The *output-list* command retrieves a list of all outputs known to wayvnc and
