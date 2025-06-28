@@ -39,6 +39,8 @@ struct keyboard {
 	struct table_entry* lookup_table;
 
 	struct intset key_state;
+
+	int last_sent_group;
 };
 
 int keyboard_init(struct keyboard* self, const struct xkb_rule_names* rule_names);
