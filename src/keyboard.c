@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 - 2020 Andri Yngvason
+ * Copyright (c) 2019 - 2025 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -40,14 +40,22 @@ struct table_entry {
 	xkb_keysym_t symbol;
 	xkb_keycode_t code;
 	int level;
+	int group;
+};
+
+struct key_iter_context {
+	struct keyboard* kb;
+	int group;
 };
 
 struct kb_mods {
 	xkb_mod_mask_t depressed, latched, locked;
 };
 
+static void save_mods(struct keyboard* self, struct kb_mods* mods);
+
 static void append_entry(struct keyboard* self, xkb_keysym_t symbol,
-                         xkb_keycode_t code, int level)
+                         xkb_keycode_t code, int level, int group)
 {
 	if (self->lookup_table_size <= self->lookup_table_length) {
 		size_t new_size = self->lookup_table_size * 2;
@@ -66,22 +74,24 @@ static void append_entry(struct keyboard* self, xkb_keysym_t symbol,
 	entry->symbol = symbol;
 	entry->code = code;
 	entry->level = level;
+	entry->group = group;
 }
 
 static void key_iter(struct xkb_keymap* map, xkb_keycode_t code, void* userdata)
 {
-	struct keyboard* self = userdata;
+	struct key_iter_context* ctx = userdata;
+	struct keyboard* self = ctx->kb;
+	int group = ctx->group;
 
-	size_t n_levels = xkb_keymap_num_levels_for_key(map, code, 0);
+	size_t n_levels = xkb_keymap_num_levels_for_key(map, code, group);
 
 	for (size_t level = 0; level < n_levels; level++) {
 		const xkb_keysym_t* symbols;
-		size_t n_syms = xkb_keymap_key_get_syms_by_level(map, code, 0,
-				                                 level,
-				                                 &symbols);
+		size_t n_syms = xkb_keymap_key_get_syms_by_level(map, code,
+				group, level, &symbols);
 
 		for (size_t sym_idx = 0; sym_idx < n_syms; sym_idx++)
-			append_entry(self, symbols[sym_idx], code, level);
+			append_entry(self, symbols[sym_idx], code, level, group);
 	}
 }
 
@@ -90,16 +100,22 @@ static int compare_symbols(const void* a, const void* b)
 	const struct table_entry* x = a;
 	const struct table_entry* y = b;
 
-	if (x->symbol == y->symbol)
-		return x->code < y->code ? -1 : x->code > y->code;
+	if (x->group != y->group)
+		return x->group < y->group ? -1 : 1;
 
-	return x->symbol < y->symbol ? -1 : x->symbol > y->symbol;
+	if (x->symbol != y->symbol)
+		return x->symbol < y->symbol ? -1 : 1;
+
+	return x->code < y->code ? -1 : x->code > y->code;
 }
 
 static int compare_symbols2(const void* a, const void* b)
 {
 	const struct table_entry* x = a;
 	const struct table_entry* y = b;
+
+	if (x->group != y->group)
+		return x->group < y->group ? -1 : 1;
 
 	return x->symbol < y->symbol ? -1 : x->symbol > y->symbol;
 }
@@ -114,7 +130,15 @@ static int create_lookup_table(struct keyboard* self)
 	if (!self->lookup_table)
 		return -1;
 
-	xkb_keymap_key_for_each(self->keymap, key_iter, self);
+	int n_groups = xkb_keymap_num_layouts(self->keymap);
+	for (int group = 0; group < n_groups; ++group) {
+		struct key_iter_context ctx = {
+			.kb = self,
+			.group = group,
+		};
+
+		xkb_keymap_key_for_each(self->keymap, key_iter, &ctx);
+	}
 
 	qsort(self->lookup_table, self->lookup_table_length,
 	      sizeof(*self->lookup_table), compare_symbols);
@@ -137,14 +161,18 @@ static void keyboard__dump_entry(const struct keyboard* self,
 	char sym_name[256];
 	get_symbol_name(entry->symbol, sym_name, sizeof(sym_name));
 
+	const char *group_name MAYBE_UNUSED =
+		xkb_keymap_layout_get_name(self->keymap, entry->group);
+
 	const char* code_name MAYBE_UNUSED =
 		xkb_keymap_key_get_name(self->keymap, entry->code);
 
 	bool is_pressed MAYBE_UNUSED =
 		intset_is_set(&self->key_state, entry->code);
 
-	nvnc_log(NVNC_LOG_DEBUG, "symbol=%s level=%d code=%s %s", sym_name, entry->level,
-	          code_name, is_pressed ? "pressed" : "released");
+	nvnc_log(NVNC_LOG_DEBUG, "group=%s symbol=%s level=%d code=%s %s",
+			group_name, sym_name, entry->level, code_name,
+			is_pressed ? "pressed" : "released");
 }
 
 void keyboard_dump_lookup_table(const struct keyboard* self)
@@ -165,9 +193,6 @@ int keyboard_init(struct keyboard* self, const struct xkb_rule_names* rule_names
 	self->keymap = xkb_keymap_new_from_names(self->context, rule_names, 0);
 	if (!self->keymap)
 		goto keymap_failure;
-
-	if (xkb_keymap_num_layouts(self->keymap) > 1)
-		nvnc_log(NVNC_LOG_WARNING, "Multiple keyboard layouts have been specified, but only one is supported.");
 
 	self->state = xkb_state_new(self->keymap);
 	if (!self->state)
@@ -236,10 +261,27 @@ void keyboard_destroy(struct keyboard* self)
 	xkb_context_unref(self->context);
 }
 
-struct table_entry* keyboard_find_symbol(const struct keyboard* self,
-                                         xkb_keysym_t symbol)
+static xkb_layout_index_t get_current_layout_group(const struct keyboard* self)
 {
-	struct table_entry cmp = { .symbol = symbol };
+	int n_groups = xkb_keymap_num_layouts(self->keymap);
+	assert(n_groups > 0);
+
+	for (int i = 0; i < n_groups; ++i) {
+		if (xkb_state_layout_index_is_active(self->state, i,
+					XKB_STATE_LAYOUT_EFFECTIVE))
+			return i;
+	}
+
+	return -1;
+}
+
+static struct table_entry* keyboard_find_symbol_in_group(const struct keyboard* self,
+                                         xkb_keysym_t symbol, int group)
+{
+	struct table_entry cmp = {
+		.group = group,
+		.symbol = symbol,
+	};
 
 	struct table_entry* entry =
 		bsearch(&cmp, self->lookup_table, self->lookup_table_length,
@@ -254,6 +296,34 @@ struct table_entry* keyboard_find_symbol(const struct keyboard* self,
 	return entry;
 }
 
+static struct table_entry* keyboard_find_symbol(struct keyboard* self,
+                                         xkb_keysym_t symbol)
+{
+	int n_groups = xkb_keymap_num_layouts(self->keymap);
+	struct table_entry* entry = NULL;
+	int current_group = get_current_layout_group(self);
+	int group = -1;
+
+	for (int g = 0; g < n_groups; ++g) {
+		group = (current_group + g) % n_groups;
+		entry = keyboard_find_symbol_in_group(self, symbol, group);
+		if (entry)
+			break;
+	}
+
+	assert(group >= 0);
+
+	if (entry && group != current_group) {
+		nvnc_log(NVNC_LOG_DEBUG, "Keyboard symbol was not found in active layout group; changing to a different one where it was found...");
+		struct kb_mods mods;
+		save_mods(self, &mods);
+		xkb_state_update_mask(self->state, mods.depressed, mods.latched,
+				mods.locked, 0, 0, group);
+	}
+
+	return entry;
+}
+
 static void keyboard_send_mods(struct keyboard* self)
 {
 	xkb_mod_mask_t depressed, latched, locked, group;
@@ -261,7 +331,8 @@ static void keyboard_send_mods(struct keyboard* self)
 	depressed = xkb_state_serialize_mods(self->state, XKB_STATE_MODS_DEPRESSED);
 	latched = xkb_state_serialize_mods(self->state, XKB_STATE_MODS_LATCHED);
 	locked = xkb_state_serialize_mods(self->state, XKB_STATE_MODS_LOCKED);
-	group = xkb_state_serialize_mods(self->state, XKB_STATE_MODS_EFFECTIVE);
+	group = get_current_layout_group(self);
+	self->last_sent_group = group;
 
 	zwp_virtual_keyboard_v1_modifiers(self->virtual_keyboard, depressed,
 	                                  latched, locked, group);
@@ -280,7 +351,9 @@ static void keyboard_apply_mods(struct keyboard* self, xkb_keycode_t code,
 	           XKB_STATE_MODS_LOCKED |
 	           XKB_STATE_MODS_EFFECTIVE;
 
-	if (!(comp & compmask))
+	int current_group = get_current_layout_group(self);
+
+	if (!(comp & compmask) && self->last_sent_group == current_group)
 		return;
 
 	keyboard_send_mods(self);
@@ -294,7 +367,8 @@ static struct table_entry* match_level(struct keyboard* self,
 	while (true) {
 		int level;
 
-		level = xkb_state_key_get_level(self->state, entry->code, 0);
+		level = xkb_state_key_get_level(self->state, entry->code,
+				entry->group);
 
 		if (entry->level == level)
 			return entry;
@@ -350,22 +424,23 @@ static void save_mods(struct keyboard* self, struct kb_mods* mods)
 
 static void restore_mods(struct keyboard* self, struct kb_mods* mods)
 {
+	int current_group = get_current_layout_group(self);
 	xkb_state_update_mask(self->state, mods->depressed, mods->latched,
-			mods->locked, XKB_STATE_MODS_DEPRESSED,
-			XKB_STATE_MODS_LATCHED, XKB_STATE_MODS_LOCKED);
+			mods->locked, 0, 0, current_group);
 }
 
 static void send_key_with_level(struct keyboard* self, xkb_keycode_t code,
 		bool is_pressed, int level)
 {
+	int current_group = get_current_layout_group(self);
 	struct kb_mods save;
 	save_mods(self, &save);
 
 	xkb_mod_mask_t mods = 0;
-	xkb_keymap_key_get_mods_for_level(self->keymap, code, 0, level,
-			&mods, 1);
-	xkb_state_update_mask(self->state, mods, 0, 0, XKB_STATE_MODS_DEPRESSED,
-			XKB_STATE_MODS_LATCHED, XKB_STATE_MODS_LOCKED);
+	xkb_keymap_key_get_mods_for_level(self->keymap, code,
+			current_group, level, &mods, 1);
+	xkb_state_update_mask(self->state, mods, 0, 0, 0, 0,
+			current_group);
 	keyboard_send_mods(self);
 
 	nvnc_log(NVNC_LOG_DEBUG, "send key with level: old mods: %x, new mods: %x",
