@@ -55,6 +55,7 @@ drm = dependency('libdrm')
 xkbcommon = dependency('xkbcommon', version: '>=1.0.0')
 wayland_client = dependency('wayland-client')
 jansson = dependency('jansson')
+libsystemd = dependency('libsystemd')
 
 aml_version = ['>=1.0.0', '<2.0.0']
 neatvnc_version = ['>=0.10', '<1.0.0']
@@ -169,6 +170,15 @@ if libpam.found()
 	dependencies += libpam
 	sources += 'src/pam_auth.c'
 	config.set('ENABLE_PAM', true)
+
+	shared_module(
+		'pam_allow_desktopuser',
+		[ 'src/pam_allow_desktopuser.c' ],
+		dependencies: [ libpam, libsystemd ],
+		name_prefix: '',
+		install: true,
+		install_dir: '/lib/security',
+	)
 endif
 
 configure_file(
