@@ -880,6 +880,9 @@ static int blank_screen(struct wayvnc* self)
 	nvnc_display_feed_buffer(self->nvnc_display, placeholder_fb, &damage);
 	pixman_region_fini(&damage);
 	nvnc_fb_unref(placeholder_fb);
+
+	nvnc_set_cursor(self->nvnc, NULL, 0, 0, 0, 0, false);
+
 	return 0;
 }
 
