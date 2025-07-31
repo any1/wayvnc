@@ -71,6 +71,11 @@ struct cmd_disconnect_client {
 	char id[64];
 };
 
+struct cmd_set_desktop_name {
+	struct cmd cmd;
+	char desktop_name[256];
+};
+
 struct cmd_response {
 	int code;
 	json_t* data;
@@ -180,6 +185,19 @@ static struct cmd_disconnect_client* cmd_disconnect_client_new(json_t* args,
 	return cmd;
 }
 
+static struct cmd_set_desktop_name* cmd_set_desktop_name_new(json_t* args,
+		struct jsonipc_error* err)
+{
+	const char* desktop_name = NULL;
+	if (json_unpack(args, "{s:s}", "desktop-name", &desktop_name) == -1) {
+		jsonipc_error_printf(err, EINVAL, "Missing desktop name");
+		return NULL;
+	}
+	struct cmd_set_desktop_name* cmd = calloc(1, sizeof(*cmd));
+	strlcpy(cmd->desktop_name, desktop_name, sizeof(cmd->desktop_name));
+	return cmd;
+}
+
 static json_t* list_allowed(struct cmd_info (*list)[], size_t len)
 {
 	json_t* allowed = json_array();
@@ -217,6 +235,9 @@ static struct cmd* parse_command(struct jsonipc_request* ipc,
 		break;
 	case CMD_CLIENT_DISCONNECT:
 		cmd = (struct cmd*)cmd_disconnect_client_new(ipc->params, err);
+		break;
+	case CMD_SET_DESKTOP_NAME:
+		cmd = (struct cmd*)cmd_set_desktop_name_new(ipc->params, err);
 		break;
 	case CMD_DETACH:
 	case CMD_VERSION:
@@ -473,6 +494,12 @@ static struct cmd_response* ctl_server_dispatch_cmd(struct ctl* self,
 		struct cmd_disconnect_client* c =
 			(struct cmd_disconnect_client*)cmd;
 		response = self->actions.on_disconnect_client(self, c->id);
+		break;
+		}
+	case CMD_SET_DESKTOP_NAME: {
+		struct cmd_set_desktop_name* c =
+			(struct cmd_set_desktop_name*)cmd;
+		response = self->actions.on_set_desktop_name(self, c->desktop_name);
 		break;
 		}
 	case CMD_DETACH:
