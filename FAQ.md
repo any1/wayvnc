@@ -34,3 +34,10 @@ Replace `$mod normal` with different arguments if applicable.
 A: Try setting the keyboard layout in wayvnc to the one that most closely
 matches the keyboard layout that you're using on the client side. An exact
 layout isn't needed, just one that has all the symbols that you use.
+
+**Q: How do i connect to a running Wayland session?**
+
+A: Let's say you want to control the host at `$host` which is already up and running Wayland:
+
+  * `ssh -L 5900:localhost:5900 $user@$host WAYLAND_DISPLAY=wayland-1 wayvnc localhost`
+  * Now, connect from your local device (VNC tunneled through SSH session): `vncviewer localhost:5900`
