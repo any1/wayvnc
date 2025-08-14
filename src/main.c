@@ -80,7 +80,6 @@ struct wayvnc_client;
 enum socket_type {
 	SOCKET_TYPE_TCP = 0,
 	SOCKET_TYPE_UNIX,
-	SOCKET_TYPE_WEBSOCKET,
 	SOCKET_TYPE_FROM_FD,
 };
 
@@ -922,20 +921,37 @@ static int count_colons_in_string(const char* str)
 	return n;
 }
 
-static char* parse_address_prefix(char* addr, enum socket_type* socket_type)
+static char* parse_address_prefix(char* addr, enum socket_type* socket_type,
+		enum nvnc_stream_type* stream_type)
 {
 	if (is_prefix("tcp:", addr)) {
 		*socket_type = SOCKET_TYPE_TCP;
+		*stream_type = NVNC_STREAM_NORMAL;
 		addr += 4;
 	} else if (is_prefix("unix:", addr)) {
 		*socket_type = SOCKET_TYPE_UNIX;
+		*stream_type = NVNC_STREAM_NORMAL;
 		addr += 5;
-	} else if (is_prefix("ws:", addr)) {
-		*socket_type = SOCKET_TYPE_WEBSOCKET;
-		addr += 3;
 	} else if (is_prefix("fd:", addr)) {
 		*socket_type = SOCKET_TYPE_FROM_FD;
+		*stream_type = NVNC_STREAM_NORMAL;
 		addr += 3;
+	} else if (is_prefix("ws:", addr)) {
+		*socket_type = SOCKET_TYPE_TCP;
+		*stream_type = NVNC_STREAM_WEBSOCKET;
+		addr += 3;
+	} else if (is_prefix("ws-tcp:", addr)) {
+		*socket_type = SOCKET_TYPE_TCP;
+		*stream_type = NVNC_STREAM_WEBSOCKET;
+		addr += 7;
+	} else if (is_prefix("ws-unix:", addr)) {
+		*socket_type = SOCKET_TYPE_UNIX;
+		*stream_type = NVNC_STREAM_WEBSOCKET;
+		addr += 8;
+	} else if (is_prefix("ws-fd:", addr)) {
+		*socket_type = SOCKET_TYPE_FROM_FD;
+		*stream_type = NVNC_STREAM_WEBSOCKET;
+		addr += 6;
 	}
 	return addr;
 }
@@ -974,16 +990,16 @@ static char* parse_address_port(char* addr, uint16_t* port)
 }
 
 static int add_listening_address(struct wayvnc* self, const char* address,
-		uint16_t port, enum socket_type socket_type)
+		uint16_t port, enum socket_type socket_type,
+		enum nvnc_stream_type stream_type)
 {
 	char buffer[256];
 	char* addr = buffer;
 	strlcpy(buffer, address, sizeof(buffer));
 
-	addr = parse_address_prefix(addr, &socket_type);
+	addr = parse_address_prefix(addr, &socket_type, &stream_type);
 
-	if (socket_type == SOCKET_TYPE_TCP ||
-			socket_type == SOCKET_TYPE_WEBSOCKET) {
+	if (socket_type == SOCKET_TYPE_TCP) {
 		uint16_t parsed_port = 0;
 		addr = parse_address_port(addr, &parsed_port);
 		if (parsed_port)
@@ -994,19 +1010,14 @@ static int add_listening_address(struct wayvnc* self, const char* address,
 	switch (socket_type) {
 		case SOCKET_TYPE_TCP:
 			rc = nvnc_listen_tcp(self->nvnc, addr, port,
-					NVNC_STREAM_NORMAL);
+					stream_type);
 			break;
 		case SOCKET_TYPE_UNIX:
-			rc = nvnc_listen_unix(self->nvnc, addr,
-					NVNC_STREAM_NORMAL);
-			break;
-		case SOCKET_TYPE_WEBSOCKET:
-			rc = nvnc_listen_tcp(self->nvnc, addr, port,
-					NVNC_STREAM_WEBSOCKET);
+			rc = nvnc_listen_unix(self->nvnc, addr, stream_type);
 			break;
 		case SOCKET_TYPE_FROM_FD:;
 			int fd = atoi(addr);
-			rc = nvnc_listen(self->nvnc, fd, NVNC_STREAM_NORMAL);
+			rc = nvnc_listen(self->nvnc, fd, stream_type);
 			break;
 		default:
 			abort();
@@ -1029,13 +1040,15 @@ static int add_listening_address(struct wayvnc* self, const char* address,
 }
 
 static int apply_addresses_from_config(struct wayvnc* self,
-		enum socket_type default_socket_type)
+		enum socket_type default_socket_type,
+		enum nvnc_stream_type default_stream_type)
 {
 	uint16_t port = self->cfg.port ? self->cfg.port : DEFAULT_PORT;
 
 	if (!self->cfg.address)
 		return add_listening_address(self, DEFAULT_ADDRESS, port,
-					default_socket_type);
+					default_socket_type,
+					default_stream_type);
 
 	char *addresses = strdup(self->cfg.address);
 	assert(addresses);
@@ -1045,7 +1058,8 @@ static int apply_addresses_from_config(struct wayvnc* self,
 	const char* delim = " ";
 	char* tok = strtok(addresses, delim);
 	while (tok) {
-		if (add_listening_address(self, tok, port, default_socket_type) < 0)
+		if (add_listening_address(self, tok, port, default_socket_type,
+					default_stream_type) < 0)
 			goto out;
 		tok = strtok(NULL, delim);
 	}
@@ -2198,10 +2212,9 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 
-	int n_address_modifiers = use_unix_socket + use_websocket +
-		use_external_fd;
+	int n_address_modifiers = use_unix_socket + use_external_fd;
 	if (n_address_modifiers > 1) {
-		nvnc_log(NVNC_LOG_ERROR, "Only one of the websocket, unix-socket or the external-listener-fd options may be set");
+		nvnc_log(NVNC_LOG_ERROR, "Only one of unix-socket or the external-listener-fd options may be set");
 		return 1;
 	}
 
@@ -2289,10 +2302,11 @@ int main(int argc, char* argv[])
 	enum socket_type default_socket_type = SOCKET_TYPE_TCP;
 	if (use_unix_socket)
 		default_socket_type = SOCKET_TYPE_UNIX;
-	else if (use_websocket)
-		default_socket_type = SOCKET_TYPE_WEBSOCKET;
 	else if (use_external_fd)
 		default_socket_type = SOCKET_TYPE_FROM_FD;
+	enum nvnc_stream_type default_stream_type = NVNC_STREAM_NORMAL;
+	if (use_websocket)
+		default_stream_type = NVNC_STREAM_WEBSOCKET;
 
 	if (!start_detached && !configure_screencopy(&self))
 		goto screencopy_failure;
@@ -2336,11 +2350,12 @@ int main(int argc, char* argv[])
 
 	if (port) {
 		if (add_listening_address(&self, address, port,
-				default_socket_type) < 0)
+				default_socket_type, default_stream_type) < 0)
 			goto nvnc_failure;
 	} else if (!option_parser_get_value_with_offset(&option_parser,
 				"address", 0)) {
-		if (apply_addresses_from_config(&self, default_socket_type) < 0)
+		if (apply_addresses_from_config(&self, default_socket_type,
+					default_stream_type) < 0)
 			goto nvnc_failure;
 	} else {
 		port = self.cfg.port ? self.cfg.port : DEFAULT_PORT;
@@ -2352,7 +2367,8 @@ int main(int argc, char* argv[])
 				break;
 
 			if (add_listening_address(&self, address, port,
-					default_socket_type) < 0)
+					default_socket_type,
+					default_stream_type) < 0)
 				goto nvnc_failure;
 		}
 	}
