@@ -86,6 +86,7 @@ enum socket_type {
 
 struct wayvnc {
 	bool do_exit;
+	bool exit_on_disconnect;
 
 	struct wl_display* display;
 	struct wl_registry* registry;
@@ -1510,6 +1511,10 @@ static void client_destroy(void* obj)
 	nvnc_log(NVNC_LOG_DEBUG, "Client disconnected, new client count: %d",
 			wayvnc->nr_clients);
 
+	if (self->server->exit_on_disconnect && self->server->nr_clients == 0) {
+		wayvnc_exit(wayvnc);
+	}
+
 	if (wayvnc->ctl) {
 		struct ctl_server_client_info info = {};
 		compose_client_info(self, &info);
@@ -2077,6 +2082,7 @@ int main(int argc, char* argv[])
 	int max_rate = 30;
 	bool disable_input = false;
 	bool use_transient_seat = false;
+	bool exit_on_disconnect = false;
 
 	const char* log_level_name = NULL;
 	bool is_verbose = false;
@@ -2093,6 +2099,8 @@ int main(int argc, char* argv[])
 		  "Disable all remote input." },
 		{ 'D', "detached", NULL,
 		  "Start detached from a compositor." },
+		{ 'e', "exit-on-disconnect", NULL,
+		  "Exit when last client disconnects." },
 		{ 'f', "max-fps", "<fps>",
 		  "Set rate limit.",
 		  .default_ = "30" },
@@ -2159,6 +2167,7 @@ int main(int argc, char* argv[])
 	overlay_cursor = !!option_parser_get_value(&option_parser, "render-cursor");
 	show_performance = !!option_parser_get_value(&option_parser,
 			"show-performance");
+	exit_on_disconnect = !!option_parser_get_value(&option_parser, "exit-on-disconnect");
 	use_unix_socket = !!option_parser_get_value(&option_parser, "unix-socket");
 	use_websocket = !!option_parser_get_value(&option_parser, "websocket");
 	use_external_fd = !!option_parser_get_value(&option_parser,
@@ -2174,6 +2183,7 @@ int main(int argc, char* argv[])
 			"disable-resizing");
 
 	self.start_detached = start_detached;
+	self.exit_on_disconnect = exit_on_disconnect;
 	self.overlay_cursor = overlay_cursor;
 	self.max_rate = max_rate;
 	self.enable_gpu_features = enable_gpu_features;
