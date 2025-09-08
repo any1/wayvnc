@@ -1234,6 +1234,11 @@ void on_output_dimension_change(struct output* output)
 
 	nvnc_log(NVNC_LOG_DEBUG, "Output dimensions changed. Restarting frame capturer...");
 
+	aml_stop(aml_get_default(), self->rate_limiter);
+	if (self->next_frame) {
+		nvnc_fb_unref(self->next_frame->nvnc_fb);
+		self->next_frame = NULL;
+	}
 	screencopy_stop(self->screencopy);
 	wayvnc_start_capture_immediate(self);
 }
