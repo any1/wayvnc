@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 - 2022 Andri Yngvason
+ * Copyright (c) 2019 - 2025 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -32,6 +32,8 @@
 #include "usdt.h"
 #include "pixels.h"
 #include "config.h"
+#include "image-source.h"
+#include "output.h"
 
 extern struct zwlr_screencopy_manager_v1* screencopy_manager;
 
@@ -306,9 +308,14 @@ static int wlr_screencopy_start(struct screencopy* ptr, bool is_immediate_copy)
 	return screencopy__start_capture(self, now);
 }
 
-static struct screencopy* wlr_screencopy_create(struct wl_output* output,
+static struct screencopy* wlr_screencopy_create(struct image_source* source,
 		bool render_cursor)
 {
+	if (!image_source_is_output(source)) {
+		nvnc_log(NVNC_LOG_ERROR, "Missing features for non-output capture");
+		return NULL;
+	}
+
 	struct wlr_screencopy* self = calloc(1, sizeof(*self));
 	if (!self)
 		return NULL;
@@ -316,7 +323,7 @@ static struct screencopy* wlr_screencopy_create(struct wl_output* output,
 	self->parent.impl = &wlr_screencopy_impl;
 	self->parent.rate_limit = 30;
 
-	self->wl_output = output;
+	self->wl_output = output_from_image_source(source)->wl_output;
 	self->overlay_cursor = render_cursor;
 
 	self->pool = wv_buffer_pool_create(NULL);

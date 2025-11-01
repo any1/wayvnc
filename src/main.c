@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 - 2024 Andri Yngvason
+ * Copyright (c) 2019 - 2025 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -62,6 +62,7 @@
 #include "pixels.h"
 #include "buffer.h"
 #include "time-util.h"
+#include "image-source.h"
 
 #ifdef ENABLE_PAM
 #include "pam_auth.h"
@@ -99,7 +100,7 @@ struct wayvnc {
 	struct zwlr_data_control_manager_v1* data_control_manager;
 	struct ext_transient_seat_manager_v1* transient_seat_manager;
 
-	struct output* selected_output;
+	struct image_source* image_source;
 	struct seat* selected_seat;
 
 	struct screencopy* screencopy;
@@ -267,6 +268,10 @@ static void registry_add(void* data, struct wl_registry* registry,
 			wl_display_dispatch(self->display);
 			wl_display_roundtrip(self->display);
 
+			if (self->image_source) {
+				image_source_notify_output_added(
+						self->image_source, output);
+			}
 			ctl_server_event_output_added(self->ctl, output->name);
 		}
 
@@ -361,7 +366,8 @@ static void registry_remove(void* data, struct wl_registry* registry,
 
 	struct output* out = output_find_by_id(&self->outputs, id);
 	if (out) {
-		if (out == self->selected_output) {
+		if (image_source_is_output(self->image_source) &&
+				out == output_from_image_source(self->image_source)) {
 			nvnc_log(NVNC_LOG_WARNING, "Selected output %s went away",
 					out->name);
 			switch_to_prev_output(self);
@@ -373,7 +379,8 @@ static void registry_remove(void* data, struct wl_registry* registry,
 		wl_list_remove(&out->link);
 		output_destroy(out);
 
-		if (out == self->selected_output) {
+		if (image_source_is_output(self->image_source) &&
+				out == output_from_image_source(self->image_source)) {
 			if (self->start_detached) {
 				nvnc_log(NVNC_LOG_WARNING, "No fallback outputs left. Detaching...");
 				wayland_detach(self);
@@ -419,7 +426,7 @@ static void wayland_detach(struct wayvnc* self)
 		}
 	}
 
-	self->selected_output = NULL;
+	self->image_source = NULL;
 
 	output_list_destroy(&self->outputs);
 	seat_list_destroy(&self->seats);
@@ -624,8 +631,10 @@ struct cmd_response* on_output_cycle(struct ctl* ctl, enum output_cycle_directio
 			direction == OUTPUT_CYCLE_FORWARD ? "next" : "previous");
 	if (!self->display)
 		return cmd_failed("Not attached!");
+	if (!image_source_is_output(self->image_source))
+		return cmd_failed("Not capturing an output!");
 	struct output* next = output_cycle(&self->outputs,
-			self->selected_output, direction);
+			output_from_image_source(self->image_source), direction);
 	switch_to_output(self, next);
 	return cmd_ok();
 }
@@ -638,6 +647,8 @@ struct cmd_response* on_output_switch(struct ctl* ctl,
 	struct wayvnc* self = ctl_server_userdata(ctl);
 	if (!self->display)
 		return cmd_failed("Not attached!");
+	if (!image_source_is_output(self->image_source))
+		return cmd_failed("Not capturing an output!");
 	if (!output_name || output_name[0] == '\0')
 		return cmd_failed("Output name is required");
 	struct output* output = output_find_by_name(&self->outputs, output_name);
@@ -710,8 +721,12 @@ static int get_output_list(struct ctl* ctl,
 				sizeof(item->description));
 		item->height = output->height;
 		item->width = output->width;
-		item->captured = (output->id == self->selected_output->id);
-		strlcpy(item->power, output_power_state_name(output->power),
+		if (image_source_is_output(self->image_source)) {
+			struct output* source_output =
+				output_from_image_source(self->image_source);
+			item->captured = (output->id == source_output->id);
+		}
+		strlcpy(item->power, image_source_power_state_name(output->power),
 				sizeof(item->power));
 		item++;
 	}
@@ -776,8 +791,10 @@ static void on_pointer_event(struct nvnc_client* client, uint16_t x, uint16_t y,
 		return;
 	}
 
+	// TODO: Not all image sources have dimensions available
+
 	uint32_t xfx = 0, xfy = 0;
-	output_transform_coord(wayvnc->selected_output, x, y, &xfx, &xfy);
+	image_source_transform_coord(wayvnc->image_source, x, y, &xfx, &xfy);
 
 	pointer_set(&wv_client->pointer, xfx, xfy, button_mask);
 }
@@ -828,15 +845,17 @@ static bool on_client_resize(struct nvnc_client* nvnc_client,
 
 	uint16_t width = nvnc_desktop_layout_get_width(layout);
 	uint16_t height = nvnc_desktop_layout_get_height(layout);
-	struct output* output = client->server->selected_output;
 
-	if (output == NULL)
+	if (!self->image_source || !image_source_is_output(self->image_source))
 		return false;
 
 	if (self->master_layout_client && self->master_layout_client != client)
 		return false;
 
 	self->master_layout_client = client;
+
+	struct output* output =
+		output_from_image_source(client->server->image_source);
 
 	nvnc_log(NVNC_LOG_DEBUG,
 		"Client resolution changed: %ux%u, capturing output %s which is headless: %s",
@@ -882,9 +901,9 @@ static int blank_screen(struct wayvnc* self)
 	int width = 1280;
 	int height = 720;
 
-	if (self->selected_output) {
-		width = output_get_transformed_width(self->selected_output);
-		height = output_get_transformed_height(self->selected_output);
+	if (self->image_source) {
+		image_source_get_transformed_dimensions(self->image_source,
+				&width, &height);
 	}
 
 	struct nvnc_fb* placeholder_fb = create_placeholder_buffer(width, height);
@@ -1184,12 +1203,12 @@ int wayvnc_start_capture_immediate(struct wayvnc* self)
 	if (self->capture_retry_timer)
 		return 0;
 
-	struct output* output = self->selected_output;
-	int rc = output_acquire_power_on(output);
+	int rc = image_source_acquire_power_on(self->image_source);
 	if (rc == 0) {
 		nvnc_log(NVNC_LOG_DEBUG, "Acquired power state management. Waiting for power event to start capturing");
 		return 0;
-	} else if (rc > 0 && output->power != OUTPUT_POWER_ON) {
+	} else if (rc > 0 && image_source_get_power(self->image_source)
+			!= IMAGE_SOURCE_POWER_ON) {
 		nvnc_log(NVNC_LOG_DEBUG, "Output power state management already acquired, but not yet powered on");
 		return 0;
 	} else if (rc < 0) {
@@ -1224,15 +1243,15 @@ static void wayvnc_restart_capture(struct wayvnc* self)
 }
 
 // TODO: Handle transform change too
-void on_output_dimension_change(struct output* output)
+void on_image_source_dimension_change(struct image_source* image_source)
 {
-	struct wayvnc* self = output->userdata;
-	assert(self->selected_output == output);
+	struct wayvnc* self = image_source->userdata;
+	assert(self->image_source == image_source);
 
 	if (self->nr_clients == 0)
 		return;
 
-	nvnc_log(NVNC_LOG_DEBUG, "Output dimensions changed. Restarting frame capturer...");
+	nvnc_log(NVNC_LOG_DEBUG, "Dimensions changed. Restarting frame capturer...");
 
 	aml_stop(aml_get_default(), self->rate_limiter);
 	if (self->next_frame) {
@@ -1243,21 +1262,26 @@ void on_output_dimension_change(struct output* output)
 	wayvnc_start_capture_immediate(self);
 }
 
-static void on_output_power_change(struct output* output)
+static void on_image_source_power_change(struct image_source* image_source)
 {
-	nvnc_trace("Output %s power state changed to %s", output->name,
-			output_power_state_name(output->power));
+	char description[256];
+	image_source_describe(image_source, description, sizeof(description));
 
-	struct wayvnc* self = output->userdata;
-	if (self->selected_output != output || self->nr_clients == 0)
+	enum image_source_power_state state = image_source_get_power(image_source);
+
+	nvnc_trace("%s power state changed to %s", description,
+			image_source_power_state_name(state));
+
+	struct wayvnc* self = image_source->userdata;
+	if (self->image_source != image_source || self->nr_clients == 0)
 		return;
 
-	switch (output->power) {
-	case OUTPUT_POWER_ON:
+	switch (state) {
+	case IMAGE_SOURCE_POWER_ON:
 		wayvnc_start_capture_immediate(self);
 		wayvnc_start_cursor_capture(self, true);
 		break;
-	case OUTPUT_POWER_OFF:
+	case IMAGE_SOURCE_POWER_OFF:
 		nvnc_log(NVNC_LOG_WARNING, "Output is now off. Pausing frame capture");
 		screencopy_stop(self->cursor_sc);
 		screencopy_stop(self->screencopy);
@@ -1272,7 +1296,7 @@ static void apply_output_transform(const struct wayvnc* self,
 		struct wv_buffer* buffer, struct pixman_region16* damage)
 {
 	enum wl_output_transform output_transform, buffer_transform;
-	output_transform = self->selected_output->transform;
+	output_transform = image_source_get_transform(self->image_source);
 
 	if (buffer->y_inverted) {
 		buffer_transform = wv_output_transform_compose(output_transform,
@@ -1433,7 +1457,12 @@ static void on_perf_tick(struct aml_ticker* obj)
 {
 	struct wayvnc* self = aml_get_userdata(obj);
 
-	double total_area = self->selected_output->width * self->selected_output->height;
+	// TODO
+	int width, height;
+	if (!image_source_get_dimensions(self->image_source, &width, &height))
+		return;
+
+	double total_area = width * height;
 	double area_avg = (double)self->damage_area_sum / (double)self->n_frames_captured;
 	double relative_area_avg = 100.0 * area_avg / total_area;
 
@@ -1555,7 +1584,7 @@ static void client_destroy(void* obj)
 	if (wayvnc->nr_clients == 0 && wayvnc->display) {
 		nvnc_log(NVNC_LOG_INFO, "Stopping screen capture");
 		screencopy_stop(wayvnc->screencopy);
-		output_release_power_on(wayvnc->selected_output);
+		image_source_release_power_on(wayvnc->image_source);
 		stop_performance_ticker(wayvnc);
 	}
 
@@ -1621,8 +1650,14 @@ static void client_init_pointer(struct wayvnc_client* self)
 	if (!wayvnc->pointer_manager)
 		return;
 
+	// TODO
+	if (!image_source_is_output(wayvnc->image_source))
+		return;
+
+	struct output* output = output_from_image_source(wayvnc->image_source);
+
 	self->pointer.vnc = self->server->nvnc;
-	self->pointer.output = self->server->selected_output;
+	self->pointer.output = output;
 
 	if (self->pointer.pointer)
 		pointer_destroy(&self->pointer);
@@ -1633,7 +1668,7 @@ static void client_init_pointer(struct wayvnc_client* self)
 	self->pointer.pointer = pointer_manager_version >= 2
 		? zwlr_virtual_pointer_manager_v1_create_virtual_pointer_with_output(
 			wayvnc->pointer_manager, self->seat->wl_seat,
-			wayvnc->selected_output->wl_output)
+			output->wl_output)
 		: zwlr_virtual_pointer_manager_v1_create_virtual_pointer(
 			wayvnc->pointer_manager, self->seat->wl_seat);
 
@@ -1768,19 +1803,28 @@ static void client_init_data_control(struct wayvnc_client* self)
 			self->seat->wl_seat);
 }
 
-void log_selected_output(struct wayvnc* self)
+void log_image_source(struct wayvnc* self)
 {
-	nvnc_log(NVNC_LOG_INFO, "Capturing output %s",
-			self->selected_output->name);
+	char description[256];
+	image_source_describe(self->image_source, description, sizeof(description));
+
+	nvnc_log(NVNC_LOG_INFO, "Capturing %s", description);
+
+	if (!image_source_is_output(self->image_source))
+		return;
+
+	// TODO: Maybe remove this?
+	struct output* source_output = output_from_image_source(self->image_source);
+
 	struct output* output;
 	wl_list_for_each(output, &self->outputs, link) {
-		bool this_output = (output->id == self->selected_output->id);
+		bool this_output = (output->id == source_output->id);
 		nvnc_log(NVNC_LOG_INFO, "%s %s %dx%d+%dx%d Power:%s",
 				this_output ? ">>" : "--",
 				output->description,
 				output->width, output->height,
 				output->x, output->y,
-				output_power_state_name(output->power));
+				image_source_power_state_name(output->power));
 	}
 }
 
@@ -1863,8 +1907,8 @@ static bool configure_cursor_sc(struct wayvnc* self,
 		return false;
 	}
 
-	self->cursor_sc = screencopy_create_cursor(
-			self->selected_output->wl_output, seat->wl_seat);
+	self->cursor_sc = screencopy_create_cursor(self->image_source,
+			seat->wl_seat);
 	if (!self->cursor_sc) {
 		nvnc_log(NVNC_LOG_DEBUG, "Failed to capture cursor");
 		return false;
@@ -1886,7 +1930,7 @@ bool configure_screencopy(struct wayvnc* self)
 	screencopy_stop(self->screencopy);
 	screencopy_destroy(self->screencopy);
 
-	self->screencopy = screencopy_create(self->selected_output->wl_output,
+	self->screencopy = screencopy_create(self->image_source,
 			self->overlay_cursor);
 	if (!self->screencopy) {
 		nvnc_log(NVNC_LOG_ERROR, "screencopy is not supported by compositor");
@@ -1911,31 +1955,37 @@ bool configure_screencopy(struct wayvnc* self)
 	return true;
 }
 
-void set_selected_output(struct wayvnc* self, struct output* output)
+void set_image_source(struct wayvnc* self, struct image_source* image_source)
 {
-	if (self->selected_output) {
-		self->selected_output->on_dimension_change = NULL;
+	if (self->image_source) {
+		self->image_source->on_dimension_change = NULL;
+		self->image_source->on_power_change = NULL;
 	}
-	self->selected_output = output;
-	output->on_dimension_change = on_output_dimension_change;
-	output->on_power_change = on_output_power_change;
-	output->userdata = self;
+	self->image_source = image_source;
 
-	if (self->ctl)
-		ctl_server_event_capture_changed(self->ctl, output->name);
-	log_selected_output(self);
+	image_source->on_dimension_change = on_image_source_dimension_change;
+	image_source->on_power_change = on_image_source_power_change;
+	image_source->userdata = self;
+
+	if (self->ctl && image_source_is_output(image_source)) {
+		ctl_server_event_capture_changed(self->ctl,
+				output_from_image_source(image_source)->name);
+	}
+
+	log_image_source(self);
 }
 
 void switch_to_output(struct wayvnc* self, struct output* output)
 {
-	if (self->selected_output == output) {
+	assert(image_source_is_output(self->image_source));
+	if (output_from_image_source(self->image_source) == output) {
 		nvnc_log(NVNC_LOG_INFO, "Already selected output %s",
 				output->name);
 		return;
 	}
 	screencopy_stop(self->screencopy);
 	output_release_power_on(output);
-	set_selected_output(self, output);
+	set_image_source(self, &output->image_source);
 	configure_screencopy(self);
 	reinitialise_pointers(self);
 	if (self->nr_clients > 0)
@@ -1949,8 +1999,8 @@ void switch_to_next_output(struct wayvnc* self)
 {
 	nvnc_log(NVNC_LOG_INFO, "Rotating to next output");
 	struct output* next = output_cycle(&self->outputs,
-			self->selected_output, OUTPUT_CYCLE_FORWARD);
-
+			output_from_image_source(self->image_source),
+			OUTPUT_CYCLE_FORWARD);
 	switch_to_output(self, next);
 }
 
@@ -1958,7 +2008,8 @@ void switch_to_prev_output(struct wayvnc* self)
 {
 	nvnc_log(NVNC_LOG_INFO, "Rotating to previous output");
 	struct output* prev = output_cycle(&self->outputs,
-			self->selected_output, OUTPUT_CYCLE_REVERSE);
+			output_from_image_source(self->image_source),
+			OUTPUT_CYCLE_REVERSE);
 	switch_to_output(self, prev);
 }
 
@@ -2035,7 +2086,7 @@ static bool wayland_attach(struct wayvnc* self, const char* display,
 		wayland_detach(self);
 		return false;
 	}
-	set_selected_output(self, out);
+	set_image_source(self, &out->image_source);
 	configure_screencopy(self);
 
 	struct nvnc_client* nvnc_client;
@@ -2310,7 +2361,7 @@ int main(int argc, char* argv[])
 				goto wayland_failure;
 			}
 		}
-		set_selected_output(&self, out);
+		set_image_source(&self, &out->image_source);
 
 		struct seat* seat = NULL;
 		if (seat_name) {

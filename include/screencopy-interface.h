@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 - 2024 Andri Yngvason
+ * Copyright (c) 2022 - 2025 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -21,7 +21,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-struct wl_output;
+struct image_source;
 struct wl_seat;
 
 enum screencopy_result {
@@ -40,8 +40,8 @@ typedef void (*screencopy_done_fn)(enum screencopy_result,
 
 struct screencopy_impl {
 	enum screencopy_capabilitites caps;
-	struct screencopy* (*create)(struct wl_output*, bool render_cursor);
-	struct screencopy* (*create_cursor)(struct wl_output*, struct wl_seat*);
+	struct screencopy* (*create)(struct image_source*, bool render_cursor);
+	struct screencopy* (*create_cursor)(struct image_source*, struct wl_seat*);
 	void (*destroy)(struct screencopy*);
 	int (*start)(struct screencopy*, bool immediate);
 	void (*stop)(struct screencopy*);
@@ -65,9 +65,9 @@ struct screencopy {
 	void* userdata;
 };
 
-struct screencopy* screencopy_create(struct wl_output* output,
+struct screencopy* screencopy_create(struct image_source* source,
 		bool render_cursor);
-struct screencopy* screencopy_create_cursor(struct wl_output* output,
+struct screencopy* screencopy_create_cursor(struct image_source* source,
 		struct wl_seat* seat);
 void screencopy_destroy(struct screencopy* self);
 

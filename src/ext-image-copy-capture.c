@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 - 2024 Andri Yngvason
+ * Copyright (c) 2022 - 2025 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -37,6 +37,8 @@
 #include "usdt.h"
 #include "pixels.h"
 #include "config.h"
+#include "image-source.h"
+#include "output.h"
 
 extern struct ext_output_image_capture_source_manager_v1* ext_output_image_capture_source_manager;
 extern struct ext_image_copy_capture_manager_v1* ext_image_copy_capture_manager;
@@ -55,7 +57,7 @@ struct format_array {
 
 struct ext_image_copy_capture {
 	struct screencopy parent;
-	struct wl_output* wl_output;
+	struct image_source *image_source;
 	struct wl_seat* wl_seat;
 	struct ext_image_copy_capture_session_v1* session;
 	struct ext_image_copy_capture_frame_v1* frame;
@@ -123,9 +125,14 @@ static void ext_image_copy_capture_deinit_session(struct ext_image_copy_capture*
 
 static int ext_image_copy_capture_init_session(struct ext_image_copy_capture* self)
 {
-	struct ext_image_capture_source_v1* source;
-	source = ext_output_image_capture_source_manager_v1_create_source(
-			ext_output_image_capture_source_manager, self->wl_output);
+	struct ext_image_capture_source_v1* source = NULL;
+	if (image_source_is_output(self->image_source)) {
+		struct wl_output *wl_output =
+			output_from_image_source(self->image_source)->wl_output;
+		source = ext_output_image_capture_source_manager_v1_create_source(
+				ext_output_image_capture_source_manager,
+				wl_output);
+	}
 	if (!source)
 		return -1;
 
@@ -146,9 +153,14 @@ static int ext_image_copy_capture_init_session(struct ext_image_copy_capture* se
 
 static int ext_image_copy_capture_init_cursor_session(struct ext_image_copy_capture* self)
 {
-	struct ext_image_capture_source_v1* source;
-	source = ext_output_image_capture_source_manager_v1_create_source(
-			ext_output_image_capture_source_manager, self->wl_output);
+	struct ext_image_capture_source_v1* source = NULL;
+	if (image_source_is_output(self->image_source)) {
+		struct wl_output *wl_output =
+			output_from_image_source(self->image_source)->wl_output;
+		source = ext_output_image_capture_source_manager_v1_create_source(
+				ext_output_image_capture_source_manager,
+				wl_output);
+	}
 	if (!source)
 		return -1;
 
@@ -695,8 +707,8 @@ static void ext_image_copy_capture_stop(struct screencopy* base)
 	self->frame_count = 0;
 }
 
-static struct screencopy* ext_image_copy_capture_create(struct wl_output* output,
-		bool render_cursor)
+static struct screencopy* ext_image_copy_capture_create(
+		struct image_source* source, bool render_cursor)
 {
 	struct ext_image_copy_capture* self = calloc(1, sizeof(*self));
 	if (!self)
@@ -705,7 +717,7 @@ static struct screencopy* ext_image_copy_capture_create(struct wl_output* output
 	self->parent.impl = &ext_image_copy_capture_impl;
 	self->parent.rate_limit = 30;
 
-	self->wl_output = output;
+	self->image_source = source;
 	self->render_cursors = render_cursor;
 
 	self->timer = aml_timer_new(0,
@@ -723,8 +735,8 @@ failure:
 	return NULL;
 }
 
-static struct screencopy* ext_image_copy_capture_create_cursor(struct wl_output* output,
-		struct wl_seat* seat)
+static struct screencopy* ext_image_copy_capture_create_cursor(
+		struct image_source* source, struct wl_seat* seat)
 {
 	struct ext_image_copy_capture* self = calloc(1, sizeof(*self));
 	if (!self)
@@ -733,7 +745,7 @@ static struct screencopy* ext_image_copy_capture_create_cursor(struct wl_output*
 	self->parent.impl = &ext_image_copy_capture_impl;
 	self->parent.rate_limit = 30;
 
-	self->wl_output = output;
+	self->image_source = source;
 	self->wl_seat = seat;
 
 	self->timer = aml_timer_new(0,

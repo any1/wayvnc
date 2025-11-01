@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Andri Yngvason
+ * Copyright (c) 2022 - 2025 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -26,21 +26,21 @@ extern struct ext_image_copy_capture_manager_v1* ext_image_copy_capture_manager;
 extern struct screencopy_impl wlr_screencopy_impl;
 extern struct screencopy_impl ext_image_copy_capture_impl;
 
-struct screencopy* screencopy_create(struct wl_output* output,
+struct screencopy* screencopy_create(struct image_source* source,
 		bool render_cursor)
 {
 	if (ext_image_copy_capture_manager && ext_output_image_capture_source_manager)
-		return ext_image_copy_capture_impl.create(output, render_cursor);
+		return ext_image_copy_capture_impl.create(source, render_cursor);
 	if (screencopy_manager)
-		return wlr_screencopy_impl.create(output, render_cursor);
+		return wlr_screencopy_impl.create(source, render_cursor);
 	return NULL;
 }
 
-struct screencopy* screencopy_create_cursor(struct wl_output* output,
+struct screencopy* screencopy_create_cursor(struct image_source* source,
 		struct wl_seat* seat)
 {
 	if (ext_image_copy_capture_manager && ext_output_image_capture_source_manager)
-		return ext_image_copy_capture_impl.create_cursor(output, seat);
+		return ext_image_copy_capture_impl.create_cursor(source, seat);
 	return NULL;
 }
 

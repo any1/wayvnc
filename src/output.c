@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 - 2020 Andri Yngvason
+ * Copyright (c) 2019 - 2025 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -14,6 +14,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <stdio.h>
 #include <stdint.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -34,91 +35,10 @@
 extern struct zxdg_output_manager_v1* xdg_output_manager;
 extern struct zwlr_output_power_manager_v1* wlr_output_power_manager;
 
-#define MIN(a, b) ((a) < (b) ? (a) : (b))
-#define MAX(a, b) ((a) > (b) ? (a) : (b))
-
-void output_transform_coord(const struct output* self,
-                            uint32_t src_x, uint32_t src_y,
-                            uint32_t* dst_x, uint32_t* dst_y)
+struct output* output_from_image_source(const struct image_source* source)
 {
-	switch (self->transform) {
-	case WL_OUTPUT_TRANSFORM_NORMAL:
-		*dst_x = src_x;
-		*dst_y = src_y;
-		break;
-	case WL_OUTPUT_TRANSFORM_90:
-		*dst_x = src_y;
-		*dst_y = self->height - src_x;
-		break;
-	case WL_OUTPUT_TRANSFORM_180:
-		*dst_x = self->width - src_x;
-		*dst_y = self->height - src_y;
-		break;
-	case WL_OUTPUT_TRANSFORM_270:
-		*dst_x = self->width - src_y;
-		*dst_y = src_x;
-		break;
-	case WL_OUTPUT_TRANSFORM_FLIPPED:
-		*dst_x = self->width - src_x;
-		*dst_y = src_y;
-		break;
-	case WL_OUTPUT_TRANSFORM_FLIPPED_90:
-		*dst_x = src_y;
-		*dst_y = src_x;
-		break;
-	case WL_OUTPUT_TRANSFORM_FLIPPED_180:
-		*dst_x = src_x;
-		*dst_y = self->height - src_y;
-		break;
-	case WL_OUTPUT_TRANSFORM_FLIPPED_270:
-		*dst_x = self->width - src_y;
-		*dst_y = self->height - src_x;
-		break;
-	}
-}
-
-void output_transform_box_coord(const struct output* self,
-                                uint32_t src_x0, uint32_t src_y0,
-                                uint32_t src_x1, uint32_t src_y1,
-                                uint32_t* dst_x0, uint32_t* dst_y0,
-				uint32_t* dst_x1, uint32_t* dst_y1)
-{
-	uint32_t x0 = 0, y0 = 0, x1 = 0, y1 = 0;
-
-	output_transform_coord(self, src_x0, src_y0, &x0, &y0);
-	output_transform_coord(self, src_x1, src_y1, &x1, &y1);
-
-	*dst_x0 = MIN(x0, x1);
-	*dst_x1 = MAX(x0, x1);
-	*dst_y0 = MIN(y0, y1);
-	*dst_y1 = MAX(y0, y1);
-}
-
-static bool is_transform_90_degrees(enum wl_output_transform transform)
-{
-	switch (transform) {
-	case WL_OUTPUT_TRANSFORM_90:
-	case WL_OUTPUT_TRANSFORM_270:
-	case WL_OUTPUT_TRANSFORM_FLIPPED_90:
-	case WL_OUTPUT_TRANSFORM_FLIPPED_270:
-		return true;
-	default:
-		break;
-	}
-
-	return false;
-}
-
-uint32_t output_get_transformed_width(const struct output* self)
-{
-	return is_transform_90_degrees(self->transform)
-	      ? self->height : self->width;
-}
-
-uint32_t output_get_transformed_height(const struct output* self)
-{
-	return is_transform_90_degrees(self->transform)
-	      ? self->width : self->height;
+	assert(image_source_is_output(source));
+	return (struct output*)source;
 }
 
 static void output_handle_geometry(void* data, struct wl_output* wl_output,
@@ -160,11 +80,11 @@ static void output_handle_done(void* data, struct wl_output* wl_output)
 {
 	struct output* output = data;
 
-	if (output->is_dimension_changed && output->on_dimension_change)
-		output->on_dimension_change(output);
+	if (output->is_dimension_changed && output->image_source.on_dimension_change)
+		output->image_source.on_dimension_change(&output->image_source);
 
-	if (output->is_transform_changed && output->on_transform_change)
-		output->on_transform_change(output);
+	if (output->is_transform_changed && output->image_source.on_transform_change)
+		output->image_source.on_transform_change(&output->image_source);
 
 	output->is_dimension_changed = false;
 	output->is_transform_changed = false;
@@ -182,7 +102,7 @@ static const struct wl_output_listener output_listener = {
 	.scale = output_handle_scale,
 };
 
-void output_destroy(struct output* output)
+static void output_deinit(struct output* output)
 {
 	output_release_power_on(output);
 	if (output->xdg_output)
@@ -190,6 +110,11 @@ void output_destroy(struct output* output)
 	if (output->wlr_output_power)
 		zwlr_output_power_v1_destroy(output->wlr_output_power);
 	wl_output_destroy(output->wl_output);
+}
+
+void output_destroy(struct output* output)
+{
+	output_deinit(output);
 	free(output);
 }
 
@@ -258,20 +183,6 @@ static void output_setup_xdg_output_manager(struct output* self)
 			self);
 }
 
-const char* output_power_state_name(enum output_power_state state)
-{
-	switch(state) {
-	case OUTPUT_POWER_ON:
-		return "ON";
-	case OUTPUT_POWER_OFF:
-		return "OFF";
-	case OUTPUT_POWER_UNKNOWN:
-		return "UNKNOWN";
-	}
-	abort();
-	return NULL;
-}
-
 static void output_power_mode(void *data,
 		     struct zwlr_output_power_v1 *zwlr_output_power_v1,
 		     uint32_t mode)
@@ -280,17 +191,17 @@ static void output_power_mode(void *data,
 	nvnc_trace("Output %s power state changed to %s", self->name,
 			(mode == ZWLR_OUTPUT_POWER_V1_MODE_ON) ? "ON" : "OFF");
 
-	enum output_power_state old = self->power;
+	enum image_source_power_state old = self->power;
 	switch (mode) {
 	case ZWLR_OUTPUT_POWER_V1_MODE_OFF:
-		self->power = OUTPUT_POWER_OFF;
+		self->power = IMAGE_SOURCE_POWER_OFF;
 		break;
 	case ZWLR_OUTPUT_POWER_V1_MODE_ON:
-		self->power = OUTPUT_POWER_ON;
+		self->power = IMAGE_SOURCE_POWER_ON;
 		break;
 	}
-	if (old != self->power && self->on_power_change)
-		self->on_power_change(self);
+	if (old != self->power && self->image_source.on_power_change)
+		self->image_source.on_power_change(&self->image_source);
 }
 
 static void output_power_failed(void *data,
@@ -298,7 +209,7 @@ static void output_power_failed(void *data,
 {
 	struct output* self = data;
 	nvnc_log(NVNC_LOG_WARNING, "Output %s power state failure", self->name);
-	self->power = OUTPUT_POWER_UNKNOWN;
+	self->power = IMAGE_SOURCE_POWER_UNKNOWN;
 	zwlr_output_power_v1_destroy(self->wlr_output_power);
 	self->wlr_output_power = NULL;
 }
@@ -336,7 +247,7 @@ void output_release_power_on(struct output* output)
 
 	zwlr_output_power_v1_destroy(output->wlr_output_power);
 	output->wlr_output_power = NULL;
-	output->power = OUTPUT_POWER_UNKNOWN;
+	output->power = IMAGE_SOURCE_POWER_UNKNOWN;
 }
 
 struct output* output_find_by_id(struct wl_list* list, uint32_t id)
@@ -396,6 +307,65 @@ void output_setup_xdg_output_managers(struct wl_list* list)
 	}
 }
 
+static void output_image_source_get_dimensions(const struct image_source* self,
+		int* width, int* height)
+{
+	struct output* output = output_from_image_source(self);
+	if (width)
+		*width = output->width;
+	if (height)
+		*height = output->height;
+}
+
+static enum wl_output_transform output_image_source_get_transform(
+		const struct image_source* self)
+{
+	return output_from_image_source(self)->transform;
+}
+
+static enum image_source_power_state output_image_source_get_power_state(
+		const struct image_source* self)
+{
+	return output_from_image_source(self)->power;
+}
+
+static void output_image_source_describe(const struct image_source* self,
+		char* dst, size_t maxlen)
+{
+	struct output* output = output_from_image_source(self);
+	snprintf(dst, maxlen, "output %s", output->name);
+}
+
+static int output_image_source_acquire_power_on(struct image_source* self)
+{
+	return output_acquire_power_on(output_from_image_source(self));
+}
+
+static void output_image_source_release_power_on(struct image_source* self)
+{
+	output_release_power_on(output_from_image_source(self));
+}
+
+static void output_image_source_deinit(struct image_source* self)
+{
+	output_deinit(output_from_image_source(self));
+}
+
+static struct image_source_impl image_source_impl = {
+	.get_dimensions = output_image_source_get_dimensions,
+	.get_transform = output_image_source_get_transform,
+	.get_power_state = output_image_source_get_power_state,
+	.describe = output_image_source_describe,
+	.acquire_power_on = output_image_source_acquire_power_on,
+	.release_power_on = output_image_source_release_power_on,
+	.deinit = output_image_source_deinit,
+};
+
+bool image_source_is_output(const struct image_source* self)
+{
+	return self->impl == &image_source_impl;
+}
+
 struct output* output_new(struct wl_output* wl_output, uint32_t id)
 {
 	struct output* output = calloc(1, sizeof(*output));
@@ -404,9 +374,11 @@ struct output* output_new(struct wl_output* wl_output, uint32_t id)
 		return NULL;
 	}
 
+	image_source_init(&output->image_source, &image_source_impl);
+
 	output->wl_output = wl_output;
 	output->id = id;
-	output->power = OUTPUT_POWER_UNKNOWN;
+	output->power = IMAGE_SOURCE_POWER_UNKNOWN;
 
 	wl_output_add_listener(output->wl_output, &output_listener,
 			output);
