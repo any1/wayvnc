@@ -45,6 +45,7 @@
 #include "wlr-output-management-unstable-v1.h"
 #include "linux-dmabuf-unstable-v1.h"
 #include "ext-transient-seat-v1.h"
+#include "ext-foreign-toplevel-list-v1.h"
 #include "screencopy-interface.h"
 #include "data-control.h"
 #include "strlcpy.h"
@@ -63,6 +64,7 @@
 #include "buffer.h"
 #include "time-util.h"
 #include "image-source.h"
+#include "toplevel.h"
 
 #ifdef ENABLE_PAM
 #include "pam_auth.h"
@@ -93,6 +95,7 @@ struct wayvnc {
 	struct aml_handler* wl_handler;
 	struct wl_list outputs;
 	struct wl_list seats;
+	struct wl_list toplevels;
 	struct cfg cfg;
 
 	struct zwp_virtual_keyboard_manager_v1* keyboard_manager;
@@ -122,6 +125,7 @@ struct wayvnc {
 
 	bool disable_input;
 	bool use_transient_seat;
+	bool use_toplevel;
 
 	int nr_clients;
 	struct aml_ticker* performance_ticker;
@@ -188,7 +192,10 @@ struct zwlr_output_power_manager_v1* wlr_output_power_manager = NULL;
 struct zwlr_screencopy_manager_v1* screencopy_manager = NULL;
 struct ext_output_image_capture_source_manager_v1*
 		ext_output_image_capture_source_manager = NULL;
+struct ext_foreign_toplevel_image_capture_source_manager_v1*
+		ext_foreign_toplevel_image_capture_source_manager = NULL;
 struct ext_image_copy_capture_manager_v1* ext_image_copy_capture_manager = NULL;
+struct ext_foreign_toplevel_list_v1* ext_foreign_toplevel_list = NULL;
 
 extern struct screencopy_impl wlr_screencopy_impl, ext_image_copy_capture_impl;
 
@@ -240,6 +247,59 @@ static bool registry_add_input(void* data, struct wl_registry* registry,
 	if (strcmp(interface, ext_transient_seat_manager_v1_interface.name) == 0) {
 		self->transient_seat_manager = wl_registry_bind(registry, id,
 				&ext_transient_seat_manager_v1_interface, 1);
+		return true;
+	}
+
+	return false;
+}
+
+static void handle_toplevel_handle(void* data,
+		struct ext_foreign_toplevel_list_v1* list,
+		struct ext_foreign_toplevel_handle_v1* handle)
+{
+	struct wayvnc* self = data;
+
+	struct toplevel *toplevel = toplevel_new(handle);
+	wl_list_insert(&self->toplevels, &toplevel->link);
+}
+
+static void handle_toplevel_list_finished(void* data,
+		struct ext_foreign_toplevel_list_v1* list)
+{
+	// noop
+}
+
+static bool registry_add_toplevel(void* data, struct wl_registry* registry,
+			 uint32_t id, const char* interface,
+			 uint32_t version)
+{
+	struct wayvnc* self = data;
+
+	if (!self->use_toplevel)
+		return false;
+
+	if (strcmp(interface, ext_foreign_toplevel_image_capture_source_manager_v1_interface.name) == 0) {
+		ext_foreign_toplevel_image_capture_source_manager =
+			wl_registry_bind(registry, id,
+					&ext_foreign_toplevel_image_capture_source_manager_v1_interface,
+					MIN(1, version));
+		return true;
+	}
+
+	if (strcmp(interface, ext_foreign_toplevel_list_v1_interface.name) == 0) {
+		ext_foreign_toplevel_list =
+			wl_registry_bind(registry, id,
+					&ext_foreign_toplevel_list_v1_interface,
+					1);
+
+		static struct ext_foreign_toplevel_list_v1_listener listener = {
+			.toplevel = handle_toplevel_handle,
+			.finished = handle_toplevel_list_finished,
+		};
+		ext_foreign_toplevel_list_v1_add_listener(
+				ext_foreign_toplevel_list, &listener, self);
+
+		ext_foreign_toplevel_list_v1_stop(ext_foreign_toplevel_list);
 		return true;
 	}
 
@@ -343,6 +403,9 @@ static void registry_add(void* data, struct wl_registry* registry,
 
 	if (registry_add_input(data, registry, id, interface, version))
 		return;
+
+	if (registry_add_toplevel(data, registry, id, interface, version))
+		return;
 }
 
 static void disconnect_seat_clients(struct wayvnc* self, struct seat* seat)
@@ -429,6 +492,7 @@ static void wayland_detach(struct wayvnc* self)
 	self->image_source = NULL;
 
 	output_list_destroy(&self->outputs);
+	toplevel_list_destroy(&self->toplevels);
 	seat_list_destroy(&self->seats);
 
 	if (zwp_linux_dmabuf)
@@ -482,6 +546,15 @@ static void wayland_detach(struct wayvnc* self)
 		ext_output_image_capture_source_manager_v1_destroy(
 				ext_output_image_capture_source_manager);
 	ext_output_image_capture_source_manager = NULL;
+
+	if (ext_foreign_toplevel_image_capture_source_manager)
+		ext_foreign_toplevel_image_capture_source_manager_v1_destroy(
+				ext_foreign_toplevel_image_capture_source_manager);
+	ext_foreign_toplevel_image_capture_source_manager = NULL;
+
+	if (ext_foreign_toplevel_list)
+		ext_foreign_toplevel_list_v1_destroy(ext_foreign_toplevel_list);
+	ext_foreign_toplevel_list = NULL;
 
 	if (ext_image_copy_capture_manager)
 		ext_image_copy_capture_manager_v1_destroy(ext_image_copy_capture_manager);
@@ -555,6 +628,7 @@ static int init_wayland(struct wayvnc* self, const char* display)
 	}
 
 	wl_list_init(&self->outputs);
+	wl_list_init(&self->toplevels);
 	wl_list_init(&self->seats);
 
 	self->registry = wl_display_get_registry(self->display);
@@ -589,6 +663,19 @@ static int init_wayland(struct wayvnc* self, const char* display)
 	if (!self->transient_seat_manager && self->use_transient_seat) {
 		nvnc_log(NVNC_LOG_ERROR, "Transient seat protocol not supported by compositor");
 		goto failure;
+	}
+
+	bool have_toplevel_capture =
+		ext_foreign_toplevel_list &&
+		ext_foreign_toplevel_image_capture_source_manager;
+	if (self->use_toplevel && !have_toplevel_capture) {
+		nvnc_log(NVNC_LOG_ERROR, "Toplevel capture is not supported by the compositor");
+		goto failure;
+	}
+
+	if (have_toplevel_capture) {
+		ext_foreign_toplevel_list_v1_destroy(ext_foreign_toplevel_list);
+		ext_foreign_toplevel_list = NULL;
 	}
 
 	self->wl_handler = aml_handler_new(wl_display_get_fd(self->display),
@@ -1955,6 +2042,13 @@ bool configure_screencopy(struct wayvnc* self)
 	return true;
 }
 
+static void on_toplevel_closed(struct toplevel* toplevel)
+{
+	struct wayvnc* self = toplevel->userdata;
+	nvnc_log(NVNC_LOG_ERROR, "Toplevel was closed. Exiting...");
+	wayvnc_exit(self);
+}
+
 void set_image_source(struct wayvnc* self, struct image_source* image_source)
 {
 	if (self->image_source) {
@@ -1966,6 +2060,13 @@ void set_image_source(struct wayvnc* self, struct image_source* image_source)
 	image_source->on_dimension_change = on_image_source_dimension_change;
 	image_source->on_power_change = on_image_source_power_change;
 	image_source->userdata = self;
+
+	if (image_source_is_toplevel(image_source)) {
+		struct toplevel* toplevel =
+			toplevel_from_image_source(image_source);
+		toplevel->on_closed = on_toplevel_closed;
+		toplevel->userdata = self;
+	}
 
 	if (self->ctl && image_source_is_output(image_source)) {
 		ctl_server_event_capture_changed(self->ctl,
@@ -2156,6 +2257,7 @@ int main(int argc, char* argv[])
 	const char* seat_name = NULL;
 	const char* socket_path = NULL;
 	const char* keyboard_options = NULL;
+	const char* toplevel_id;
 
 	bool overlay_cursor = false;
 	bool show_performance = false;
@@ -2210,6 +2312,8 @@ int main(int argc, char* argv[])
 		  "Control socket path." },
 		{ 't', "transient-seat", NULL,
 		  "Use transient seat." },
+		{ 'T', "toplevel", "<identifier>",
+		  "Capture a toplevel" },
 		{ 'u', "unix-socket", NULL,
 		  "Create unix domain socket." },
 		{ 'v', "verbose", NULL,
@@ -2258,6 +2362,7 @@ int main(int argc, char* argv[])
 	max_rate = atoi(option_parser_get_value(&option_parser, "max-fps"));
 	use_transient_seat = !!option_parser_get_value(&option_parser,
 				"transient-seat");
+	toplevel_id = option_parser_get_value(&option_parser, "toplevel");
 	start_detached = !!option_parser_get_value(&option_parser, "detached");
 	self.enable_resizing = !option_parser_get_value(&option_parser,
 			"disable-resizing");
@@ -2267,6 +2372,7 @@ int main(int argc, char* argv[])
 	self.overlay_cursor = overlay_cursor;
 	self.max_rate = max_rate;
 	self.enable_gpu_features = enable_gpu_features;
+	self.use_toplevel = !!toplevel_id;
 
 	keyboard_options = option_parser_get_value(&option_parser, "keyboard");
 	if (keyboard_options)
@@ -2301,6 +2407,16 @@ int main(int argc, char* argv[])
 
 	if (seat_name && use_transient_seat) {
 		nvnc_log(NVNC_LOG_ERROR, "transient-seat and seat are conflicting options");
+		return 1;
+	}
+
+	if (toplevel_id && output_name) {
+		nvnc_log(NVNC_LOG_ERROR, "toplevel and output are conflicting options");
+		return 1;
+	}
+
+	if (toplevel_id && start_detached) {
+		nvnc_log(NVNC_LOG_ERROR, "toplevel and start-detached are conflicting options");
 		return 1;
 	}
 
@@ -2347,21 +2463,32 @@ int main(int argc, char* argv[])
 			goto wayland_failure;
 		}
 
-		struct output* out;
 		if (output_name) {
+			struct output* out;
 			out = output_find_by_name(&self.outputs, output_name);
 			if (!out) {
 				nvnc_log(NVNC_LOG_ERROR, "No such output");
 				goto wayland_failure;
 			}
+			set_image_source(&self, &out->image_source);
+		} else if (toplevel_id) {
+			struct toplevel* toplevel;
+			toplevel = toplevel_find_by_identifier(&self.toplevels,
+					toplevel_id);
+			if (!toplevel) {
+				nvnc_log(NVNC_LOG_ERROR, "No such toplevel");
+				goto wayland_failure;
+			}
+			set_image_source(&self, &toplevel->image_source);
 		} else {
+			struct output* out;
 			out = output_first(&self.outputs);
 			if (!out) {
 				nvnc_log(NVNC_LOG_ERROR, "No output found");
 				goto wayland_failure;
 			}
+			set_image_source(&self, &out->image_source);
 		}
-		set_image_source(&self, &out->image_source);
 
 		struct seat* seat = NULL;
 		if (seat_name) {

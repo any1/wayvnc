@@ -62,6 +62,7 @@ void image_source_destroy(struct image_source* self);
 void image_source_notify_output_added(struct image_source* self, struct output*);
 
 bool image_source_is_output(const struct image_source* self);
+bool image_source_is_toplevel(const struct image_source* self);
 bool image_source_is_desktop(const struct image_source* self);
 
 bool image_source_get_dimensions(const struct image_source* self,

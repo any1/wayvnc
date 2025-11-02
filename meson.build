@@ -107,6 +107,7 @@ sources = [
 	'src/option-parser.c',
 	'src/table-printer.c',
 	'src/image-source.c',
+	'src/toplevel.c',
 ]
 
 dependencies = [

@@ -31,6 +31,7 @@
 #include "screencopy-interface.h"
 #include "ext-image-copy-capture-v1.h"
 #include "ext-image-capture-source-v1.h"
+#include "ext-foreign-toplevel-list-v1.h"
 #include "buffer.h"
 #include "shm.h"
 #include "time-util.h"
@@ -39,8 +40,14 @@
 #include "config.h"
 #include "image-source.h"
 #include "output.h"
+#include "toplevel.h"
 
-extern struct ext_output_image_capture_source_manager_v1* ext_output_image_capture_source_manager;
+extern struct ext_output_image_capture_source_manager_v1*
+ext_output_image_capture_source_manager;
+
+extern struct ext_foreign_toplevel_image_capture_source_manager_v1*
+ext_foreign_toplevel_image_capture_source_manager;
+
 extern struct ext_image_copy_capture_manager_v1* ext_image_copy_capture_manager;
 
 struct format_entry {
@@ -123,16 +130,30 @@ static void ext_image_copy_capture_deinit_session(struct ext_image_copy_capture*
 	self->buffer = NULL;
 }
 
-static int ext_image_copy_capture_init_session(struct ext_image_copy_capture* self)
+struct ext_image_capture_source_v1* image_capture_source_from_image_source(
+		struct image_source* image_source)
 {
-	struct ext_image_capture_source_v1* source = NULL;
-	if (image_source_is_output(self->image_source)) {
+	if (image_source_is_output(image_source)) {
 		struct wl_output *wl_output =
-			output_from_image_source(self->image_source)->wl_output;
-		source = ext_output_image_capture_source_manager_v1_create_source(
+			output_from_image_source(image_source)->wl_output;
+		return ext_output_image_capture_source_manager_v1_create_source(
 				ext_output_image_capture_source_manager,
 				wl_output);
 	}
+	if (image_source_is_toplevel(image_source)) {
+		struct ext_foreign_toplevel_handle_v1 *handle =
+			toplevel_from_image_source(image_source)->handle;
+		return ext_foreign_toplevel_image_capture_source_manager_v1_create_source(
+				ext_foreign_toplevel_image_capture_source_manager,
+				handle);
+	}
+	return NULL;
+}
+
+static int ext_image_copy_capture_init_session(struct ext_image_copy_capture* self)
+{
+	struct ext_image_capture_source_v1 *source =
+		image_capture_source_from_image_source(self->image_source);
 	if (!source)
 		return -1;
 
@@ -153,14 +174,8 @@ static int ext_image_copy_capture_init_session(struct ext_image_copy_capture* se
 
 static int ext_image_copy_capture_init_cursor_session(struct ext_image_copy_capture* self)
 {
-	struct ext_image_capture_source_v1* source = NULL;
-	if (image_source_is_output(self->image_source)) {
-		struct wl_output *wl_output =
-			output_from_image_source(self->image_source)->wl_output;
-		source = ext_output_image_capture_source_manager_v1_create_source(
-				ext_output_image_capture_source_manager,
-				wl_output);
-	}
+	struct ext_image_capture_source_v1 *source =
+		image_capture_source_from_image_source(self->image_source);
 	if (!source)
 		return -1;
 

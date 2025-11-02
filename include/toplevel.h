@@ -1,0 +1,44 @@
+/*
+ * Copyright (c) 2025 Andri Yngvason
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+ * REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+ * AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+ * INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+ * LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
+ * OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+ * PERFORMANCE OF THIS SOFTWARE.
+ */
+
+#pragma once
+
+#include "image-source.h"
+
+struct ext_foreign_toplevel_handle_v1;
+
+struct toplevel {
+	struct image_source image_source;
+	struct ext_foreign_toplevel_handle_v1 *handle;
+
+	struct wl_list link;
+
+	void (*on_closed)(struct toplevel* self);
+	void* userdata;
+
+	char title[256];
+	char app_id[256];
+	char identifier[33];
+};
+
+struct toplevel* toplevel_from_image_source(const struct image_source* source);
+
+struct toplevel* toplevel_new(struct ext_foreign_toplevel_handle_v1* handle);
+void toplevel_destroy(struct toplevel* self);
+
+void toplevel_list_destroy(struct wl_list* list);
+struct toplevel* toplevel_find_by_identifier(struct wl_list* list,
+		const char *identifier);
