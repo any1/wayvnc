@@ -34,7 +34,6 @@ enum image_source_power_state {
 struct image_source {
 	struct image_source_impl* impl;
 
-	void (*on_dimension_change)(struct image_source*);
 	void (*on_transform_change)(struct image_source*);
 	void (*on_power_change)(struct image_source*);
 	void *userdata;

@@ -1329,26 +1329,6 @@ static void wayvnc_restart_capture(struct wayvnc* self)
 	aml_start(aml_get_default(), self->capture_retry_timer);
 }
 
-// TODO: Handle transform change too
-void on_image_source_dimension_change(struct image_source* image_source)
-{
-	struct wayvnc* self = image_source->userdata;
-	assert(self->image_source == image_source);
-
-	if (self->nr_clients == 0)
-		return;
-
-	nvnc_log(NVNC_LOG_DEBUG, "Dimensions changed. Restarting frame capturer...");
-
-	aml_stop(aml_get_default(), self->rate_limiter);
-	if (self->next_frame) {
-		nvnc_fb_unref(self->next_frame->nvnc_fb);
-		self->next_frame = NULL;
-	}
-	screencopy_stop(self->screencopy);
-	wayvnc_start_capture_immediate(self);
-}
-
 static void on_image_source_power_change(struct image_source* image_source)
 {
 	char description[256];
@@ -2052,12 +2032,10 @@ static void on_toplevel_closed(struct toplevel* toplevel)
 void set_image_source(struct wayvnc* self, struct image_source* image_source)
 {
 	if (self->image_source) {
-		self->image_source->on_dimension_change = NULL;
 		self->image_source->on_power_change = NULL;
 	}
 	self->image_source = image_source;
 
-	image_source->on_dimension_change = on_image_source_dimension_change;
 	image_source->on_power_change = on_image_source_power_change;
 	image_source->userdata = self;
 

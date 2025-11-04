@@ -80,9 +80,6 @@ static void output_handle_done(void* data, struct wl_output* wl_output)
 {
 	struct output* output = data;
 
-	if (output->is_dimension_changed && output->image_source.on_dimension_change)
-		output->image_source.on_dimension_change(&output->image_source);
-
 	if (output->is_transform_changed && output->image_source.on_transform_change)
 		output->image_source.on_transform_change(&output->image_source);
 
