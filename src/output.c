@@ -49,9 +49,6 @@ static void output_handle_geometry(void* data, struct wl_output* wl_output,
 {
 	struct output* output = data;
 
-	if (transform != (int32_t)output->transform)
-		output->is_transform_changed = true;
-
 	output->x = x;
 	output->y = y;
 	output->transform = transform;
@@ -69,22 +66,13 @@ static void output_handle_mode(void* data, struct wl_output* wl_output,
 	if (!(flags & WL_OUTPUT_MODE_CURRENT))
 		return;
 
-	if (width != (int32_t)output->width || height != (int32_t)output->height)
-		output->is_dimension_changed = true;
-
 	output->width = width;
 	output->height = height;
 }
 
 static void output_handle_done(void* data, struct wl_output* wl_output)
 {
-	struct output* output = data;
-
-	if (output->is_transform_changed && output->image_source.on_transform_change)
-		output->image_source.on_transform_change(&output->image_source);
-
-	output->is_dimension_changed = false;
-	output->is_transform_changed = false;
+	 // noop
 }
 
 static void output_handle_scale(void* data, struct wl_output* wl_output,

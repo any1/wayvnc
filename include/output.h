@@ -51,8 +51,6 @@ struct output {
 	char description[256];
 	enum image_source_power_state power;
 
-	bool is_dimension_changed;
-	bool is_transform_changed;
 	bool is_headless;
 
 	void* userdata;
