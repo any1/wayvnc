@@ -149,6 +149,12 @@ struct wayvnc {
 	uint64_t last_send_time;
 	struct aml_timer* rate_limiter;
 	struct wv_buffer* next_frame;
+
+	struct {
+		bool is_set;
+		int width, height;
+		enum wl_output_transform transform;
+	} last_frame_info;
 };
 
 struct wayvnc_client {
@@ -878,12 +884,17 @@ static void on_pointer_event(struct nvnc_client* client, uint16_t x, uint16_t y,
 		return;
 	}
 
-	// TODO: Not all image sources have dimensions available
-
-	int width, height;
-	image_source_get_dimensions(wayvnc->image_source, &width, &height);
-	enum wl_output_transform transform =
-		image_source_get_transform(wayvnc->image_source);
+	enum wl_output_transform transform;
+	int width = 0, height = 0;
+	if (image_source_get_dimensions(wayvnc->image_source, &width, &height)) {
+		transform = image_source_get_transform(wayvnc->image_source);
+	} else if (wayvnc->last_frame_info.is_set) {
+		width = wayvnc->last_frame_info.width;
+		height = wayvnc->last_frame_info.height;
+		transform = wayvnc->last_frame_info.transform;
+	} else {
+		transform = WL_OUTPUT_TRANSFORM_NORMAL;
+	}
 
 	struct { int x, y; } xf = { x, y };
 	wv_output_transform_canvas_point(transform, width, height, &xf.x, &xf.y);
@@ -994,8 +1005,12 @@ static int blank_screen(struct wayvnc* self)
 	int height = 720;
 
 	if (self->image_source) {
-		image_source_get_transformed_dimensions(self->image_source,
-				&width, &height);
+		if (image_source_get_transformed_dimensions(self->image_source,
+				&width, &height)) {
+		} else if (self->last_frame_info.is_set) {
+			width = self->last_frame_info.width;
+			height = self->last_frame_info.height;
+		}
 	}
 
 	struct nvnc_fb* placeholder_fb = create_placeholder_buffer(width, height);
@@ -1431,6 +1446,14 @@ static void wayvnc_process_frame(struct wayvnc* self, struct wv_buffer* buffer)
 	self->n_frames_captured++;
 	self->damage_area_sum += calculate_region_area(&buffer->frame_damage);
 
+	self->last_frame_info.is_set = true;
+	self->last_frame_info.width = buffer->width;
+	self->last_frame_info.height = buffer->height;
+
+	if (self->screencopy->impl->caps & SCREENCOPY_CAP_TRANSFORM)
+		self->last_frame_info.transform =
+			(enum wl_output_transform)nvnc_fb_get_transform(buffer->nvnc_fb);
+
 	bool have_pending_frame = false;
 	if (self->next_frame) {
 		pixman_region_union(&buffer->frame_damage,
@@ -1529,10 +1552,14 @@ static void on_perf_tick(struct aml_ticker* obj)
 {
 	struct wayvnc* self = aml_get_userdata(obj);
 
-	// TODO
 	int width, height;
-	if (!image_source_get_dimensions(self->image_source, &width, &height))
+	if (image_source_get_dimensions(self->image_source, &width, &height)) {
+	} else if (self->last_frame_info.is_set) {
+		width = self->last_frame_info.width;
+		height = self->last_frame_info.height;
+	} else {
 		return;
+	}
 
 	double total_area = width * height;
 	double area_avg = (double)self->damage_area_sum / (double)self->n_frames_captured;
