@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Andri Yngvason
+ * Copyright (c) 2020 - 2025 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -29,3 +29,7 @@ void wv_pixman_transform_from_wl_output_transform(pixman_transform_t* dst,
 enum wl_output_transform wv_output_transform_invert(enum wl_output_transform tr);
 enum wl_output_transform wv_output_transform_compose(
 		enum wl_output_transform tr_a, enum wl_output_transform tr_b);
+
+void wv_output_transform_canvas_point(enum wl_output_transform transform,
+		int canvas_width, int canvas_height,
+		int* point_x, int* point_y);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 Andri Yngvason
+ * Copyright (c) 2020 - 2025 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -233,4 +233,49 @@ enum wl_output_transform wv_output_transform_compose(
 		rotated = (tr_a + tr_b) & rotation_mask;
 	}
 	return flipped | rotated;
+}
+
+void wv_output_transform_canvas_point(enum wl_output_transform transform,
+		int canvas_width, int canvas_height,
+		int* point_x, int* point_y)
+{
+	struct { int x, y; } dst;
+
+	switch (transform) {
+	case WL_OUTPUT_TRANSFORM_NORMAL:
+		dst.x = *point_x;
+		dst.y = *point_y;
+		break;
+	case WL_OUTPUT_TRANSFORM_90:
+		dst.x = *point_y;
+		dst.y = canvas_height - *point_x;
+		break;
+	case WL_OUTPUT_TRANSFORM_180:
+		dst.x = canvas_width - *point_x;
+		dst.y = canvas_height - *point_y;
+		break;
+	case WL_OUTPUT_TRANSFORM_270:
+		dst.x = canvas_width - *point_y;
+		dst.y = *point_x;
+		break;
+	case WL_OUTPUT_TRANSFORM_FLIPPED:
+		dst.x = canvas_width - *point_x;
+		dst.y = *point_y;
+		break;
+	case WL_OUTPUT_TRANSFORM_FLIPPED_90:
+		dst.x = *point_y;
+		dst.y = *point_x;
+		break;
+	case WL_OUTPUT_TRANSFORM_FLIPPED_180:
+		dst.x = *point_x;
+		dst.y = canvas_height - *point_y;
+		break;
+	case WL_OUTPUT_TRANSFORM_FLIPPED_270:
+		dst.x = canvas_width - *point_y;
+		dst.y = canvas_height - *point_x;
+		break;
+	}
+
+	*point_x = dst.x;
+	*point_y = dst.y;
 }

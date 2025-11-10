@@ -78,7 +78,3 @@ int image_source_acquire_power_on(struct image_source* self);
 void image_source_release_power_on(struct image_source* self);
 
 const char* image_source_power_state_name(enum image_source_power_state state);
-
-void image_source_transform_coord(const struct image_source* self,
-		uint32_t src_x, uint32_t src_y,
-		uint32_t* dst_x, uint32_t* dst_y);

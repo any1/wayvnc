@@ -880,10 +880,15 @@ static void on_pointer_event(struct nvnc_client* client, uint16_t x, uint16_t y,
 
 	// TODO: Not all image sources have dimensions available
 
-	uint32_t xfx = 0, xfy = 0;
-	image_source_transform_coord(wayvnc->image_source, x, y, &xfx, &xfy);
+	int width, height;
+	image_source_get_dimensions(wayvnc->image_source, &width, &height);
+	enum wl_output_transform transform =
+		image_source_get_transform(wayvnc->image_source);
 
-	pointer_set(&wv_client->pointer, xfx, xfy, button_mask);
+	struct { int x, y; } xf = { x, y };
+	wv_output_transform_canvas_point(transform, width, height, &xf.x, &xf.y);
+
+	pointer_set(&wv_client->pointer, xf.x, xf.y, button_mask);
 }
 
 static void on_key_event(struct nvnc_client* client, uint32_t symbol,
