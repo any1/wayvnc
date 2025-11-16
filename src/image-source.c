@@ -39,11 +39,13 @@ const char* image_source_power_state_name(enum image_source_power_state state)
 void image_source_init(struct image_source* self, struct image_source_impl* impl)
 {
 	self->impl = impl;
+	observable_init(&self->observable.power_change);
 }
 
 void image_source_deinit(struct image_source* self)
 {
 	assert(self->impl);
+	observable_deinit(&self->observable.power_change);
 	if (self->impl->deinit)
 		self->impl->deinit(self);
 }

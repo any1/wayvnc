@@ -185,8 +185,9 @@ static void output_power_mode(void *data,
 		self->power = IMAGE_SOURCE_POWER_ON;
 		break;
 	}
-	if (old != self->power && self->image_source.on_power_change)
-		self->image_source.on_power_change(&self->image_source);
+	if (old != self->power)
+		observable_notify(&self->image_source.observable.power_change,
+				NULL);
 }
 
 static void output_power_failed(void *data,

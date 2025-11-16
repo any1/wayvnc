@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include "observer.h"
+
 #include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
@@ -34,8 +36,9 @@ enum image_source_power_state {
 struct image_source {
 	struct image_source_impl* impl;
 
-	void (*on_power_change)(struct image_source*);
-	void *userdata;
+	struct {
+		struct observable power_change;
+	} observable;
 };
 
 struct image_source_impl {

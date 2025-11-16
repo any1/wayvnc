@@ -150,6 +150,8 @@ struct wayvnc {
 	struct aml_timer* rate_limiter;
 	struct wv_buffer* next_frame;
 
+	struct observer power_change_observer;
+
 	struct {
 		bool is_set;
 		int width, height;
@@ -495,6 +497,7 @@ static void wayland_detach(struct wayvnc* self)
 		}
 	}
 
+	observer_deinit(&self->power_change_observer);
 	self->image_source = NULL;
 
 	output_list_destroy(&self->outputs);
@@ -1349,8 +1352,13 @@ static void wayvnc_restart_capture(struct wayvnc* self)
 	aml_start(aml_get_default(), self->capture_retry_timer);
 }
 
-static void on_image_source_power_change(struct image_source* image_source)
+static void on_image_source_power_change(struct observer* observer,
+		void* arg)
 {
+	struct wayvnc* self = wl_container_of(observer, self,
+			power_change_observer);
+	struct image_source* image_source = self->image_source;
+
 	char description[256];
 	image_source_describe(image_source, description, sizeof(description));
 
@@ -1359,7 +1367,6 @@ static void on_image_source_power_change(struct image_source* image_source)
 	nvnc_trace("%s power state changed to %s", description,
 			image_source_power_state_name(state));
 
-	struct wayvnc* self = image_source->userdata;
 	if (self->image_source != image_source || self->nr_clients == 0)
 		return;
 
@@ -2064,12 +2071,12 @@ static void on_toplevel_closed(struct toplevel* toplevel)
 void set_image_source(struct wayvnc* self, struct image_source* image_source)
 {
 	if (self->image_source) {
-		self->image_source->on_power_change = NULL;
+		observer_deinit(&self->power_change_observer);
 	}
 	self->image_source = image_source;
-
-	image_source->on_power_change = on_image_source_power_change;
-	image_source->userdata = self;
+	observer_init(&self->power_change_observer,
+			&image_source->observable.power_change,
+			on_image_source_power_change);
 
 	if (image_source_is_toplevel(image_source)) {
 		struct toplevel* toplevel =
