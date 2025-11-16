@@ -32,8 +32,7 @@ struct toplevel* toplevel_from_image_source(const struct image_source* source)
 
 void toplevel_destroy(struct toplevel *self)
 {
-	wl_list_remove(&self->link);
-	free(self);
+	image_source_destroy(&self->image_source);
 }
 
 void toplevel_image_source_describe(const struct image_source* self, char* dst,
@@ -43,7 +42,13 @@ void toplevel_image_source_describe(const struct image_source* self, char* dst,
 	snprintf(dst, maxlen, "Toplevel %s", toplevel->identifier);
 }
 
-struct image_source_impl image_source_impl = {
+void toplevel_image_source_deinit(struct image_source* base)
+{
+	struct toplevel* self = toplevel_from_image_source(base);
+	wl_list_remove(&self->link);
+}
+
+static struct image_source_impl image_source_impl = {
 	.describe = toplevel_image_source_describe,
 };
 
