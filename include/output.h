@@ -17,6 +17,7 @@
 #pragma once
 
 #include "image-source.h"
+#include "observer.h"
 
 #include <wayland-client.h>
 #include <stdint.h>
@@ -55,6 +56,9 @@ struct output {
 
 	void* userdata;
 };
+
+extern struct observable output_added;
+extern struct observable output_removed;
 
 struct output* output_from_image_source(const struct image_source* source);
 

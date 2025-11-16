@@ -15,6 +15,7 @@
  */
 
 #include "screencopy-interface.h"
+#include "image-source.h"
 
 #include <unistd.h>
 
@@ -25,10 +26,13 @@ extern struct ext_image_copy_capture_manager_v1* ext_image_copy_capture_manager;
 
 extern struct screencopy_impl wlr_screencopy_impl;
 extern struct screencopy_impl ext_image_copy_capture_impl;
+extern struct screencopy_impl desktop_capture_impl;
 
 struct screencopy* screencopy_create(struct image_source* source,
 		bool render_cursor)
 {
+	if (image_source_is_desktop(source))
+		return desktop_capture_impl.create(source, render_cursor);
 	if (ext_image_copy_capture_manager && ext_output_image_capture_source_manager)
 		return ext_image_copy_capture_impl.create(source, render_cursor);
 	if (screencopy_manager)
@@ -39,6 +43,8 @@ struct screencopy* screencopy_create(struct image_source* source,
 struct screencopy* screencopy_create_cursor(struct image_source* source,
 		struct wl_seat* seat)
 {
+	if (image_source_is_desktop(source))
+		return NULL; // TODO
 	if (ext_image_copy_capture_manager && ext_output_image_capture_source_manager)
 		return ext_image_copy_capture_impl.create_cursor(source, seat);
 	return NULL;

@@ -20,7 +20,7 @@
 #include <neatvnc.h>
 #include "wlr-virtual-pointer-unstable-v1.h"
 
-#include "output.h"
+struct image_source;
 
 struct pointer {
 	struct nvnc* vnc;
@@ -31,7 +31,7 @@ struct pointer {
 	uint32_t current_x;
 	uint32_t current_y;
 
-	const struct output* output;
+	const struct image_source* image_source;
 };
 
 int pointer_init(struct pointer* self);

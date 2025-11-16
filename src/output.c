@@ -49,8 +49,6 @@ static void output_handle_geometry(void* data, struct wl_output* wl_output,
 {
 	struct output* output = data;
 
-	output->x = x;
-	output->y = y;
 	output->transform = transform;
 
 	strlcpy(output->make, make, sizeof(output->make));
@@ -117,6 +115,10 @@ void output_list_destroy(struct wl_list* list)
 void output_logical_position(void* data, struct zxdg_output_v1* xdg_output,
                              int32_t x, int32_t y)
 {
+	struct output* output = data;
+	output->x = x;
+	output->y = y;
+	nvnc_log(NVNC_LOG_DEBUG, "output geometry: %d, %d", x, y);
 }
 
 void output_logical_size(void* data, struct zxdg_output_v1* xdg_output,

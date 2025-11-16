@@ -212,7 +212,8 @@ static void ext_image_copy_capture_schedule_capture(
 
 	self->buffer = wv_buffer_pool_acquire(self->pool);
 	if (!self->buffer) {
-		self->parent.on_done(SCREENCOPY_FATAL, NULL, self->parent.userdata);
+		self->parent.on_done(SCREENCOPY_FATAL, NULL, self->image_source,
+				self->parent.userdata);
 		return;
 	}
 
@@ -567,7 +568,8 @@ static void frame_handle_ready(void *data,
 
 	self->frame_count++;
 
-	self->parent.on_done(SCREENCOPY_DONE, buffer, self->parent.userdata);
+	self->parent.on_done(SCREENCOPY_DONE, buffer, self->image_source,
+			self->parent.userdata);
 }
 
 static void frame_handle_failed(void *data,
@@ -592,7 +594,8 @@ static void frame_handle_failed(void *data,
 		return;
 	}
 
-	self->parent.on_done(SCREENCOPY_FATAL, NULL, self->parent.userdata);
+	self->parent.on_done(SCREENCOPY_FATAL, NULL, self->image_source,
+			self->parent.userdata);
 }
 
 static void frame_handle_damage(void *data,

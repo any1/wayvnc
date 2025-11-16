@@ -65,6 +65,8 @@
 #include "time-util.h"
 #include "image-source.h"
 #include "toplevel.h"
+#include "observer.h"
+#include "desktop.h"
 
 #ifdef ENABLE_PAM
 #include "pam_auth.h"
@@ -85,6 +87,20 @@ enum socket_type {
 	SOCKET_TYPE_UNIX,
 	SOCKET_TYPE_FROM_FD,
 };
+
+struct wayvnc_display {
+	LIST_ENTRY(wayvnc_display) link;
+	struct nvnc_display* nvnc_display;
+	struct image_source* image_source;
+	struct wv_buffer* next_frame;
+	struct {
+		bool is_set;
+		int width, height;
+		enum wl_output_transform transform;
+	} last_frame_info;
+};
+
+LIST_HEAD(wayvnc_display_list, wayvnc_display);
 
 struct wayvnc {
 	bool do_exit;
@@ -112,7 +128,7 @@ struct wayvnc {
 	struct aml_signal* signal_handler;
 
 	struct nvnc* nvnc;
-	struct nvnc_display* nvnc_display;
+	struct wayvnc_display_list wayvnc_displays;
 
 	const char* desktop_name;
 
@@ -148,15 +164,8 @@ struct wayvnc {
 
 	uint64_t last_send_time;
 	struct aml_timer* rate_limiter;
-	struct wv_buffer* next_frame;
 
 	struct observer power_change_observer;
-
-	struct {
-		bool is_set;
-		int width, height;
-		enum wl_output_transform transform;
-	} last_frame_info;
 };
 
 struct wayvnc_client {
@@ -174,9 +183,10 @@ struct wayvnc_client {
 
 void wayvnc_exit(struct wayvnc* self);
 void on_capture_done(enum screencopy_result result, struct wv_buffer* buffer,
-		void* userdata);
+		struct image_source* source, void* userdata);
 static void on_cursor_capture_done(enum screencopy_result result,
-		struct wv_buffer* buffer, void* userdata);
+		struct wv_buffer* buffer, struct image_source* source,
+		void* userdata);
 static void on_nvnc_client_new(struct nvnc_client* client);
 void switch_to_output(struct wayvnc*, struct output*);
 void switch_to_next_output(struct wayvnc*);
@@ -204,6 +214,9 @@ struct ext_foreign_toplevel_image_capture_source_manager_v1*
 		ext_foreign_toplevel_image_capture_source_manager = NULL;
 struct ext_image_copy_capture_manager_v1* ext_image_copy_capture_manager = NULL;
 struct ext_foreign_toplevel_list_v1* ext_foreign_toplevel_list = NULL;
+
+struct observable output_added;
+struct observable output_removed;
 
 extern struct screencopy_impl wlr_screencopy_impl, ext_image_copy_capture_impl;
 
@@ -336,10 +349,7 @@ static void registry_add(void* data, struct wl_registry* registry,
 			wl_display_dispatch(self->display);
 			wl_display_roundtrip(self->display);
 
-			if (self->image_source) {
-				image_source_notify_output_added(
-						self->image_source, output);
-			}
+			observable_notify(&output_added, output);
 			ctl_server_event_output_added(self->ctl, output->name);
 		}
 
@@ -445,6 +455,7 @@ static void registry_remove(void* data, struct wl_registry* registry,
 		} else
 			nvnc_log(NVNC_LOG_INFO, "Output %s went away", out->name);
 
+		observable_notify(&output_removed, out);
 		ctl_server_event_output_removed(self->ctl, out->name);
 
 		wl_list_remove(&out->link);
@@ -877,6 +888,16 @@ int init_main_loop(struct wayvnc* self)
 	return 0;
 }
 
+static struct wayvnc_display *wayvnc_display_find_by_source(struct wayvnc* self,
+		struct image_source *source)
+{
+	struct wayvnc_display* display;
+	LIST_FOREACH(display, &self->wayvnc_displays, link)
+		if (display->image_source == source)
+			return display;
+	return NULL;
+}
+
 static void on_pointer_event(struct nvnc_client* client, uint16_t x, uint16_t y,
 			     enum nvnc_button_mask button_mask)
 {
@@ -891,12 +912,18 @@ static void on_pointer_event(struct nvnc_client* client, uint16_t x, uint16_t y,
 	int width = 0, height = 0;
 	if (image_source_get_dimensions(wayvnc->image_source, &width, &height)) {
 		transform = image_source_get_transform(wayvnc->image_source);
-	} else if (wayvnc->last_frame_info.is_set) {
-		width = wayvnc->last_frame_info.width;
-		height = wayvnc->last_frame_info.height;
-		transform = wayvnc->last_frame_info.transform;
 	} else {
-		transform = WL_OUTPUT_TRANSFORM_NORMAL;
+		struct wayvnc_display* display = wayvnc_display_find_by_source(
+				wayvnc, wayvnc->image_source);
+		assert(display);
+
+		if (display->last_frame_info.is_set) {
+			width = display->last_frame_info.width;
+			height = display->last_frame_info.height;
+			transform = display->last_frame_info.transform;
+		} else {
+			transform = WL_OUTPUT_TRANSFORM_NORMAL;
+		}
 	}
 
 	struct { int x, y; } xf = { x, y };
@@ -1002,17 +1029,18 @@ static struct nvnc_fb* create_placeholder_buffer(uint16_t width, uint16_t height
 	return fb;
 }
 
-static int blank_screen(struct wayvnc* self)
+static int wayvnc_display_blank(struct wayvnc* self,
+		struct wayvnc_display* display)
 {
 	int width = 1280;
 	int height = 720;
 
-	if (self->image_source) {
+	if (display->image_source) {
 		if (image_source_get_transformed_dimensions(self->image_source,
 				&width, &height)) {
-		} else if (self->last_frame_info.is_set) {
-			width = self->last_frame_info.width;
-			height = self->last_frame_info.height;
+		} else if (display->last_frame_info.is_set) {
+			width = display->last_frame_info.width;
+			height = display->last_frame_info.height;
 		}
 	}
 
@@ -1027,12 +1055,20 @@ static int blank_screen(struct wayvnc* self)
 			nvnc_fb_get_width(placeholder_fb),
 			nvnc_fb_get_height(placeholder_fb));
 
-	nvnc_display_feed_buffer(self->nvnc_display, placeholder_fb, &damage);
+	nvnc_display_feed_buffer(display->nvnc_display, placeholder_fb, &damage);
 	pixman_region_fini(&damage);
 	nvnc_fb_unref(placeholder_fb);
 
 	nvnc_set_cursor(self->nvnc, NULL, 0, 0, 0, 0, false);
 
+	return 0;
+}
+
+static int blank_screen(struct wayvnc* self)
+{
+	struct wayvnc_display* display;
+	LIST_FOREACH(display, &self->wayvnc_displays, link)
+		wayvnc_display_blank(self, display);
 	return 0;
 }
 
@@ -1210,17 +1246,75 @@ out:
 	return rc;
 }
 
+static bool wayvnc_display_add(struct wayvnc* self,
+		struct image_source* image_source)
+{
+	struct wayvnc_display* display = calloc(1, sizeof(*display));
+	if (!display)
+		return false;
+
+	LIST_INSERT_HEAD(&self->wayvnc_displays, display, link);
+
+	display->image_source = image_source;
+
+	uint16_t x = 0, y = 0;
+	if (image_source_is_output(image_source)) {
+		nvnc_log(NVNC_LOG_DEBUG, "Image source is output");
+		struct output* output = output_from_image_source(image_source);
+		x = output->x;
+		y = output->y;
+	}
+
+	nvnc_log(NVNC_LOG_DEBUG, "Adding display at %d, %d", (int)x, (int)y);
+
+	display->nvnc_display = nvnc_display_new(x, y);
+	if (!display->nvnc_display) {
+		free(display);
+		return false;
+	}
+
+	nvnc_add_display(self->nvnc, display->nvnc_display);
+
+	return true;
+}
+
+static void wayvnc_display_list_init(struct wayvnc* self)
+{
+	if (image_source_is_desktop(self->image_source)) {
+		struct output* output;
+		wl_list_for_each(output, &self->outputs, link) {
+			wayvnc_display_add(self, &output->image_source);
+		}
+	} else {
+		wayvnc_display_add(self, self->image_source);
+	}
+}
+
+static void wayvnc_display_list_deinit(struct wayvnc_display_list* list)
+{
+	while (!LIST_EMPTY(list)) {
+		struct wayvnc_display* display = LIST_FIRST(list);
+		LIST_REMOVE(display, link);
+		nvnc_display_unref(display->nvnc_display);
+		if (display->next_frame) {
+			nvnc_fb_unref(display->next_frame->nvnc_fb);
+			display->next_frame = NULL;
+		}
+		free(display);
+	}
+}
+
 static int init_nvnc(struct wayvnc* self)
 {
 	self->nvnc = nvnc_new();
 	if (!self->nvnc)
 		return -1;
 
-	self->nvnc_display = nvnc_display_new(0, 0);
-	if (!self->nvnc_display)
-		goto display_failure;
+	// TODO: Add/remove displays on the fly
+	// TODO: The display list needs to interact correctly when
+	// attaching/detaching
 
-	nvnc_add_display(self->nvnc, self->nvnc_display);
+	wayvnc_display_list_init(self);
 
 	nvnc_set_userdata(self->nvnc, self, NULL);
 
@@ -1285,8 +1379,7 @@ static int init_nvnc(struct wayvnc* self)
 
 blank_screen_failure:
 auth_failure:
-	nvnc_display_unref(self->nvnc_display);
-display_failure:
+	wayvnc_display_list_deinit(&self->wayvnc_displays);
 	nvnc_del(self->nvnc);
 	return -1;
 }
@@ -1408,13 +1501,17 @@ static void apply_output_transform(const struct wayvnc* self,
 			(enum nvnc_transform)buffer_transform);
 }
 
-static void wayvnc_send_next_frame(struct wayvnc* self, uint64_t now)
+static void wayvnc_display_send_next_frame(struct wayvnc* self,
+		struct wayvnc_display* display, uint64_t now)
 {
+	struct wv_buffer* buffer = display->next_frame;
+	display->next_frame = NULL;
+
+	if (!buffer)
+		return;
+
 	struct pixman_region16 damage;
 	pixman_region_init(&damage);
-
-	struct wv_buffer* buffer = self->next_frame;
-	self->next_frame = NULL;
 
 	if (self->screencopy->impl->caps & SCREENCOPY_CAP_TRANSFORM) {
 		pixman_region_copy(&damage, &buffer->frame_damage);
@@ -1425,7 +1522,7 @@ static void wayvnc_send_next_frame(struct wayvnc* self, uint64_t now)
 	pixman_region_intersect_rect(&damage, &damage, 0, 0, buffer->width,
 			buffer->height);
 
-	nvnc_display_feed_buffer(self->nvnc_display, buffer->nvnc_fb,
+	nvnc_display_feed_buffer(display->nvnc_display, buffer->nvnc_fb,
 			&damage);
 	self->n_frames_sent++;
 
@@ -1438,38 +1535,49 @@ static void wayvnc_send_next_frame(struct wayvnc* self, uint64_t now)
 	self->last_send_time = now;
 }
 
+static void wayvnc_send_next_frame(struct wayvnc* self, uint64_t now)
+{
+	struct wayvnc_display* display;
+	LIST_FOREACH(display, &self->wayvnc_displays, link)
+		wayvnc_display_send_next_frame(self, display, now);
+}
+
 static void wayvnc_handle_rate_limit_timeout(struct aml_timer* timer)
 {
 	struct wayvnc* self = aml_get_userdata(timer);
 	uint64_t now = gettime_us();
-	assert(self->next_frame);
 	wayvnc_send_next_frame(self, now);
 }
 
-static void wayvnc_process_frame(struct wayvnc* self, struct wv_buffer* buffer)
+static void wayvnc_process_frame(struct wayvnc* self, struct wv_buffer* buffer,
+		struct image_source* source)
 {
 	nvnc_trace("Processing buffer: %p", buffer);
 
 	self->n_frames_captured++;
 	self->damage_area_sum += calculate_region_area(&buffer->frame_damage);
 
-	self->last_frame_info.is_set = true;
-	self->last_frame_info.width = buffer->width;
-	self->last_frame_info.height = buffer->height;
+	struct wayvnc_display* display =
+		wayvnc_display_find_by_source(self, source);
+	assert(display);
+
+	display->last_frame_info.is_set = true;
+	display->last_frame_info.width = buffer->width;
+	display->last_frame_info.height = buffer->height;
 
 	if (self->screencopy->impl->caps & SCREENCOPY_CAP_TRANSFORM)
-		self->last_frame_info.transform =
+		display->last_frame_info.transform =
 			(enum wl_output_transform)nvnc_fb_get_transform(buffer->nvnc_fb);
 
 	bool have_pending_frame = false;
-	if (self->next_frame) {
+	if (display->next_frame) {
 		pixman_region_union(&buffer->frame_damage,
 				&buffer->frame_damage,
-				&self->next_frame->frame_damage);
-		nvnc_fb_unref(self->next_frame->nvnc_fb);
+				&display->next_frame->frame_damage);
+		nvnc_fb_unref(display->next_frame->nvnc_fb);
 		have_pending_frame = true;
 	}
-	self->next_frame = buffer;
+	display->next_frame = buffer;
 	nvnc_fb_ref(buffer->nvnc_fb);
 
 	if (have_pending_frame)
@@ -1488,7 +1596,7 @@ static void wayvnc_process_frame(struct wayvnc* self, struct wv_buffer* buffer)
 }
 
 void on_capture_done(enum screencopy_result result, struct wv_buffer* buffer,
-		void* userdata)
+		struct image_source* source, void* userdata)
 {
 	struct wayvnc* self = userdata;
 
@@ -1501,7 +1609,7 @@ void on_capture_done(enum screencopy_result result, struct wv_buffer* buffer,
 		wayvnc_restart_capture(self);
 		break;
 	case SCREENCOPY_DONE:
-		wayvnc_process_frame(self, buffer);
+		wayvnc_process_frame(self, buffer, source);
 		break;
 	}
 }
@@ -1559,16 +1667,24 @@ static void on_perf_tick(struct aml_ticker* obj)
 {
 	struct wayvnc* self = aml_get_userdata(obj);
 
+	double total_area = 0;
 	int width, height;
 	if (image_source_get_dimensions(self->image_source, &width, &height)) {
-	} else if (self->last_frame_info.is_set) {
-		width = self->last_frame_info.width;
-		height = self->last_frame_info.height;
+		total_area = width * height;
 	} else {
-		return;
+		struct wayvnc_display *display;
+		LIST_FOREACH(display, &self->wayvnc_displays, link) {
+			if (!display->last_frame_info.is_set)
+				break;
+			width = display->last_frame_info.width;
+			height = display->last_frame_info.height;
+			total_area += width * height;
+		}
 	}
 
-	double total_area = width * height;
+	if (total_area == 0)
+		return;
+
 	double area_avg = (double)self->damage_area_sum / (double)self->n_frames_captured;
 	double relative_area_avg = 100.0 * area_avg / total_area;
 
@@ -1757,21 +1873,25 @@ static void client_init_pointer(struct wayvnc_client* self)
 		return;
 
 	// TODO
-	if (!image_source_is_output(wayvnc->image_source))
+	if (!image_source_is_output(wayvnc->image_source) &&
+			!image_source_is_desktop(wayvnc->image_source))
 		return;
-
-	struct output* output = output_from_image_source(wayvnc->image_source);
-
-	self->pointer.vnc = self->server->nvnc;
-	self->pointer.output = output;
-
-	if (self->pointer.pointer)
-		pointer_destroy(&self->pointer);
 
 	int pointer_manager_version =
 		zwlr_virtual_pointer_manager_v1_get_version(wayvnc->pointer_manager);
 
-	self->pointer.pointer = pointer_manager_version >= 2
+	struct output* output = NULL;
+	if (pointer_manager_version >= 2 &&
+			image_source_is_output(wayvnc->image_source))
+		output_from_image_source(wayvnc->image_source);
+
+	self->pointer.vnc = self->server->nvnc;
+	self->pointer.image_source = wayvnc->image_source;
+
+	if (self->pointer.pointer)
+		pointer_destroy(&self->pointer);
+
+	self->pointer.pointer = output
 		? zwlr_virtual_pointer_manager_v1_create_virtual_pointer_with_output(
 			wayvnc->pointer_manager, self->seat->wl_seat,
 			output->wl_output)
@@ -1934,7 +2054,8 @@ void log_image_source(struct wayvnc* self)
 	}
 }
 
-static void wayvnc_process_cursor(struct wayvnc* self, struct wv_buffer* buffer)
+static void wayvnc_process_cursor(struct wayvnc* self, struct wv_buffer* buffer,
+		struct image_source* source)
 {
 	nvnc_log(NVNC_LOG_DEBUG, "Got new cursor");
 	bool is_damaged = pixman_region_not_empty(&buffer->frame_damage);
@@ -1945,7 +2066,8 @@ static void wayvnc_process_cursor(struct wayvnc* self, struct wv_buffer* buffer)
 }
 
 static void on_cursor_capture_done(enum screencopy_result result,
-		struct wv_buffer* buffer, void* userdata)
+		struct wv_buffer* buffer, struct image_source* source,
+		void* userdata)
 {
 	struct wayvnc* self = userdata;
 
@@ -1958,7 +2080,7 @@ static void on_cursor_capture_done(enum screencopy_result result,
 		wayvnc_start_cursor_capture(self, true);
 		break;
 	case SCREENCOPY_DONE:
-		wayvnc_process_cursor(self, buffer);
+		wayvnc_process_cursor(self, buffer, source);
 		break;
 	}
 }
@@ -2260,11 +2382,14 @@ int main(int argc, char* argv[])
 {
 	struct wayvnc self = { 0 };
 
+	LIST_INIT(&self.wayvnc_displays);
+
 	const char* cfg_file = NULL;
 	bool enable_gpu_features = false;
 
 	const char* address = NULL;
 	int port = 0;
+	bool use_desktop_capture = false;
 	bool use_external_fd = false;
 	bool use_unix_socket = false;
 	bool use_websocket = false;
@@ -2292,6 +2417,8 @@ int main(int argc, char* argv[])
 		  .help = "An address to listen on.",
 		  .default_ = "localhost",
 		  .is_repeating = true },
+		{ 'a', "desktop", NULL,
+		  "Capture all outputs." },
 		{ 'C', "config", "<path>",
 		  "Select a config file." },
 		{ 'd', "disable-input", NULL,
@@ -2359,6 +2486,7 @@ int main(int argc, char* argv[])
 		return wayvnc_usage(&option_parser, stdout, 0);
 	}
 
+	use_desktop_capture = option_parser_get_value(&option_parser, "desktop");
 	cfg_file = option_parser_get_value(&option_parser, "config");
 	enable_gpu_features = !!option_parser_get_value(&option_parser, "gpu");
 	self.desktop_name = option_parser_get_value(&option_parser, "name");
@@ -2437,6 +2565,16 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 
+	if (use_desktop_capture && output_name) {
+		nvnc_log(NVNC_LOG_ERROR, "desktop and output are conflicting options");
+		return 1;
+	}
+
+	if (use_desktop_capture && toplevel_id) {
+		nvnc_log(NVNC_LOG_ERROR, "desktop and toplevel are conflicting options");
+		return 1;
+	}
+
 	errno = 0;
 	int cfg_rc = cfg_load(&self.cfg, cfg_file);
 	if (cfg_rc != 0 && (cfg_file || errno != ENOENT)) {
@@ -2474,6 +2612,11 @@ int main(int argc, char* argv[])
 	if (!self.rate_limiter)
 		goto rate_limiter_failure;
 
+	observable_init(&output_added);
+	observable_init(&output_removed);
+
+	struct desktop* desktop = NULL;
+
 	if (!start_detached) {
 		if (init_wayland(&self, NULL) < 0) {
 			nvnc_log(NVNC_LOG_ERROR, "Failed to initialise wayland");
@@ -2488,6 +2631,13 @@ int main(int argc, char* argv[])
 				goto wayland_failure;
 			}
 			set_image_source(&self, &out->image_source);
+		} else if (use_desktop_capture) {
+			desktop = desktop_new(&self.outputs);
+			if (!desktop) {
+				nvnc_log(NVNC_LOG_ERROR, "Failed to set up desktop capture");
+				goto wayland_failure;
+			}
+			set_image_source(&self, &desktop->image_source);
 		} else if (toplevel_id) {
 			struct toplevel* toplevel;
 			toplevel = toplevel_find_by_identifier(&self.toplevels,
@@ -2607,16 +2757,21 @@ int main(int argc, char* argv[])
 
 	nvnc_log(NVNC_LOG_INFO, "Exiting...");
 
+	desktop_destroy(desktop);
+
 	if (self.display)
 		screencopy_stop(self.screencopy);
 
 	ctl_server_destroy(self.ctl);
 	self.ctl = NULL;
 
-	nvnc_display_unref(self.nvnc_display);
+	wayvnc_display_list_deinit(&self.wayvnc_displays);
 	nvnc_del(self.nvnc);
 	self.nvnc = NULL;
 	wayland_detach(&self);
+
+	observable_deinit(&output_added);
+	observable_deinit(&output_removed);
 
 	if (zwp_linux_dmabuf)
 		zwp_linux_dmabuf_v1_destroy(zwp_linux_dmabuf);
@@ -2633,11 +2788,12 @@ int main(int argc, char* argv[])
 nvnc_failure:
 	ctl_server_destroy(self.ctl);
 	self.ctl = NULL;
-	nvnc_display_unref(self.nvnc_display);
+	wayvnc_display_list_deinit(&self.wayvnc_displays);
 	nvnc_del(self.nvnc);
 	self.nvnc = NULL;
 ctl_server_failure:
 screencopy_failure:
+	desktop_destroy(desktop);
 	wayland_detach(&self);
 wayland_failure:
 rate_limiter_failure:

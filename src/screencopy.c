@@ -61,7 +61,7 @@ struct wlr_screencopy {
 
 	bool is_immediate_copy;
 	bool overlay_cursor;
-	struct wl_output* wl_output;
+	struct output* output;
 
 	uint32_t wl_shm_width, wl_shm_height, wl_shm_stride;
 	enum wl_shm_format wl_shm_format;
@@ -142,7 +142,9 @@ static void screencopy_buffer_done(void* data,
 	if (!buffer) {
 		screencopy__stop(self);
 		self->status = WLR_SCREENCOPY_FATAL;
-		self->parent.on_done(SCREENCOPY_FATAL, NULL, self->parent.userdata);
+		self->parent.on_done(SCREENCOPY_FATAL, NULL,
+				&self->output->image_source,
+				self->parent.userdata);
 		return;
 	}
 
@@ -216,7 +218,8 @@ static void screencopy_ready(void* data,
 	nvnc_fb_set_pts(self->back->nvnc_fb, pts);
 
 	self->status = WLR_SCREENCOPY_DONE;
-	self->parent.on_done(SCREENCOPY_DONE, self->back, self->parent.userdata);
+	self->parent.on_done(SCREENCOPY_DONE, self->back,
+			&self->output->image_source, self->parent.userdata);
 
 	self->back = NULL;
 }
@@ -235,7 +238,8 @@ static void screencopy_failed(void* data,
 	self->front = NULL;
 
 	self->status = WLR_SCREENCOPY_FAILED;
-	self->parent.on_done(SCREENCOPY_FAILED, NULL, self->parent.userdata);
+	self->parent.on_done(SCREENCOPY_FAILED, NULL,
+			&self->output->image_source, self->parent.userdata);
 }
 
 static void screencopy_damage(void* data,
@@ -266,7 +270,7 @@ static int screencopy__start_capture(struct wlr_screencopy* self, uint64_t now)
 
 	self->frame = zwlr_screencopy_manager_v1_capture_output(
 			screencopy_manager, self->overlay_cursor,
-			self->wl_output);
+			self->output->wl_output);
 	if (!self->frame)
 		return -1;
 
@@ -323,7 +327,7 @@ static struct screencopy* wlr_screencopy_create(struct image_source* source,
 	self->parent.impl = &wlr_screencopy_impl;
 	self->parent.rate_limit = 30;
 
-	self->wl_output = output_from_image_source(source)->wl_output;
+	self->output = output_from_image_source(source);
 	self->overlay_cursor = render_cursor;
 
 	self->pool = wv_buffer_pool_create(NULL);

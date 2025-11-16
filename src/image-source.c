@@ -52,6 +52,8 @@ void image_source_deinit(struct image_source* self)
 
 void image_source_destroy(struct image_source* self)
 {
+	if (!self)
+		return;
 	image_source_deinit(self);
 	free(self);
 }

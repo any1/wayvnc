@@ -36,7 +36,8 @@ enum screencopy_capabilitites {
 };
 
 typedef void (*screencopy_done_fn)(enum screencopy_result,
-		struct wv_buffer* buffer, void* userdata);
+		struct wv_buffer* buffer, struct image_source* source,
+		void* userdata);
 
 struct screencopy_impl {
 	enum screencopy_capabilitites caps;

@@ -108,6 +108,7 @@ sources = [
 	'src/table-printer.c',
 	'src/image-source.c',
 	'src/toplevel.c',
+	'src/desktop.c',
 ]
 
 dependencies = [
