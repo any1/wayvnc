@@ -108,14 +108,6 @@ void image_source_release_power_on(struct image_source* self)
 		self->impl->release_power_on(self);
 }
 
-void image_source_notify_output_added(struct image_source* self,
-		struct output* output)
-{
-	assert(self->impl);
-	if (self->impl->output_added)
-		self->impl->output_added(self, output);
-}
-
 static bool is_transform_90_degrees(enum wl_output_transform transform)
 {
 	switch (transform) {

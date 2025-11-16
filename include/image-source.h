@@ -51,7 +51,6 @@ struct image_source_impl {
 			size_t maxlen);
 	int (*acquire_power_on)(struct image_source*);
 	void (*release_power_on)(struct image_source*);
-	void (*output_added)(struct image_source*, struct output*);
 	void (*deinit)(struct image_source*);
 };
 
@@ -59,8 +58,6 @@ void image_source_init(struct image_source* self, struct image_source_impl* impl
 void image_source_deinit(struct image_source* self);
 
 void image_source_destroy(struct image_source* self);
-
-void image_source_notify_output_added(struct image_source* self, struct output*);
 
 bool image_source_is_output(const struct image_source* self);
 bool image_source_is_toplevel(const struct image_source* self);
