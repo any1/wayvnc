@@ -85,20 +85,9 @@ static const struct wl_output_listener output_listener = {
 	.scale = output_handle_scale,
 };
 
-static void output_deinit(struct output* output)
-{
-	output_release_power_on(output);
-	if (output->xdg_output)
-		zxdg_output_v1_destroy(output->xdg_output);
-	if (output->wlr_output_power)
-		zwlr_output_power_v1_destroy(output->wlr_output_power);
-	wl_output_destroy(output->wl_output);
-}
-
 void output_destroy(struct output* output)
 {
-	output_deinit(output);
-	free(output);
+	image_source_destroy(&output->image_source);
 }
 
 void output_list_destroy(struct wl_list* list)
@@ -334,9 +323,15 @@ static void output_image_source_release_power_on(struct image_source* self)
 	output_release_power_on(output_from_image_source(self));
 }
 
-static void output_image_source_deinit(struct image_source* self)
+static void output_image_source_deinit(struct image_source* base)
 {
-	output_deinit(output_from_image_source(self));
+	struct output* output = output_from_image_source(base);
+	output_release_power_on(output);
+	if (output->xdg_output)
+		zxdg_output_v1_destroy(output->xdg_output);
+	if (output->wlr_output_power)
+		zwlr_output_power_v1_destroy(output->wlr_output_power);
+	wl_output_destroy(output->wl_output);
 }
 
 static struct image_source_impl image_source_impl = {
