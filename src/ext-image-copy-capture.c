@@ -683,7 +683,7 @@ static int ext_image_copy_capture_start(struct screencopy* ptr, bool immediate)
 {
 	struct ext_image_copy_capture* self = (struct ext_image_copy_capture*)ptr;
 	if (self->frame) {
-		return -1;
+		return 0;
 	}
 
 	if (immediate || self->frame_count == 0) {

@@ -294,7 +294,7 @@ static int wlr_screencopy_start(struct screencopy* ptr, bool is_immediate_copy)
 	struct wlr_screencopy* self = (struct wlr_screencopy*)ptr;
 
 	if (self->status == WLR_SCREENCOPY_IN_PROGRESS)
-		return -1;
+		return 0;
 
 	self->is_immediate_copy = is_immediate_copy;
 
