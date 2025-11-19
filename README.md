@@ -35,16 +35,17 @@ project.
 
 #### For Arch Linux
 ```
-pacman -S base-devel libglvnd libxkbcommon pixman gnutls jansson
+pacman -S base-devel ffmpeg libxkbcommon mesa wayland git meson scdoc
 ```
+Also, see the PKGBUILD on the AUR.
 
 #### For Fedora 37
 ```
-dnf install -y meson gcc ninja-build pkg-config egl-wayland egl-wayland-devel \
-	mesa-libEGL-devel mesa-libEGL libwayland-egl libglvnd-devel \
-	libglvnd-core-devel libglvnd mesa-libGLES-devel mesa-libGLES \
-	libxkbcommon-devel libxkbcommon libwayland-client \
-	pam-devel pixman-devel libgbm-devel libdrm-devel scdoc \
+dnf install -y meson gcc ninja-build pkgconf-pkg-config egl-wayland \
+	egl-wayland-devel mesa-libEGL-devel mesa-libEGL libwayland-egl \
+	libglvnd-devel libglvnd-core-devel libglvnd mesa-libGLES-devel \
+	mesa-libGLES libxkbcommon-devel libxkbcommon libwayland-client \
+	pam-devel pixman-devel mesa-libgbm-devel libdrm-devel scdoc \
 	libavcodec-free-devel libavfilter-free-devel libavutil-free-devel \
 	turbojpeg-devel	wayland-devel gnutls-devel jansson-devel
 ```
@@ -57,8 +58,8 @@ apt build-dep wayvnc
 #### For Ubuntu
 ```
 apt install meson libdrm-dev libxkbcommon-dev libwlroots-dev libjansson-dev \
-	libpam0g-dev libgnutls28-dev libavfilter-dev libavcodec-dev \
-	libavutil-dev libturbojpeg0-dev scdoc
+	libgbm-dev libpam0g-dev libgnutls28-dev libavfilter-dev libavcodec-dev \
+	libavutil-dev libturbojpeg0-dev pkg-config scdoc
 ```
 
 #### Additional build-time dependencies
