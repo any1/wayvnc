@@ -2409,6 +2409,7 @@ int main(int argc, char* argv[])
 	bool exit_on_disconnect = false;
 
 	const char* log_level_name = NULL;
+	const char* log_filter = NULL;
 	bool is_verbose = false;
 	int log_level = NVNC_LOG_WARNING;
 
@@ -2430,6 +2431,8 @@ int main(int argc, char* argv[])
 		{ 'f', "max-fps", "<fps>",
 		  "Set rate limit.",
 		  .default_ = "30" },
+		{ 'F', "log-filter", "<string>",
+		  "Set log filter." },
 		{ 'g', "gpu", NULL,
 		  "Enable features that need GPU." },
 		{ 'h', "help", NULL,
@@ -2504,6 +2507,7 @@ int main(int argc, char* argv[])
 	disable_input = !!option_parser_get_value(&option_parser, "disable-input");
 	is_verbose = option_parser_get_value(&option_parser, "verbose");
 	log_level_name = option_parser_get_value(&option_parser, "log-level");
+	log_filter = option_parser_get_value(&option_parser, "log-filter");
 	max_rate = atoi(option_parser_get_value(&option_parser, "max-fps"));
 	use_transient_seat = !!option_parser_get_value(&option_parser,
 				"transient-seat");
@@ -2533,6 +2537,9 @@ int main(int argc, char* argv[])
 		log_level = NVNC_LOG_INFO;
 
 	nvnc_set_log_level(log_level);
+
+	if (log_filter)
+		nvnc_set_log_filter(log_filter);
 
 	if (seat_name && disable_input) {
 		nvnc_log(NVNC_LOG_ERROR, "seat and disable-input are conflicting options");
