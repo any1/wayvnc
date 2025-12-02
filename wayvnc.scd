@@ -10,6 +10,9 @@ wayvnc - A VNC server for wlroots based Wayland compositors.
 
 # OPTIONS
 
+*-a, --desktop*
+	Capture all outputs.
+
 *-C, --config=<path>*
 	Select a config file.
 
@@ -23,6 +26,9 @@ wayvnc - A VNC server for wlroots based Wayland compositors.
 
 *-f, --max-fps=<fps>*
 	Set the rate limit (default 30).
+
+*-F, --log-filter=<file>*
+	Set a log filter.
 
 *-g, --gpu*
 	Enable features that require GPU.
@@ -57,6 +63,9 @@ wayvnc - A VNC server for wlroots based Wayland compositors.
 
 *-t, --transient-seat*
 	Create a transient seat for each client session.
+
+*-T, --toplevel=<identifier>*
+	Capture a toplevel.
 
 *-S, --socket=<path>*
 	Set wayvnc control socket path. Default: $XDG_RUNTIME_DIR/wayvncctl
