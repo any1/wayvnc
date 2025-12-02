@@ -397,10 +397,26 @@ static void desktop_capture_stop(struct screencopy* base)
 	}
 }
 
+static enum screencopy_capabilitites desktop_capture_get_caps(
+		const struct screencopy* base)
+{
+	struct desktop_capture* self = (struct desktop_capture*)base;
+	struct desktop* desktop = self->desktop;
+	assert(desktop);
+
+	if (LIST_EMPTY(&desktop->outputs)) {
+		nvnc_log(NVNC_LOG_ERROR, "Whoops. No outputs. Can't get capabilities");
+		return 0;
+	}
+
+	struct desktop_output* output = LIST_FIRST(&desktop->outputs);
+	return screencopy_get_capabilities(output->sc);
+}
+
 struct screencopy_impl desktop_capture_impl = {
-	.caps = 0,
 	.create = desktop_capture_create,
 	.destroy = desktop_capture_destroy,
 	.start = desktop_capture_start,
 	.stop = desktop_capture_stop,
+	.get_capabilities = desktop_capture_get_caps,
 };

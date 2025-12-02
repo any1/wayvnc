@@ -358,7 +358,6 @@ static void wlr_screencopy_destroy(struct screencopy* ptr)
 }
 
 struct screencopy_impl wlr_screencopy_impl = {
-	.caps = 0,
 	.create = wlr_screencopy_create,
 	.destroy = wlr_screencopy_destroy,
 	.start = wlr_screencopy_start,

@@ -66,3 +66,11 @@ void screencopy_stop(struct screencopy* self)
 	if (self)
 		self->impl->stop(self);
 }
+
+enum screencopy_capabilitites screencopy_get_capabilities(
+		const struct screencopy* self)
+{
+	if (!self->impl->get_capabilities)
+		return 0;
+	return self->impl->get_capabilities(self);
+}

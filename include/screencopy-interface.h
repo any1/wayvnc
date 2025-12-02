@@ -40,12 +40,13 @@ typedef void (*screencopy_done_fn)(enum screencopy_result,
 		void* userdata);
 
 struct screencopy_impl {
-	enum screencopy_capabilitites caps;
 	struct screencopy* (*create)(struct image_source*, bool render_cursor);
 	struct screencopy* (*create_cursor)(struct image_source*, struct wl_seat*);
 	void (*destroy)(struct screencopy*);
 	int (*start)(struct screencopy*, bool immediate);
 	void (*stop)(struct screencopy*);
+	enum screencopy_capabilitites
+		(*get_capabilities)(const struct screencopy*);
 };
 
 struct screencopy {
@@ -71,6 +72,9 @@ struct screencopy* screencopy_create(struct image_source* source,
 struct screencopy* screencopy_create_cursor(struct image_source* source,
 		struct wl_seat* seat);
 void screencopy_destroy(struct screencopy* self);
+
+enum screencopy_capabilitites screencopy_get_capabilities(
+		const struct screencopy* self);
 
 int screencopy_start(struct screencopy* self, bool immediate);
 void screencopy_stop(struct screencopy* self);

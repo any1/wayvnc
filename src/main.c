@@ -1513,9 +1513,11 @@ static void wayvnc_display_send_next_frame(struct wayvnc* self,
 	struct pixman_region16 damage;
 	pixman_region_init(&damage);
 
-	if (self->screencopy->impl->caps & SCREENCOPY_CAP_TRANSFORM) {
+	if (screencopy_get_capabilities(self->screencopy)
+			& SCREENCOPY_CAP_TRANSFORM) {
 		pixman_region_copy(&damage, &buffer->frame_damage);
 	} else {
+		// TODO: During desktop capture, use correct transform
 		apply_output_transform(self, buffer, &damage);
 	}
 
@@ -1565,7 +1567,8 @@ static void wayvnc_process_frame(struct wayvnc* self, struct wv_buffer* buffer,
 	display->last_frame_info.width = buffer->width;
 	display->last_frame_info.height = buffer->height;
 
-	if (self->screencopy->impl->caps & SCREENCOPY_CAP_TRANSFORM)
+	if (screencopy_get_capabilities(self->screencopy)
+			& SCREENCOPY_CAP_TRANSFORM)
 		display->last_frame_info.transform =
 			(enum wl_output_transform)nvnc_fb_get_transform(buffer->nvnc_fb);
 

@@ -799,11 +799,17 @@ void ext_image_copy_capture_destroy(struct screencopy* ptr)
 	free(self);
 }
 
+static enum screencopy_capabilitites ext_image_copy_capture_get_caps(
+		const struct screencopy* self)
+{
+	return SCREENCOPY_CAP_TRANSFORM | SCREENCOPY_CAP_CURSOR;
+}
+
 struct screencopy_impl ext_image_copy_capture_impl = {
-	.caps = SCREENCOPY_CAP_CURSOR | SCREENCOPY_CAP_TRANSFORM,
 	.create = ext_image_copy_capture_create,
 	.create_cursor = ext_image_copy_capture_create_cursor,
 	.destroy = ext_image_copy_capture_destroy,
 	.start = ext_image_copy_capture_start,
 	.stop = ext_image_copy_capture_stop,
+	.get_capabilities = ext_image_copy_capture_get_caps,
 };
