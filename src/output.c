@@ -59,13 +59,6 @@ static void output_handle_mode(void* data, struct wl_output* wl_output,
 			       uint32_t flags, int32_t width, int32_t height,
 			       int32_t refresh)
 {
-	struct output* output = data;
-
-	if (!(flags & WL_OUTPUT_MODE_CURRENT))
-		return;
-
-	output->width = width;
-	output->height = height;
 }
 
 static void output_handle_done(void* data, struct wl_output* wl_output)
@@ -113,6 +106,9 @@ void output_logical_position(void* data, struct zxdg_output_v1* xdg_output,
 void output_logical_size(void* data, struct zxdg_output_v1* xdg_output,
                          int32_t width, int32_t height)
 {
+	struct output* output = data;
+	output->width = width;
+	output->height = height;
 }
 
 void output_name(void* data, struct zxdg_output_v1* xdg_output,
@@ -284,14 +280,38 @@ void output_setup_xdg_output_managers(struct wl_list* list)
 	}
 }
 
+static bool is_transform_90_degrees(enum wl_output_transform transform)
+{
+	switch (transform) {
+	case WL_OUTPUT_TRANSFORM_90:
+	case WL_OUTPUT_TRANSFORM_270:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_90:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_270:
+		return true;
+	default:
+		break;
+	}
+
+	return false;
+}
+
 static void output_image_source_get_dimensions(const struct image_source* self,
 		int* width, int* height)
 {
 	struct output* output = output_from_image_source(self);
-	if (width)
-		*width = output->width;
-	if (height)
-		*height = output->height;
+
+	// The output's dimensions are pre-transformed, so transform back
+	if (is_transform_90_degrees(image_source_get_transform(self))) {
+		if (width)
+			*width = output->height;
+		if (height)
+			*height = output->width;
+	} else {
+		if (width)
+			*width = output->width;
+		if (height)
+			*height = output->height;
+	}
 }
 
 static enum wl_output_transform output_image_source_get_transform(
