@@ -1273,6 +1273,12 @@ static bool wayvnc_display_add(struct wayvnc* self,
 		return false;
 	}
 
+	int width, height;
+	if (image_source_get_transformed_dimensions(image_source, &width,
+				&height))
+		nvnc_display_set_logical_size(display->nvnc_display, width,
+				height);
+
 	nvnc_add_display(self->nvnc, display->nvnc_display);
 
 	return true;
