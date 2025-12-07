@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 - 2024 Andri Yngvason
+ * Copyright (c) 2020 - 2025 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -112,6 +112,16 @@ enum wv_buffer_type wv_buffer_get_available_types(void)
 	return type;
 }
 
+static void wv_buffer_handle_wayland_destroyed(struct observer* observer,
+		void *data)
+{
+	struct wv_buffer* self = wl_container_of(observer, self,
+			wayland_destroy_observer);
+	if (self->wl_buffer)
+		wl_buffer_destroy(self->wl_buffer);
+	self->wl_buffer = NULL;
+}
+
 struct wv_buffer* wv_buffer_create_shm(const struct wv_buffer_config* config)
 {
 	assert(wayland->wl_shm);
@@ -163,6 +173,10 @@ struct wv_buffer* wv_buffer_create_shm(const struct wv_buffer_config* config)
 			config->height);
 
 	LIST_INSERT_HEAD(&buffer_registry, self, registry_link);
+
+	observer_init(&self->wayland_destroy_observer,
+			&wayland->observable.destroyed,
+			wv_buffer_handle_wayland_destroyed);
 
 	close(fd);
 	return self;
@@ -367,6 +381,9 @@ static struct wv_buffer* wv_buffer_create_dmabuf(
 
 	LIST_INSERT_HEAD(&buffer_registry, self, registry_link);
 
+	observer_init(&self->wayland_destroy_observer,
+			&wayland->observable.destroyed,
+			wv_buffer_handle_wayland_destroyed);
 	return self;
 
 nvnc_fb_failure:
@@ -412,8 +429,6 @@ static struct wv_buffer* wv_buffer_create(const struct wv_buffer_config* config)
 
 static void wv_buffer_destroy_shm(struct wv_buffer* self)
 {
-	nvnc_fb_unref(self->nvnc_fb);
-	wl_buffer_destroy(self->wl_buffer);
 	munmap(self->pixels, self->size);
 	free(self);
 }
@@ -421,8 +436,6 @@ static void wv_buffer_destroy_shm(struct wv_buffer* self)
 #ifdef ENABLE_SCREENCOPY_DMABUF
 static void wv_buffer_destroy_dmabuf(struct wv_buffer* self)
 {
-	nvnc_fb_unref(self->nvnc_fb);
-	wl_buffer_destroy(self->wl_buffer);
 	free(self->modifiers);
 	gbm_bo_destroy(self->bo);
 	wv_gbm_device_unref(self->gbm);
@@ -435,6 +448,11 @@ static void wv_buffer_destroy(struct wv_buffer* self)
 	pixman_region_fini(&self->buffer_damage);
 	pixman_region_fini(&self->frame_damage);
 	LIST_REMOVE(self, registry_link);
+
+	nvnc_fb_unref(self->nvnc_fb);
+	observer_deinit(&self->wayland_destroy_observer);
+	if (self->wl_buffer)
+		wl_buffer_destroy(self->wl_buffer);
 
 	switch (self->type) {
 	case WV_BUFFER_SHM:

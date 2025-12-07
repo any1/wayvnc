@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020 - 2021 Andri Yngvason
+ * Copyright (c) 2020 - 2025 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -18,6 +18,7 @@
 
 #include "sys/queue.h"
 #include "config.h"
+#include "observer.h"
 
 #include <unistd.h>
 #include <stdbool.h>
@@ -66,6 +67,8 @@ struct wv_buffer {
 	int width, height, stride;
 	uint32_t format;
 	bool y_inverted;
+
+	struct observer wayland_destroy_observer;
 
 	enum wv_buffer_domain domain;
 
