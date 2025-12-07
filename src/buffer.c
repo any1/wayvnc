@@ -35,6 +35,7 @@
 #include "config.h"
 #include "util.h"
 #include "strlcpy.h"
+#include "wayland.h"
 
 #ifdef ENABLE_SCREENCOPY_DMABUF
 #include <gbm.h>
@@ -48,8 +49,7 @@
 #endif // HAVE_LINUX_DMA_HEAP
 #endif // ENABLE_SCREENCOPY_DMABUF
 
-extern struct wl_shm* wl_shm;
-extern struct zwp_linux_dmabuf_v1* zwp_linux_dmabuf;
+extern struct wayland* wayland;
 
 LIST_HEAD(wv_buffer_list, wv_buffer);
 
@@ -101,11 +101,11 @@ enum wv_buffer_type wv_buffer_get_available_types(void)
 {
 	enum wv_buffer_type type = 0;
 
-	if (wl_shm)
+	if (wayland->wl_shm)
 		type |= WV_BUFFER_SHM;
 
 #ifdef ENABLE_SCREENCOPY_DMABUF
-	if (zwp_linux_dmabuf)
+	if (wayland->zwp_linux_dmabuf_v1)
 		type |= WV_BUFFER_DMABUF;
 #endif
 
@@ -114,7 +114,7 @@ enum wv_buffer_type wv_buffer_get_available_types(void)
 
 struct wv_buffer* wv_buffer_create_shm(const struct wv_buffer_config* config)
 {
-	assert(wl_shm);
+	assert(wayland->wl_shm);
 	enum wl_shm_format wl_fmt = fourcc_to_wl_shm(config->format);
 
 	struct wv_buffer* self = calloc(1, sizeof(*self));
@@ -137,7 +137,8 @@ struct wv_buffer* wv_buffer_create_shm(const struct wv_buffer_config* config)
 	if (!self->pixels)
 		goto mmap_failure;
 
-	struct wl_shm_pool* pool = wl_shm_create_pool(wl_shm, fd, self->size);
+	struct wl_shm_pool* pool = wl_shm_create_pool(wayland->wl_shm, fd,
+			self->size);
 	if (!pool)
 		goto pool_failure;
 
@@ -281,7 +282,7 @@ static struct wv_buffer* wv_buffer_create_dmabuf(
 		const struct wv_buffer_config* config,
 		struct wv_gbm_device* gbm)
 {
-	assert(zwp_linux_dmabuf);
+	assert(wayland->zwp_linux_dmabuf_v1);
 
 	struct wv_buffer* self = calloc(1, sizeof(*self));
 	if (!self)
@@ -317,7 +318,7 @@ static struct wv_buffer* wv_buffer_create_dmabuf(
 		goto bo_failure;
 
 	struct zwp_linux_buffer_params_v1* params;
-	params = zwp_linux_dmabuf_v1_create_params(zwp_linux_dmabuf);
+	params = zwp_linux_dmabuf_v1_create_params(wayland->zwp_linux_dmabuf_v1);
 	if (!params)
 		goto params_failure;
 

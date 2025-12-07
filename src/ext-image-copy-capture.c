@@ -27,6 +27,7 @@
 #include <libdrm/drm_fourcc.h>
 #include <aml.h>
 #include <neatvnc.h>
+#include <wayland.h>
 
 #include "screencopy-interface.h"
 #include "ext-image-copy-capture-v1.h"
@@ -41,14 +42,6 @@
 #include "image-source.h"
 #include "output.h"
 #include "toplevel.h"
-
-extern struct ext_output_image_capture_source_manager_v1*
-ext_output_image_capture_source_manager;
-
-extern struct ext_foreign_toplevel_image_capture_source_manager_v1*
-ext_foreign_toplevel_image_capture_source_manager;
-
-extern struct ext_image_copy_capture_manager_v1* ext_image_copy_capture_manager;
 
 struct format_entry {
 	double score;
@@ -90,6 +83,8 @@ struct ext_image_copy_capture {
 	uint64_t last_time;
 	struct aml_timer* timer;
 };
+
+extern struct wayland* wayland;
 
 struct screencopy_impl ext_image_copy_capture_impl;
 
@@ -137,14 +132,14 @@ struct ext_image_capture_source_v1* image_capture_source_from_image_source(
 		struct wl_output *wl_output =
 			output_from_image_source(image_source)->wl_output;
 		return ext_output_image_capture_source_manager_v1_create_source(
-				ext_output_image_capture_source_manager,
+				wayland->ext_output_image_capture_source_manager_v1,
 				wl_output);
 	}
 	if (image_source_is_toplevel(image_source)) {
 		struct ext_foreign_toplevel_handle_v1 *handle =
 			toplevel_from_image_source(image_source)->handle;
 		return ext_foreign_toplevel_image_capture_source_manager_v1_create_source(
-				ext_foreign_toplevel_image_capture_source_manager,
+				wayland->ext_foreign_toplevel_image_capture_source_manager_v1,
 				handle);
 	}
 	return NULL;
@@ -162,7 +157,8 @@ static int ext_image_copy_capture_init_session(struct ext_image_copy_capture* se
 		options |= EXT_IMAGE_COPY_CAPTURE_MANAGER_V1_OPTIONS_PAINT_CURSORS;
 
 	self->session = ext_image_copy_capture_manager_v1_create_session(
-			ext_image_copy_capture_manager, source, options);
+			wayland->ext_image_copy_capture_manager_v1, source,
+			options);
 	ext_image_capture_source_v1_destroy(source);
 	if (!self->session)
 		return -1;
@@ -181,7 +177,8 @@ static int ext_image_copy_capture_init_cursor_session(struct ext_image_copy_capt
 
 	struct wl_pointer* pointer = wl_seat_get_pointer(self->wl_seat);
 	self->cursor = ext_image_copy_capture_manager_v1_create_pointer_cursor_session(
-			ext_image_copy_capture_manager, source, pointer);
+			wayland->ext_image_copy_capture_manager_v1, source,
+			pointer);
 	ext_image_capture_source_v1_destroy(source);
 	wl_pointer_release(pointer);
 	if (!self->cursor)

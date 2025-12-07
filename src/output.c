@@ -28,12 +28,10 @@
 
 #include "output.h"
 #include "strlcpy.h"
+#include "wayland.h"
 
 #include "xdg-output-unstable-v1.h"
 #include "wlr-output-power-management-unstable-v1.h"
-
-extern struct zxdg_output_manager_v1* xdg_output_manager;
-extern struct zwlr_output_power_manager_v1* wlr_output_power_manager;
 
 struct output* output_from_image_source(const struct image_source* source)
 {
@@ -142,14 +140,14 @@ static const struct zxdg_output_v1_listener xdg_output_listener = {
 	.description = output_description,
 };
 
-static void output_setup_xdg_output_manager(struct output* self)
+static void output_setup_xdg_output_manager(struct wayland* wayland,
+		struct output* self)
 {
-	if (!xdg_output_manager || self->xdg_output)
+	if (!wayland->zxdg_output_manager_v1 || self->xdg_output)
 		return;
 
-	struct zxdg_output_v1* xdg_output =
-		zxdg_output_manager_v1_get_xdg_output(
-			xdg_output_manager, self->wl_output);
+	struct zxdg_output_v1* xdg_output = zxdg_output_manager_v1_get_xdg_output(
+			wayland->zxdg_output_manager_v1, self->wl_output);
 	self->xdg_output = xdg_output;
 	zxdg_output_v1_add_listener(self->xdg_output, &xdg_output_listener,
 			self);
@@ -197,12 +195,15 @@ int output_acquire_power_on(struct output* output)
 	if (output->wlr_output_power)
 		return 1;
 
-	if (!wlr_output_power_manager)
+	struct zwlr_output_power_manager_v1 *power_manager =
+		output->wayland->zwlr_output_power_manager_v1;
+	if (!power_manager)
 		return -1;
 
 	struct zwlr_output_power_v1* wlr_output_power =
 		zwlr_output_power_manager_v1_get_output_power(
-				wlr_output_power_manager, output->wl_output);
+				power_manager,
+				output->wl_output);
 	output->wlr_output_power = wlr_output_power;
 
 	zwlr_output_power_v1_add_listener(output->wlr_output_power,
@@ -272,11 +273,12 @@ struct output* output_cycle(const struct wl_list* list,
 	return wl_container_of(iter, output, link);
 }
 
-void output_setup_xdg_output_managers(struct wl_list* list)
+void output_setup_xdg_output_managers(struct wayland* wayland,
+		struct wl_list* list)
 {
 	struct output* output;
 	wl_list_for_each(output, list, link) {
-		output_setup_xdg_output_manager(output);
+		output_setup_xdg_output_manager(wayland, output);
 	}
 }
 
@@ -369,7 +371,8 @@ bool image_source_is_output(const struct image_source* self)
 	return self->impl == &image_source_impl;
 }
 
-struct output* output_new(struct wl_output* wl_output, uint32_t id)
+struct output* output_new(struct wayland* wayland, struct wl_output* wl_output,
+		uint32_t id)
 {
 	struct output* output = calloc(1, sizeof(*output));
 	if (!output) {
@@ -379,6 +382,7 @@ struct output* output_new(struct wl_output* wl_output, uint32_t id)
 
 	image_source_init(&output->image_source, &image_source_impl);
 
+	output->wayland = wayland;
 	output->wl_output = wl_output;
 	output->id = id;
 	output->power = IMAGE_SOURCE_POWER_UNKNOWN;
@@ -386,7 +390,7 @@ struct output* output_new(struct wl_output* wl_output, uint32_t id)
 	wl_output_add_listener(output->wl_output, &output_listener,
 			output);
 
-	output_setup_xdg_output_manager(output);
+	output_setup_xdg_output_manager(wayland, output);
 
 	return output;
 }

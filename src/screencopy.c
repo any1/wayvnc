@@ -34,8 +34,9 @@
 #include "config.h"
 #include "image-source.h"
 #include "output.h"
+#include "wayland.h"
 
-extern struct zwlr_screencopy_manager_v1* screencopy_manager;
+extern struct wayland* wayland;
 
 enum wlr_screencopy_status {
 	WLR_SCREENCOPY_STOPPED = 0,
@@ -170,7 +171,8 @@ static void screencopy_buffer(void* data,
 	self->wl_shm_height = height;
 	self->wl_shm_stride = stride;
 
-	int version = zwlr_screencopy_manager_v1_get_version(screencopy_manager);
+	int version = zwlr_screencopy_manager_v1_get_version(
+			wayland->zwlr_screencopy_manager_v1);
 	if (version < 3) {
 		self->have_linux_dmabuf = false;
 		screencopy_buffer_done(data, frame);
@@ -269,8 +271,8 @@ static int screencopy__start_capture(struct wlr_screencopy* self, uint64_t now)
 	};
 
 	self->frame = zwlr_screencopy_manager_v1_capture_output(
-			screencopy_manager, self->overlay_cursor,
-			self->output->wl_output);
+			wayland->zwlr_screencopy_manager_v1,
+			self->overlay_cursor, self->output->wl_output);
 	if (!self->frame)
 		return -1;
 

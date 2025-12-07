@@ -23,6 +23,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+struct wayland;
 struct zxdg_output_manager_v1;
 struct zxdg_output_v1;
 struct zwlr_output_power_manager_v1;
@@ -31,6 +32,7 @@ struct zwlr_output_power_v1;
 struct output {
 	struct image_source image_source;
 
+	struct wayland* wayland;
 	struct wl_output* wl_output;
 	struct zxdg_output_v1* xdg_output;
 	struct zwlr_output_power_v1* wlr_output_power;
@@ -57,14 +59,13 @@ struct output {
 	void* userdata;
 };
 
-extern struct observable output_added;
-extern struct observable output_removed;
-
 struct output* output_from_image_source(const struct image_source* source);
 
-struct output* output_new(struct wl_output* wl_output, uint32_t id);
+struct output* output_new(struct wayland* wayland, struct wl_output* wl_output,
+		uint32_t id);
 void output_destroy(struct output* output);
-void output_setup_xdg_output_managers(struct wl_list* list);
+void output_setup_xdg_output_managers(struct wayland* wayland,
+		struct wl_list* list);
 int output_acquire_power_on(struct output* output);
 void output_release_power_on(struct output* output);
 void output_list_destroy(struct wl_list* list);

@@ -16,6 +16,7 @@
 
 #include "desktop.h"
 #include "output.h"
+#include "wayland.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -29,6 +30,8 @@ static void desktop_capture_handle_done(enum screencopy_result result,
 static double desktop_capture_rate_format(const void* userdata,
 		enum wv_buffer_type type, enum wv_buffer_domain domain,
 		uint32_t format, uint64_t modifier);
+
+extern struct wayland* wayland;
 
 struct desktop* desktop_from_image_source(const struct image_source* source)
 {
@@ -265,10 +268,12 @@ struct desktop* desktop_new(struct wl_list* output_list)
 	if (!self)
 		return NULL;
 
-	observer_init(&self->output_added_observer, &output_added,
+	observer_init(&self->output_added_observer,
+			&wayland->observable.output_added,
 			desktop_image_source_output_added);
 
-	observer_init(&self->output_removed_observer, &output_removed,
+	observer_init(&self->output_removed_observer,
+			&wayland->observable.output_removed,
 			desktop_image_source_output_removed);
 
 	LIST_INIT(&self->outputs);

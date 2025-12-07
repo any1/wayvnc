@@ -254,6 +254,7 @@ key_state_failure:
 
 void keyboard_destroy(struct keyboard* self)
 {
+	zwp_virtual_keyboard_v1_destroy(self->virtual_keyboard);
 	free(self->lookup_table);
 	xkb_state_unref(self->state);
 	xkb_keymap_unref(self->keymap);

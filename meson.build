@@ -109,6 +109,7 @@ sources = [
 	'src/image-source.c',
 	'src/toplevel.c',
 	'src/desktop.c',
+	'src/wayland.c',
 ]
 
 dependencies = [

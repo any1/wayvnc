@@ -35,17 +35,9 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-#include "wlr-screencopy-unstable-v1.h"
-#include "ext-image-copy-capture-v1.h"
-#include "ext-image-capture-source-v1.h"
-#include "wlr-virtual-pointer-unstable-v1.h"
-#include "virtual-keyboard-unstable-v1.h"
-#include "xdg-output-unstable-v1.h"
-#include "wlr-output-power-management-unstable-v1.h"
-#include "wlr-output-management-unstable-v1.h"
-#include "linux-dmabuf-unstable-v1.h"
 #include "ext-transient-seat-v1.h"
-#include "ext-foreign-toplevel-list-v1.h"
+#include "virtual-keyboard-unstable-v1.h"
+
 #include "screencopy-interface.h"
 #include "data-control.h"
 #include "strlcpy.h"
@@ -67,6 +59,7 @@
 #include "toplevel.h"
 #include "observer.h"
 #include "desktop.h"
+#include "wayland.h"
 
 #ifdef ENABLE_PAM
 #include "pam_auth.h"
@@ -77,8 +70,6 @@
 
 #define XSTR(x) STR(x)
 #define STR(x) #x
-
-#define MAYBE_UNUSED __attribute__((unused))
 
 struct wayvnc_client;
 
@@ -106,25 +97,13 @@ struct wayvnc {
 	bool do_exit;
 	bool exit_on_disconnect;
 
-	struct wl_display* display;
-	struct wl_registry* registry;
-	struct aml_handler* wl_handler;
-	struct wl_list outputs;
-	struct wl_list seats;
-	struct wl_list toplevels;
 	struct cfg cfg;
-
-	struct zwp_virtual_keyboard_manager_v1* keyboard_manager;
-	struct zwlr_virtual_pointer_manager_v1* pointer_manager;
-	struct zwlr_data_control_manager_v1* data_control_manager;
-	struct ext_transient_seat_manager_v1* transient_seat_manager;
 
 	struct image_source* image_source;
 	struct seat* selected_seat;
 
 	struct screencopy* screencopy;
 
-	struct aml_handler* wayland_handler;
 	struct aml_signal* signal_handler;
 
 	struct nvnc* nvnc;
@@ -149,7 +128,6 @@ struct wayvnc {
 	struct aml_timer* capture_retry_timer;
 
 	struct ctl* ctl;
-	bool is_initializing;
 
 	bool start_detached;
 	bool overlay_cursor;
@@ -165,6 +143,13 @@ struct wayvnc {
 	uint64_t last_send_time;
 	struct aml_timer* rate_limiter;
 
+	// wayland observers
+	struct observer output_added_observer;
+	struct observer output_removed_observer;
+	struct observer seat_removed_observer;
+	struct observer wayland_destroy_observer;
+
+	// image source observers
 	struct observer power_change_observer;
 };
 
@@ -203,231 +188,51 @@ static void wayland_detach(struct wayvnc* self);
 static bool configure_cursor_sc(struct wayvnc* self,
 		struct wayvnc_client* client);
 
-struct wl_shm* wl_shm = NULL;
-struct zwp_linux_dmabuf_v1* zwp_linux_dmabuf = NULL;
-struct zxdg_output_manager_v1* xdg_output_manager = NULL;
-struct zwlr_output_power_manager_v1* wlr_output_power_manager = NULL;
-struct zwlr_screencopy_manager_v1* screencopy_manager = NULL;
-struct ext_output_image_capture_source_manager_v1*
-		ext_output_image_capture_source_manager = NULL;
-struct ext_foreign_toplevel_image_capture_source_manager_v1*
-		ext_foreign_toplevel_image_capture_source_manager = NULL;
-struct ext_image_copy_capture_manager_v1* ext_image_copy_capture_manager = NULL;
-struct ext_foreign_toplevel_list_v1* ext_foreign_toplevel_list = NULL;
-
-struct observable output_added;
-struct observable output_removed;
+struct wayland* wayland = NULL;
 
 extern struct screencopy_impl wlr_screencopy_impl, ext_image_copy_capture_impl;
 
-static bool registry_add_input(void* data, struct wl_registry* registry,
-			 uint32_t id, const char* interface,
-			 uint32_t version)
+static void on_output_added(struct observer* observer, void* data)
 {
-	struct wayvnc* self = data;
+	struct wayvnc* self = wl_container_of(observer, self,
+			output_added_observer);
+	struct output* output = data;
+	ctl_server_event_output_added(self->ctl, output->name);
+}
 
-	if (self->disable_input)
-		return false;
+static void on_output_removed(struct observer* observer, void* data)
+{
+	struct wayvnc* self = wl_container_of(observer, self,
+			output_removed_observer);
+	struct output* out = data;
 
-	if (strcmp(interface, wl_seat_interface.name) == 0) {
-		struct wl_seat* wl_seat =
-			wl_registry_bind(registry, id, &wl_seat_interface, 7);
-		if (!wl_seat)
-			return true;
+	if (image_source_is_output(self->image_source) &&
+			out == output_from_image_source(self->image_source)) {
+		nvnc_log(NVNC_LOG_WARNING, "Selected output %s went away",
+				out->name);
+		switch_to_prev_output(self);
+	} else
+		nvnc_log(NVNC_LOG_INFO, "Output %s went away", out->name);
 
-		struct seat* seat = seat_new(wl_seat, id);
-		if (!seat) {
-			wl_seat_release(wl_seat);
-			return true;
+	ctl_server_event_output_removed(self->ctl, out->name);
+
+	if (image_source_is_output(self->image_source) &&
+			out == output_from_image_source(self->image_source)) {
+		if (self->start_detached) {
+			nvnc_log(NVNC_LOG_WARNING, "No fallback outputs left. Detaching...");
+			wayland_detach(self);
+		} else {
+			nvnc_log(NVNC_LOG_ERROR, "No fallback outputs left. Exiting...");
+			wayvnc_exit(self);
 		}
-
-		wl_list_insert(&self->seats, &seat->link);
-		return true;
 	}
-
-	if (strcmp(interface, zwlr_virtual_pointer_manager_v1_interface.name) == 0) {
-		self->pointer_manager = wl_registry_bind(registry, id,
-				&zwlr_virtual_pointer_manager_v1_interface,
-				MIN(2, version));
-		return true;
-	}
-
-	if (strcmp(interface, zwp_virtual_keyboard_manager_v1_interface.name) == 0) {
-		self->keyboard_manager = wl_registry_bind(registry, id,
-				&zwp_virtual_keyboard_manager_v1_interface,
-				1);
-		return true;
-	}
-
-	if (strcmp(interface, zwlr_data_control_manager_v1_interface.name) == 0) {
-		self->data_control_manager = wl_registry_bind(registry, id,
-				&zwlr_data_control_manager_v1_interface, 2);
-		return true;
-	}
-
-	if (strcmp(interface, ext_transient_seat_manager_v1_interface.name) == 0) {
-		self->transient_seat_manager = wl_registry_bind(registry, id,
-				&ext_transient_seat_manager_v1_interface, 1);
-		return true;
-	}
-
-	return false;
 }
 
-static void handle_toplevel_handle(void* data,
-		struct ext_foreign_toplevel_list_v1* list,
-		struct ext_foreign_toplevel_handle_v1* handle)
+static void on_seat_removed(struct observer* observer, void* data)
 {
-	struct wayvnc* self = data;
-
-	struct toplevel *toplevel = toplevel_new(handle);
-	wl_list_insert(&self->toplevels, &toplevel->link);
-}
-
-static void handle_toplevel_list_finished(void* data,
-		struct ext_foreign_toplevel_list_v1* list)
-{
-	// noop
-}
-
-static bool registry_add_toplevel(void* data, struct wl_registry* registry,
-			 uint32_t id, const char* interface,
-			 uint32_t version)
-{
-	struct wayvnc* self = data;
-
-	if (!self->use_toplevel)
-		return false;
-
-	if (strcmp(interface, ext_foreign_toplevel_image_capture_source_manager_v1_interface.name) == 0) {
-		ext_foreign_toplevel_image_capture_source_manager =
-			wl_registry_bind(registry, id,
-					&ext_foreign_toplevel_image_capture_source_manager_v1_interface,
-					MIN(1, version));
-		return true;
-	}
-
-	if (strcmp(interface, ext_foreign_toplevel_list_v1_interface.name) == 0) {
-		ext_foreign_toplevel_list =
-			wl_registry_bind(registry, id,
-					&ext_foreign_toplevel_list_v1_interface,
-					1);
-
-		static struct ext_foreign_toplevel_list_v1_listener listener = {
-			.toplevel = handle_toplevel_handle,
-			.finished = handle_toplevel_list_finished,
-		};
-		ext_foreign_toplevel_list_v1_add_listener(
-				ext_foreign_toplevel_list, &listener, self);
-
-		ext_foreign_toplevel_list_v1_stop(ext_foreign_toplevel_list);
-		return true;
-	}
-
-	return false;
-}
-
-static void registry_add(void* data, struct wl_registry* registry,
-			 uint32_t id, const char* interface,
-			 uint32_t version)
-{
-	struct wayvnc* self = data;
-
-	if (strcmp(interface, wl_output_interface.name) == 0) {
-		nvnc_trace("Registering new output %u", id);
-		struct wl_output* wl_output =
-			wl_registry_bind(registry, id, &wl_output_interface, 3);
-		if (!wl_output)
-			return;
-
-		struct output* output = output_new(wl_output, id);
-		if (!output)
-			return;
-
-		wl_list_insert(&self->outputs, &output->link);
-		if (!self->is_initializing) {
-			wl_display_dispatch(self->display);
-			wl_display_roundtrip(self->display);
-
-			observable_notify(&output_added, output);
-			ctl_server_event_output_added(self->ctl, output->name);
-		}
-
-		return;
-	}
-
-	if (strcmp(interface, zxdg_output_manager_v1_interface.name) == 0) {
-		nvnc_trace("Registering new xdg_output_manager");
-		xdg_output_manager =
-			wl_registry_bind(registry, id,
-			                 &zxdg_output_manager_v1_interface, 3);
-
-		output_setup_xdg_output_managers(&self->outputs);
-		return;
-	}
-
-	if (strcmp(interface, zwlr_output_power_manager_v1_interface.name) == 0) {
-		nvnc_trace("Registering new wlr_output_power_manager");
-		wlr_output_power_manager = wl_registry_bind(registry, id,
-					&zwlr_output_power_manager_v1_interface, 1);
-		return;
-	}
-
-	if (strcmp(interface, zwlr_output_manager_v1_interface.name) == 0) {
-		nvnc_trace("Registering new wlr_output_manager");
-		struct zwlr_output_manager_v1* wlr_output_manager =
-			wl_registry_bind(registry, id,
-				&zwlr_output_manager_v1_interface, 1);
-		wlr_output_manager_setup(wlr_output_manager);
-		return;
-	}
-
-	if (strcmp(interface, zwlr_screencopy_manager_v1_interface.name) == 0) {
-		screencopy_manager =
-			wl_registry_bind(registry, id,
-					 &zwlr_screencopy_manager_v1_interface,
-					 MIN(3, version));
-		return;
-	}
-
-#if 1
-	if (strcmp(interface, ext_image_copy_capture_manager_v1_interface.name) == 0) {
-		ext_image_copy_capture_manager =
-			wl_registry_bind(registry, id,
-					 &ext_image_copy_capture_manager_v1_interface,
-					 MIN(1, version));
-		return;
-	}
-
-	if (strcmp(interface, ext_output_image_capture_source_manager_v1_interface.name) == 0) {
-		ext_output_image_capture_source_manager =
-			wl_registry_bind(registry, id,
-					&ext_output_image_capture_source_manager_v1_interface,
-					MIN(1, version));
-		return;
-	}
-#endif
-
-	if (strcmp(interface, wl_shm_interface.name) == 0) {
-		wl_shm = wl_registry_bind(registry, id, &wl_shm_interface, 1);
-		return;
-	}
-
-	if (strcmp(interface, zwp_linux_dmabuf_v1_interface.name) == 0) {
-		zwp_linux_dmabuf = wl_registry_bind(registry, id,
-				&zwp_linux_dmabuf_v1_interface, 3);
-		return;
-	}
-
-	if (registry_add_input(data, registry, id, interface, version))
-		return;
-
-	if (registry_add_toplevel(data, registry, id, interface, version))
-		return;
-}
-
-static void disconnect_seat_clients(struct wayvnc* self, struct seat* seat)
-{
+	struct wayvnc* self = wl_container_of(observer, self,
+			seat_removed_observer);
+	struct seat* seat = data;
 	struct nvnc_client* nvnc_client;
 	for (nvnc_client = nvnc_client_first(self->nvnc); nvnc_client;
 			nvnc_client = nvnc_client_next(nvnc_client)) {
@@ -440,59 +245,22 @@ static void disconnect_seat_clients(struct wayvnc* self, struct seat* seat)
 	}
 }
 
-static void registry_remove(void* data, struct wl_registry* registry,
-			    uint32_t id)
-{
-	struct wayvnc* self = data;
-
-	struct output* out = output_find_by_id(&self->outputs, id);
-	if (out) {
-		if (image_source_is_output(self->image_source) &&
-				out == output_from_image_source(self->image_source)) {
-			nvnc_log(NVNC_LOG_WARNING, "Selected output %s went away",
-					out->name);
-			switch_to_prev_output(self);
-		} else
-			nvnc_log(NVNC_LOG_INFO, "Output %s went away", out->name);
-
-		observable_notify(&output_removed, out);
-		ctl_server_event_output_removed(self->ctl, out->name);
-
-		wl_list_remove(&out->link);
-		output_destroy(out);
-
-		if (image_source_is_output(self->image_source) &&
-				out == output_from_image_source(self->image_source)) {
-			if (self->start_detached) {
-				nvnc_log(NVNC_LOG_WARNING, "No fallback outputs left. Detaching...");
-				wayland_detach(self);
-			} else {
-				nvnc_log(NVNC_LOG_ERROR, "No fallback outputs left. Exiting...");
-				wayvnc_exit(self);
-			}
-		}
-
-		return;
-	}
-
-	struct seat* seat = seat_find_by_id(&self->seats, id);
-	if (seat) {
-		nvnc_log(NVNC_LOG_INFO, "Seat %s went away", seat->name);
-		disconnect_seat_clients(self, seat);
-		wl_list_remove(&seat->link);
-		seat_destroy(seat);
-		return;
-	}
-}
-
 static void wayland_detach(struct wayvnc* self)
 {
-	if (!self->display)
-		return;
+	wayland_destroy(wayland);
+}
 
-	aml_stop(aml_get_default(), self->wl_handler);
-	aml_unref(self->wl_handler);
-	self->wl_handler = NULL;
+static void on_wayland_destroyed(struct observer* observer, void* data)
+{
+	struct wayvnc* self = wl_container_of(observer, self,
+			wayland_destroy_observer);
+
+	observer_deinit(&self->output_added_observer);
+	observer_deinit(&self->output_removed_observer);
+	observer_deinit(&self->seat_removed_observer);
+	observer_deinit(&self->wayland_destroy_observer);
+
+	observer_deinit(&self->power_change_observer);
 
 	// Screen blanking is required to release wl_shm of linux_dmabuf.
 	if (self->nvnc)
@@ -508,16 +276,8 @@ static void wayland_detach(struct wayvnc* self)
 		}
 	}
 
-	observer_deinit(&self->power_change_observer);
+	// TODO: Destroy image source?
 	self->image_source = NULL;
-
-	output_list_destroy(&self->outputs);
-	toplevel_list_destroy(&self->toplevels);
-	seat_list_destroy(&self->seats);
-
-	if (zwp_linux_dmabuf)
-		zwp_linux_dmabuf_v1_destroy(zwp_linux_dmabuf);
-	zwp_linux_dmabuf = NULL;
 
 	screencopy_stop(self->screencopy);
 	screencopy_destroy(self->screencopy);
@@ -527,58 +287,11 @@ static void wayland_detach(struct wayvnc* self)
 	screencopy_destroy(self->cursor_sc);
 	self->cursor_sc = NULL;
 
-	if (xdg_output_manager)
-		zxdg_output_manager_v1_destroy(xdg_output_manager);
-	xdg_output_manager = NULL;
-
-	if (wlr_output_power_manager)
-		zwlr_output_power_manager_v1_destroy(wlr_output_power_manager);
-	wlr_output_power_manager = NULL;
-
-	wlr_output_manager_destroy();
-
-	wl_shm_destroy(wl_shm);
-	wl_shm = NULL;
-
-	if (self->keyboard_manager)
-		zwp_virtual_keyboard_manager_v1_destroy(self->keyboard_manager);
-	self->keyboard_manager = NULL;
-
-	if (self->pointer_manager)
-		zwlr_virtual_pointer_manager_v1_destroy(self->pointer_manager);
-	self->pointer_manager = NULL;
-
-	if (self->data_control_manager)
-		zwlr_data_control_manager_v1_destroy(self->data_control_manager);
-	self->data_control_manager = NULL;
-
 	if (self->performance_ticker) {
 		aml_stop(aml_get_default(), self->performance_ticker);
 		aml_unref(self->performance_ticker);
 	}
 	self->performance_ticker = NULL;
-
-	if (screencopy_manager)
-		zwlr_screencopy_manager_v1_destroy(screencopy_manager);
-	screencopy_manager = NULL;
-
-	if (ext_output_image_capture_source_manager)
-		ext_output_image_capture_source_manager_v1_destroy(
-				ext_output_image_capture_source_manager);
-	ext_output_image_capture_source_manager = NULL;
-
-	if (ext_foreign_toplevel_image_capture_source_manager)
-		ext_foreign_toplevel_image_capture_source_manager_v1_destroy(
-				ext_foreign_toplevel_image_capture_source_manager);
-	ext_foreign_toplevel_image_capture_source_manager = NULL;
-
-	if (ext_foreign_toplevel_list)
-		ext_foreign_toplevel_list_v1_destroy(ext_foreign_toplevel_list);
-	ext_foreign_toplevel_list = NULL;
-
-	if (ext_image_copy_capture_manager)
-		ext_image_copy_capture_manager_v1_destroy(ext_image_copy_capture_manager);
-	ext_image_copy_capture_manager = NULL;
 
 	if (self->capture_retry_timer) {
 		aml_stop(aml_get_default(), self->capture_retry_timer);
@@ -586,136 +299,74 @@ static void wayland_detach(struct wayvnc* self)
 	}
 	self->capture_retry_timer = NULL;
 
-	if (self->transient_seat_manager)
-		ext_transient_seat_manager_v1_destroy(self->transient_seat_manager);
-
-	wl_registry_destroy(self->registry);
-	self->registry = NULL;
-
-	wl_display_disconnect(self->display);
-	self->display = NULL;
-
 	if (self->ctl)
 		ctl_server_event_detached(self->ctl);
-}
 
-void on_wayland_event(struct aml_handler* handler)
-{
-	struct wayvnc* self = aml_get_userdata(handler);
+	if (!self->start_detached)
+		wayvnc_exit(self);
 
-	int rc MAYBE_UNUSED = wl_display_prepare_read(self->display);
-	assert(rc == 0);
-
-	if (wl_display_read_events(self->display) < 0) {
-		if (errno == EPIPE || errno == ECONNRESET) {
-			nvnc_log(NVNC_LOG_ERROR, "Compositor has gone away. Exiting...");
-			if (self->start_detached)
-				wayland_detach(self);
-			else
-				wayvnc_exit(self);
-			return;
-		} else {
-			nvnc_log(NVNC_LOG_ERROR, "Failed to read wayland events: %m");
-		}
-	}
-
-	if (wl_display_dispatch_pending(self->display) < 0) {
-		nvnc_log(NVNC_LOG_ERROR, "Failed to dispatch pending");
-		wayland_detach(self);
-		// TODO: Re-attach
-	}
+	wayland = NULL;
 }
 
 static int init_wayland(struct wayvnc* self, const char* display)
 {
-	self->is_initializing = true;
-	static const struct wl_registry_listener registry_listener = {
-		.global = registry_add,
-		.global_remove = registry_remove,
-	};
+	assert(!wayland);
 
-	self->display = wl_display_connect(display);
-	if (!self->display) {
-		const char* display_name = display ? display:
-			getenv("WAYLAND_DISPLAY");
-		if (!display_name) {
-			nvnc_log(NVNC_LOG_ERROR, "WAYLAND_DISPLAY is not set in the environment");
-		} else {
-			nvnc_log(NVNC_LOG_ERROR, "Failed to connect to WAYLAND_DISPLAY=\"%s\"", display_name);
-			nvnc_log(NVNC_LOG_ERROR, "Ensure wayland is running with that display name");
-		}
-		return -1;
-	}
+	enum wayland_flags flags = 0;
+	if (!self->disable_input)
+		flags |= WAYLAND_FLAG_ENABLE_INPUT;
+	if (self->use_transient_seat)
+		flags |= WAYLAND_FLAG_ENABLE_TRANSIENT_SEAT;
+	if (self->use_toplevel)
+		flags |= WAYLAND_FLAG_ENABLE_TOPLEVEL_CAPTURE;
 
-	wl_list_init(&self->outputs);
-	wl_list_init(&self->toplevels);
-	wl_list_init(&self->seats);
+	wayland = wayland_connect(display, flags);
 
-	self->registry = wl_display_get_registry(self->display);
-	if (!self->registry) {
-		nvnc_log(NVNC_LOG_ERROR, "Could not locate the wayland compositor object registry");
-		goto failure;
-	}
+	observer_init(&self->output_added_observer,
+			&wayland->observable.output_added, on_output_added);
+	observer_init(&self->output_removed_observer,
+			&wayland->observable.output_removed, on_output_removed);
+	observer_init(&self->seat_removed_observer,
+			&wayland->observable.seat_removed, on_seat_removed);
+	observer_init(&self->wayland_destroy_observer,
+			&wayland->observable.destroyed, on_wayland_destroyed);
 
-	wl_registry_add_listener(self->registry, &registry_listener, self);
-
-	wl_display_dispatch(self->display);
-	wl_display_roundtrip(self->display);
-	self->is_initializing = false;
-
-	if (!self->pointer_manager && !self->disable_input) {
+	if (!wayland->zwlr_virtual_pointer_manager_v1 && !self->disable_input) {
 		nvnc_log(NVNC_LOG_ERROR, "Virtual Pointer protocol not supported by compositor.");
 		nvnc_log(NVNC_LOG_ERROR, "wayvnc may still work if started with --disable-input.");
 		goto failure;
 	}
 
-	if (!self->keyboard_manager && !self->disable_input) {
+	if (!wayland->zwp_virtual_keyboard_manager_v1 && !self->disable_input) {
 		nvnc_log(NVNC_LOG_ERROR, "Virtual Keyboard protocol not supported by compositor.");
 		nvnc_log(NVNC_LOG_ERROR, "wayvnc may still work if started with --disable-input.");
 		goto failure;
 	}
 
-	if (!screencopy_manager && !ext_image_copy_capture_manager) {
+	if (!wayland->zwlr_screencopy_manager_v1 &&
+			!wayland->ext_image_copy_capture_manager_v1) {
 		nvnc_log(NVNC_LOG_ERROR, "Screencopy protocol not supported by compositor. Exiting. Refer to FAQ section in man page.");
 		goto failure;
 	}
 
-	if (!self->transient_seat_manager && self->use_transient_seat) {
+	if (!wayland->ext_transient_seat_manager_v1 && self->use_transient_seat) {
 		nvnc_log(NVNC_LOG_ERROR, "Transient seat protocol not supported by compositor");
 		goto failure;
 	}
 
 	bool have_toplevel_capture =
-		ext_foreign_toplevel_list &&
-		ext_foreign_toplevel_image_capture_source_manager;
+		wayland->ext_foreign_toplevel_list_v1 &&
+		wayland->ext_foreign_toplevel_image_capture_source_manager_v1;
 	if (self->use_toplevel && !have_toplevel_capture) {
 		nvnc_log(NVNC_LOG_ERROR, "Toplevel capture is not supported by the compositor");
 		goto failure;
 	}
 
-	if (have_toplevel_capture) {
-		ext_foreign_toplevel_list_v1_destroy(ext_foreign_toplevel_list);
-		ext_foreign_toplevel_list = NULL;
-	}
-
-	self->wl_handler = aml_handler_new(wl_display_get_fd(self->display),
-	                             on_wayland_event, self, NULL);
-	if (!self->wl_handler)
-		goto failure;
-
-	int rc = aml_start(aml_get_default(), self->wl_handler);
-	if (rc < 0)
-		goto handler_failure;
-
 	return 0;
 
 failure:
-	wl_display_disconnect(self->display);
-	self->display = NULL;
-handler_failure:
-	if (self->wl_handler)
-		aml_unref(self->wl_handler);
-	self->wl_handler = NULL;
+	wayland_destroy(wayland);
+	wayland = NULL;
 	return -1;
 }
 
@@ -736,11 +387,11 @@ struct cmd_response* on_output_cycle(struct ctl* ctl, enum output_cycle_directio
 	struct wayvnc* self = ctl_server_userdata(ctl);
 	nvnc_log(NVNC_LOG_INFO, "ctl command: Rotating to %s output",
 			direction == OUTPUT_CYCLE_FORWARD ? "next" : "previous");
-	if (!self->display)
+	if (!wayland)
 		return cmd_failed("Not attached!");
 	if (!image_source_is_output(self->image_source))
 		return cmd_failed("Not capturing an output!");
-	struct output* next = output_cycle(&self->outputs,
+	struct output* next = output_cycle(&wayland->outputs,
 			output_from_image_source(self->image_source), direction);
 	switch_to_output(self, next);
 	return cmd_ok();
@@ -752,13 +403,14 @@ struct cmd_response* on_output_switch(struct ctl* ctl,
 	nvnc_log(NVNC_LOG_INFO, "ctl command: Switch to output \"%s\"", output_name);
 
 	struct wayvnc* self = ctl_server_userdata(ctl);
-	if (!self->display)
+	if (!wayland)
 		return cmd_failed("Not attached!");
 	if (!image_source_is_output(self->image_source))
 		return cmd_failed("Not capturing an output!");
 	if (!output_name || output_name[0] == '\0')
 		return cmd_failed("Output name is required");
-	struct output* output = output_find_by_name(&self->outputs, output_name);
+	struct output* output = output_find_by_name(&wayland->outputs,
+			output_name);
 	if (!output) {
 		return cmd_failed("No such output \"%s\"", output_name);
 	}
@@ -810,11 +462,11 @@ static int get_output_list(struct ctl* ctl,
 		struct ctl_server_output** outputs)
 {
 	struct wayvnc* self = ctl_server_userdata(ctl);
-	if (!self->display) {
+	if (!wayland) {
 		*outputs = NULL;
 		return 0;
 	}
-	int n = wl_list_length(&self->outputs);
+	int n = wl_list_length(&wayland->outputs);
 	if (n == 0) {
 		*outputs = NULL;
 		return 0;
@@ -822,7 +474,7 @@ static int get_output_list(struct ctl* ctl,
 	*outputs = calloc(n, sizeof(**outputs));
 	struct output* output;
 	struct ctl_server_output* item = *outputs;
-	wl_list_for_each(output, &self->outputs, link) {
+	wl_list_for_each(output, &wayland->outputs, link) {
 		strlcpy(item->name, output->name, sizeof(item->name));
 		strlcpy(item->description, output->description,
 				sizeof(item->description));
@@ -1288,7 +940,7 @@ static void wayvnc_display_list_init(struct wayvnc* self)
 {
 	if (image_source_is_desktop(self->image_source)) {
 		struct output* output;
-		wl_list_for_each(output, &self->outputs, link) {
+		wl_list_for_each(output, &wayland->outputs, link) {
 			wayvnc_display_add(self, &output->image_source);
 		}
 	} else {
@@ -1733,11 +1385,8 @@ static void client_detach_wayland(struct wayvnc_client* self)
 {
 	self->seat = NULL;
 
-	if (self->keyboard.virtual_keyboard) {
-		zwp_virtual_keyboard_v1_destroy(
-				self->keyboard.virtual_keyboard);
+	if (self->keyboard.virtual_keyboard)
 		keyboard_destroy(&self->keyboard);
-	}
 	self->keyboard.virtual_keyboard = NULL;
 
 	if (self->pointer.pointer)
@@ -1766,9 +1415,8 @@ static struct wayvnc_client* client_create(struct wayvnc* wayvnc,
 	if (!wayvnc->cursor_master)
 		wayvnc->cursor_master = self;
 
-	if (wayvnc->display) {
+	if (wayland)
 		client_init_wayland(self);
-	}
 
 	return self;
 }
@@ -1812,18 +1460,15 @@ static void client_destroy(void* obj)
 				wayvnc->nr_clients);
 	}
 
-	if (wayvnc->nr_clients == 0 && wayvnc->display) {
+	if (wayvnc->nr_clients == 0 && wayland) {
 		nvnc_log(NVNC_LOG_INFO, "Stopping screen capture");
 		screencopy_stop(wayvnc->screencopy);
 		image_source_release_power_on(wayvnc->image_source);
 		stop_performance_ticker(wayvnc);
 	}
 
-	if (self->keyboard.virtual_keyboard) {
-		zwp_virtual_keyboard_v1_destroy(
-				self->keyboard.virtual_keyboard);
+	if (self->keyboard.virtual_keyboard)
 		keyboard_destroy(&self->keyboard);
-	}
 
 	if (self->pointer.pointer)
 		pointer_destroy(&self->pointer);
@@ -1850,7 +1495,7 @@ static void on_nvnc_client_new(struct nvnc_client* client)
 	assert(wayvnc_client);
 	nvnc_set_userdata(client, wayvnc_client, client_destroy);
 
-	if (self->nr_clients++ == 0 && self->display) {
+	if (self->nr_clients++ == 0 && wayland) {
 		handle_first_client(self);
 	}
 	nvnc_log(NVNC_LOG_DEBUG, "Client connected, new client count: %d",
@@ -1878,7 +1523,10 @@ static void client_init_pointer(struct wayvnc_client* self)
 {
 	struct wayvnc* wayvnc = self->server;
 
-	if (!wayvnc->pointer_manager)
+	struct zwlr_virtual_pointer_manager_v1* pointer_manager =
+		wayland->zwlr_virtual_pointer_manager_v1;
+
+	if (!pointer_manager)
 		return;
 
 	// TODO
@@ -1887,7 +1535,7 @@ static void client_init_pointer(struct wayvnc_client* self)
 		return;
 
 	int pointer_manager_version =
-		zwlr_virtual_pointer_manager_v1_get_version(wayvnc->pointer_manager);
+		zwlr_virtual_pointer_manager_v1_get_version(pointer_manager);
 
 	struct output* output = NULL;
 	if (pointer_manager_version >= 2 &&
@@ -1902,10 +1550,9 @@ static void client_init_pointer(struct wayvnc_client* self)
 
 	self->pointer.pointer = output
 		? zwlr_virtual_pointer_manager_v1_create_virtual_pointer_with_output(
-			wayvnc->pointer_manager, self->seat->wl_seat,
-			output->wl_output)
+			pointer_manager, self->seat->wl_seat, output->wl_output)
 		: zwlr_virtual_pointer_manager_v1_create_virtual_pointer(
-			wayvnc->pointer_manager, self->seat->wl_seat);
+			pointer_manager, self->seat->wl_seat);
 
 	if (pointer_init(&self->pointer) < 0) {
 		nvnc_log(NVNC_LOG_ERROR, "Failed to initialise pointer");
@@ -1914,8 +1561,8 @@ static void client_init_pointer(struct wayvnc_client* self)
 	if (self == wayvnc->cursor_master) {
 		// Get seat capability update
 		// TODO: Make this asynchronous
-		wl_display_roundtrip(wayvnc->display);
-		wl_display_dispatch_pending(wayvnc->display);
+		wl_display_roundtrip(wayland->display);
+		wl_display_dispatch_pending(wayland->display);
 
 		configure_cursor_sc(wayvnc, self);
 		if (wayvnc->cursor_sc)
@@ -1930,9 +1577,8 @@ static void handle_transient_seat_ready(void* data,
 	(void)transient_seat;
 
 	struct wayvnc_client* client = data;
-	struct wayvnc* wayvnc = client->server;
 
-	struct seat* seat = seat_find_by_id(&wayvnc->seats, global_name);
+	struct seat* seat = seat_find_by_id(&wayland->seats, global_name);
 	assert(seat);
 
 	client->seat = seat;
@@ -1950,10 +1596,8 @@ static void handle_transient_seat_denied(void* data,
 
 static void client_init_transient_seat(struct wayvnc_client* self)
 {
-	struct wayvnc* wayvnc = self->server;
-
-	self->transient_seat =
-		ext_transient_seat_manager_v1_create(wayvnc->transient_seat_manager);
+	self->transient_seat = ext_transient_seat_manager_v1_create(
+			wayland->ext_transient_seat_manager_v1);
 
 	static const struct ext_transient_seat_v1_listener listener = {
 		.ready = handle_transient_seat_ready,
@@ -1963,7 +1607,7 @@ static void client_init_transient_seat(struct wayvnc_client* self)
 			self);
 
 	// TODO: Make this asynchronous
-	wl_display_roundtrip(wayvnc->display);
+	wl_display_roundtrip(wayland->display);
 
 	assert(self->seat);
 }
@@ -1980,9 +1624,9 @@ static void client_init_seat(struct wayvnc_client* self)
 	} else if (wayvnc->use_transient_seat) {
 		client_init_transient_seat(self);
 	} else {
-		self->seat = seat_find_unoccupied(&wayvnc->seats);
+		self->seat = seat_find_unoccupied(&wayland->seats);
 		if (!self->seat) {
-			self->seat = seat_first(&wayvnc->seats);
+			self->seat = seat_first(&wayland->seats);
 		}
 	}
 
@@ -1994,12 +1638,15 @@ static void client_init_keyboard(struct wayvnc_client* self)
 {
 	struct wayvnc* wayvnc = self->server;
 
-	if (!wayvnc->keyboard_manager)
+	struct zwp_virtual_keyboard_manager_v1* keyboard_manager =
+		wayland->zwp_virtual_keyboard_manager_v1;
+
+	if (!keyboard_manager)
 		return;
 
 	self->keyboard.virtual_keyboard =
 		zwp_virtual_keyboard_manager_v1_create_virtual_keyboard(
-			wayvnc->keyboard_manager, self->seat->wl_seat);
+			keyboard_manager, self->seat->wl_seat);
 
 	struct xkb_rule_names rule_names = {
 		.rules = wayvnc->cfg.xkb_rules,
@@ -2030,10 +1677,10 @@ static void client_init_data_control(struct wayvnc_client* self)
 {
 	struct wayvnc* wayvnc = self->server;
 
-	if (!wayvnc->data_control_manager)
+	if (!wayland->zwlr_data_control_manager_v1)
 		return;
 
-	self->data_control.manager = wayvnc->data_control_manager;
+	self->data_control.manager = wayland->zwlr_data_control_manager_v1;
 	data_control_init(&self->data_control, wayvnc->nvnc,
 			self->seat->wl_seat);
 }
@@ -2052,7 +1699,7 @@ void log_image_source(struct wayvnc* self)
 	struct output* source_output = output_from_image_source(self->image_source);
 
 	struct output* output;
-	wl_list_for_each(output, &self->outputs, link) {
+	wl_list_for_each(output, &wayland->outputs, link) {
 		bool this_output = (output->id == source_output->id);
 		nvnc_log(NVNC_LOG_INFO, "%s %s %dx%d+%dx%d Power:%s",
 				this_output ? ">>" : "--",
@@ -2247,7 +1894,7 @@ void switch_to_output(struct wayvnc* self, struct output* output)
 void switch_to_next_output(struct wayvnc* self)
 {
 	nvnc_log(NVNC_LOG_INFO, "Rotating to next output");
-	struct output* next = output_cycle(&self->outputs,
+	struct output* next = output_cycle(&wayland->outputs,
 			output_from_image_source(self->image_source),
 			OUTPUT_CYCLE_FORWARD);
 	switch_to_output(self, next);
@@ -2256,7 +1903,7 @@ void switch_to_next_output(struct wayvnc* self)
 void switch_to_prev_output(struct wayvnc* self)
 {
 	nvnc_log(NVNC_LOG_INFO, "Rotating to previous output");
-	struct output* prev = output_cycle(&self->outputs,
+	struct output* prev = output_cycle(&wayland->outputs,
 			output_from_image_source(self->image_source),
 			OUTPUT_CYCLE_REVERSE);
 	switch_to_output(self, prev);
@@ -2303,7 +1950,7 @@ static struct cmd_response* on_attach(struct ctl* ctl, const char* display)
 static bool wayland_attach(struct wayvnc* self, const char* display,
 		const char* output)
 {
-	if (self->display) {
+	if (wayland) {
 		wayland_detach(self);
 	}
 
@@ -2315,14 +1962,14 @@ static bool wayland_attach(struct wayvnc* self, const char* display,
 
 	struct output* out;
 	if (output) {
-		out = output_find_by_name(&self->outputs, output);
+		out = output_find_by_name(&wayland->outputs, output);
 		if (!out) {
 			nvnc_log(NVNC_LOG_ERROR, "No such output: %s", output);
 			wayland_detach(self);
 			return false;
 		}
 	} else {
-		out = output_first(&self->outputs);
+		out = output_first(&wayland->outputs);
 		if (!out) {
 			nvnc_log(NVNC_LOG_ERROR, "No output available");
 			wayland_detach(self);
@@ -2330,8 +1977,9 @@ static bool wayland_attach(struct wayvnc* self, const char* display,
 		}
 	}
 
-	if (!screencopy_manager) {
-		nvnc_log(NVNC_LOG_ERROR, "Attached display does not implement wlr-screencopy-v1");
+	if (!wayland->zwlr_screencopy_manager_v1 &&
+			!wayland->ext_image_copy_capture_manager_v1) {
+		nvnc_log(NVNC_LOG_ERROR, "Attached display does not implement screencapturing");
 		wayland_detach(self);
 		return false;
 	}
@@ -2359,7 +2007,7 @@ static struct cmd_response* on_detach(struct ctl* ctl)
 	struct wayvnc* self = ctl_server_userdata(ctl);
 	assert(self);
 
-	if (!self->display) {
+	if (!wayland) {
 		return cmd_failed("Not attached!");
 	}
 
@@ -2628,9 +2276,6 @@ int main(int argc, char* argv[])
 	if (!self.rate_limiter)
 		goto rate_limiter_failure;
 
-	observable_init(&output_added);
-	observable_init(&output_removed);
-
 	struct desktop* desktop = NULL;
 
 	if (!start_detached) {
@@ -2641,14 +2286,14 @@ int main(int argc, char* argv[])
 
 		if (output_name) {
 			struct output* out;
-			out = output_find_by_name(&self.outputs, output_name);
+			out = output_find_by_name(&wayland->outputs, output_name);
 			if (!out) {
 				nvnc_log(NVNC_LOG_ERROR, "No such output");
 				goto wayland_failure;
 			}
 			set_image_source(&self, &out->image_source);
 		} else if (use_desktop_capture) {
-			desktop = desktop_new(&self.outputs);
+			desktop = desktop_new(&wayland->outputs);
 			if (!desktop) {
 				nvnc_log(NVNC_LOG_ERROR, "Failed to set up desktop capture");
 				goto wayland_failure;
@@ -2656,8 +2301,8 @@ int main(int argc, char* argv[])
 			set_image_source(&self, &desktop->image_source);
 		} else if (toplevel_id) {
 			struct toplevel* toplevel;
-			toplevel = toplevel_find_by_identifier(&self.toplevels,
-					toplevel_id);
+			toplevel = toplevel_find_by_identifier(
+					&wayland->toplevels, toplevel_id);
 			if (!toplevel) {
 				nvnc_log(NVNC_LOG_ERROR, "No such toplevel");
 				goto wayland_failure;
@@ -2665,7 +2310,7 @@ int main(int argc, char* argv[])
 			set_image_source(&self, &toplevel->image_source);
 		} else {
 			struct output* out;
-			out = output_first(&self.outputs);
+			out = output_first(&wayland->outputs);
 			if (!out) {
 				nvnc_log(NVNC_LOG_ERROR, "No output found");
 				goto wayland_failure;
@@ -2675,7 +2320,7 @@ int main(int argc, char* argv[])
 
 		struct seat* seat = NULL;
 		if (seat_name) {
-			seat = seat_find_by_name(&self.seats, seat_name);
+			seat = seat_find_by_name(&wayland->seats, seat_name);
 			if (!seat) {
 				nvnc_log(NVNC_LOG_ERROR, "No such seat");
 				goto wayland_failure;
@@ -2760,12 +2405,12 @@ int main(int argc, char* argv[])
 		}
 	}
 
-	if (self.display)
-		wl_display_dispatch_pending(self.display);
+	if (wayland)
+		wl_display_dispatch_pending(wayland->display);
 
 	while (!self.do_exit) {
-		if (self.display)
-			wl_display_flush(self.display);
+		if (wayland)
+			wl_display_flush(wayland->display);
 
 		aml_poll(aml, -1);
 		aml_dispatch(aml);
@@ -2775,7 +2420,7 @@ int main(int argc, char* argv[])
 
 	desktop_destroy(desktop);
 
-	if (self.display)
+	if (wayland)
 		screencopy_stop(self.screencopy);
 
 	ctl_server_destroy(self.ctl);
@@ -2786,11 +2431,6 @@ int main(int argc, char* argv[])
 	self.nvnc = NULL;
 	wayland_detach(&self);
 
-	observable_deinit(&output_added);
-	observable_deinit(&output_removed);
-
-	if (zwp_linux_dmabuf)
-		zwp_linux_dmabuf_v1_destroy(zwp_linux_dmabuf);
 	if (self.screencopy)
 		screencopy_destroy(self.screencopy);
 	aml_stop(aml, self.rate_limiter);
