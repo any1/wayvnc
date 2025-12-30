@@ -69,7 +69,6 @@ struct ext_image_copy_capture {
 	uint32_t frame_count;
 
 	uint32_t width, height;
-	uint32_t wl_shm_stride;
 
 	struct format_array wl_shm_formats;
 	struct format_array dmabuf_formats;
@@ -337,7 +336,6 @@ static void session_handle_dimensions(void *data,
 
 	self->width = width;
 	self->height = height;
-	self->wl_shm_stride = width * 4;
 }
 
 static double rate_format(const struct ext_image_copy_capture* self,
@@ -429,13 +427,6 @@ static bool config_dma_buffers(struct ext_image_copy_capture* self)
 
 static bool config_shm_buffers(struct ext_image_copy_capture* self)
 {
-	struct wv_buffer_config config = {
-		.width = self->width,
-		.height = self->height,
-		.type = WV_BUFFER_SHM,
-		.stride = self->wl_shm_stride,
-	};
-
 	rate_formats_in_array(self, &self->wl_shm_formats,
 			WV_BUFFER_SHM);
 	format_array_sort_by_score(&self->wl_shm_formats);
@@ -444,7 +435,18 @@ static bool config_shm_buffers(struct ext_image_copy_capture* self)
 			self->wl_shm_formats.entries[0].score == 0)
 		return false;
 
+	struct wv_buffer_config config = {
+		.width = self->width,
+		.height = self->height,
+		.type = WV_BUFFER_SHM,
+	};
+
 	config.format = self->wl_shm_formats.entries[0].format;
+
+	int bpp = pixel_size_from_fourcc(config.format);
+	assert(bpp > 0);
+
+	config.stride = bpp * config.width;
 
 	nvnc_trace("Choosing SHM format \"%.4s\"", (const char*)&config.format);
 
