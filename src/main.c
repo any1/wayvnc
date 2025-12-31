@@ -81,10 +81,12 @@ enum socket_type {
 
 struct wayvnc_display {
 	LIST_ENTRY(wayvnc_display) link;
+	struct wayvnc* wayvnc;
 	struct nvnc_display* nvnc_display;
 	struct image_source* image_source;
 	struct wv_buffer* next_frame;
 	struct observer dimension_change_observer;
+	struct observer destruction_observer;
 	struct {
 		bool is_set;
 		int width, height;
@@ -908,6 +910,7 @@ static struct wayvnc_display* wayvnc_display_add(struct wayvnc* self,
 
 	LIST_INSERT_HEAD(&self->wayvnc_displays, display, link);
 
+	display->wayvnc = self;
 	display->image_source = image_source;
 
 	nvnc_log(NVNC_LOG_DEBUG, "Adding display at %d, %d", (int)x, (int)y);
@@ -923,6 +926,19 @@ static struct wayvnc_display* wayvnc_display_add(struct wayvnc* self,
 	return display;
 }
 
+static void wayvnc_display_destroy(struct wayvnc_display* display)
+{
+	LIST_REMOVE(display, link);
+	observer_deinit(&display->destruction_observer);
+	observer_deinit(&display->dimension_change_observer);
+	nvnc_display_unref(display->nvnc_display);
+	if (display->next_frame) {
+		nvnc_fb_unref(display->next_frame->nvnc_fb);
+		display->next_frame = NULL;
+	}
+	free(display);
+}
+
 static void on_output_geometry_change(struct observer* observer, void* data)
 {
 	struct wayvnc_display* self = wl_container_of(observer, self,
@@ -931,6 +947,23 @@ static void on_output_geometry_change(struct observer* observer, void* data)
 	nvnc_display_set_position(self->nvnc_display, output->x, output->y);
 	nvnc_display_set_logical_size(self->nvnc_display, output->width,
 			output->height);
+}
+
+static void on_desktop_output_destroyed(struct observer* observer, void* data)
+{
+	struct wayvnc_display* self = wl_container_of(observer, self,
+			destruction_observer);
+	struct wayvnc* wayvnc = self->wayvnc;
+	nvnc_remove_display(wayvnc->nvnc, self->nvnc_display);
+	wayvnc_display_destroy(self);
+
+	if (wayvnc->start_detached) {
+		nvnc_log(NVNC_LOG_WARNING, "No desktop outputs left. Detaching...");
+		wayland_detach(wayvnc);
+	} else {
+		nvnc_log(NVNC_LOG_ERROR, "No desktop outputs left. Exiting...");
+		wayvnc_exit(wayvnc);
+	}
 }
 
 static void wayvnc_display_list_init(struct wayvnc* self)
@@ -957,6 +990,10 @@ static void wayvnc_display_list_init(struct wayvnc* self)
 		observer_init(&display->dimension_change_observer,
 				&display->image_source->observable.geometry_change,
 				on_output_geometry_change);
+
+		observer_init(&display->destruction_observer,
+				&display->image_source->observable.destroyed,
+				on_desktop_output_destroyed);
 	}
 }
 
@@ -964,14 +1001,7 @@ static void wayvnc_display_list_deinit(struct wayvnc_display_list* list)
 {
 	while (!LIST_EMPTY(list)) {
 		struct wayvnc_display* display = LIST_FIRST(list);
-		LIST_REMOVE(display, link);
-		observer_deinit(&display->dimension_change_observer);
-		nvnc_display_unref(display->nvnc_display);
-		if (display->next_frame) {
-			nvnc_fb_unref(display->next_frame->nvnc_fb);
-			display->next_frame = NULL;
-		}
-		free(display);
+		wayvnc_display_destroy(display);
 	}
 }
 
@@ -981,7 +1011,7 @@ static int init_nvnc(struct wayvnc* self)
 	if (!self->nvnc)
 		return -1;
 
-	// TODO: Add/remove displays on the fly
+	// TODO: Add new desktop displays when the appear
 	// TODO: The display list needs to interact correctly when
 	// attaching/detaching
 
