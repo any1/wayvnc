@@ -273,6 +273,16 @@ struct output* output_first(struct wl_list* list)
 	return output;
 }
 
+struct output* output_last(struct wl_list* list)
+{
+	struct output* output;
+
+	wl_list_for_each_reverse(output, list, link)
+		return output;
+
+	return output;
+}
+
 struct output* output_cycle(const struct wl_list* list,
 		const struct output* current,
 		enum output_cycle_direction direction)

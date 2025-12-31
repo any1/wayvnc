@@ -74,6 +74,7 @@ void output_list_destroy(struct wl_list* list);
 struct output* output_find_by_id(struct wl_list* list, uint32_t id);
 struct output* output_find_by_name(struct wl_list* list, const char* name);
 struct output* output_first(struct wl_list* list);
+struct output* output_last(struct wl_list* list);
 
 enum output_cycle_direction {
 	OUTPUT_CYCLE_FORWARD,
