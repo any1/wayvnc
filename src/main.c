@@ -85,7 +85,7 @@ struct wayvnc_display {
 	struct nvnc_display* nvnc_display;
 	struct image_source* image_source;
 	struct wv_buffer* next_frame;
-	struct observer dimension_change_observer;
+	struct observer geometry_change_observer;
 	struct observer destruction_observer;
 	struct {
 		bool is_set;
@@ -945,7 +945,7 @@ static void wayvnc_display_destroy(struct wayvnc_display* display)
 {
 	LIST_REMOVE(display, link);
 	observer_deinit(&display->destruction_observer);
-	observer_deinit(&display->dimension_change_observer);
+	observer_deinit(&display->geometry_change_observer);
 	nvnc_display_unref(display->nvnc_display);
 	if (display->next_frame) {
 		nvnc_fb_unref(display->next_frame->nvnc_fb);
@@ -957,11 +957,17 @@ static void wayvnc_display_destroy(struct wayvnc_display* display)
 static void on_output_geometry_change(struct observer* observer, void* data)
 {
 	struct wayvnc_display* self = wl_container_of(observer, self,
-			dimension_change_observer);
+			geometry_change_observer);
 	struct output* output = output_from_image_source(self->image_source);
 	nvnc_display_set_position(self->nvnc_display, output->x, output->y);
-	nvnc_display_set_logical_size(self->nvnc_display, output->width,
-			output->height);
+
+	int width = 0, height = 0;
+	image_source_get_transformed_dimensions(self->image_source, &width,
+			&height);
+	nvnc_display_set_logical_size(self->nvnc_display, width, height);
+
+	nvnc_log(NVNC_LOG_DEBUG, "Output geometry changed: %d, %d", width,
+			height);
 }
 
 static void on_desktop_output_destroyed(struct observer* observer, void* data)
@@ -997,7 +1003,7 @@ static bool wayvnc_desktop_display_add(struct wayvnc* self,
 				width, height);
 	}
 
-	observer_init(&display->dimension_change_observer,
+	observer_init(&display->geometry_change_observer,
 			&display->image_source->observable.geometry_change,
 			on_output_geometry_change);
 
