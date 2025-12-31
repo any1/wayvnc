@@ -190,6 +190,8 @@ static bool wayland_attach(struct wayvnc* self, const char* display,
 static void wayland_detach(struct wayvnc* self);
 static bool configure_cursor_sc(struct wayvnc* self,
 		struct wayvnc_client* client);
+static bool wayvnc_desktop_display_add(struct wayvnc* self,
+		struct image_source* image_source);
 
 struct wayland* wayland = NULL;
 
@@ -201,6 +203,10 @@ static void on_output_added(struct observer* observer, void* data)
 			output_added_observer);
 	struct output* output = data;
 	ctl_server_event_output_added(self->ctl, output->name);
+
+	if (image_source_is_desktop(self->image_source)) {
+		wayvnc_desktop_display_add(self, &output->image_source);
+	}
 }
 
 static void on_output_removed(struct observer* observer, void* data)
@@ -966,34 +972,41 @@ static void on_desktop_output_destroyed(struct observer* observer, void* data)
 	}
 }
 
-static void wayvnc_display_list_init(struct wayvnc* self)
+static bool wayvnc_desktop_display_add(struct wayvnc* self,
+		struct image_source* image_source)
 {
-	if (!image_source_is_desktop(self->image_source)) {
-		wayvnc_display_add(self, self->image_source, 0, 0);
-		return;
+	struct output* output = output_from_image_source(image_source);
+	struct wayvnc_display* display = wayvnc_display_add(self, image_source,
+			output->x, output->y);
+	if (!display)
+		return false;
+
+	int width, height;
+	if (image_source_get_transformed_dimensions(self->image_source,
+				&width, &height)) {
+		nvnc_display_set_logical_size(display->nvnc_display,
+				width, height);
 	}
 
-	struct output* output;
-	wl_list_for_each(output, &wayland->outputs, link) {
-		struct wayvnc_display* display =
-			wayvnc_display_add(self, &output->image_source,
-				output->x, output->y);
-		assert(display);
+	observer_init(&display->dimension_change_observer,
+			&display->image_source->observable.geometry_change,
+			on_output_geometry_change);
 
-		int width, height;
-		if (image_source_get_transformed_dimensions(self->image_source,
-					&width, &height)) {
-			nvnc_display_set_logical_size(display->nvnc_display,
-					width, height);
-		}
+	observer_init(&display->destruction_observer,
+			&display->image_source->observable.destroyed,
+			on_desktop_output_destroyed);
 
-		observer_init(&display->dimension_change_observer,
-				&display->image_source->observable.geometry_change,
-				on_output_geometry_change);
+	return true;
+}
 
-		observer_init(&display->destruction_observer,
-				&display->image_source->observable.destroyed,
-				on_desktop_output_destroyed);
+static void wayvnc_display_list_init(struct wayvnc* self)
+{
+	if (image_source_is_desktop(self->image_source)) {
+		struct output* output;
+		wl_list_for_each(output, &wayland->outputs, link)
+			wayvnc_desktop_display_add(self, &output->image_source);
+	} else {
+		wayvnc_display_add(self, self->image_source, 0, 0);
 	}
 }
 
@@ -1011,7 +1024,6 @@ static int init_nvnc(struct wayvnc* self)
 	if (!self->nvnc)
 		return -1;
 
-	// TODO: Add new desktop displays when the appear
 	// TODO: The display list needs to interact correctly when
 	// attaching/detaching
 
@@ -1263,6 +1275,8 @@ static void wayvnc_process_frame(struct wayvnc* self, struct wv_buffer* buffer,
 	struct wayvnc_display* display =
 		wayvnc_display_find_by_source(self, source);
 	assert(display);
+	if (!display)
+		return;
 
 	display->last_frame_info.is_set = true;
 	display->last_frame_info.width = buffer->width;
