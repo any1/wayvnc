@@ -640,7 +640,13 @@ static bool on_client_resize(struct nvnc_client* nvnc_client,
 	uint16_t width = nvnc_desktop_layout_get_width(layout);
 	uint16_t height = nvnc_desktop_layout_get_height(layout);
 
-	if (!self->image_source || !image_source_is_output(self->image_source))
+	if (!self->image_source)
+		return false;
+
+	if (image_source_is_desktop(self->image_source)) {
+		if (output_first(&wayland->outputs) != output_last(&wayland->outputs))
+			return false;
+	} else if (!image_source_is_output(self->image_source))
 		return false;
 
 	if (self->master_layout_client && self->master_layout_client != client)
@@ -648,8 +654,11 @@ static bool on_client_resize(struct nvnc_client* nvnc_client,
 
 	self->master_layout_client = client;
 
-	struct output* output =
-		output_from_image_source(client->server->image_source);
+	struct output* output;
+	if (image_source_is_output(client->server->image_source))
+		output = output_from_image_source(client->server->image_source);
+	else
+		output = output_first(&wayland->outputs);
 
 	nvnc_log(NVNC_LOG_DEBUG,
 		"Client resolution changed: %ux%u, capturing output %s which is headless: %s",
