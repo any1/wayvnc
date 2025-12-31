@@ -997,7 +997,7 @@ static bool wayvnc_desktop_display_add(struct wayvnc* self,
 		return false;
 
 	int width, height;
-	if (image_source_get_transformed_dimensions(self->image_source,
+	if (image_source_get_transformed_dimensions(display->image_source,
 				&width, &height)) {
 		nvnc_display_set_logical_size(display->nvnc_display,
 				width, height);
