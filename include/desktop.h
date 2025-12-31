@@ -30,6 +30,7 @@ struct desktop_output {
 	struct output* output;
 	struct desktop* desktop;
 	struct observer power_change_observer;
+	struct observer geometry_change_observer;
 	struct screencopy* sc;
 };
 

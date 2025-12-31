@@ -40,12 +40,14 @@ void image_source_init(struct image_source* self, struct image_source_impl* impl
 {
 	self->impl = impl;
 	observable_init(&self->observable.power_change);
+	observable_init(&self->observable.geometry_change);
 }
 
 void image_source_deinit(struct image_source* self)
 {
 	assert(self->impl);
 	observable_deinit(&self->observable.power_change);
+	observable_deinit(&self->observable.geometry_change);
 	if (self->impl->deinit)
 		self->impl->deinit(self);
 }

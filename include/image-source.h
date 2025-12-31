@@ -38,6 +38,7 @@ struct image_source {
 
 	struct {
 		struct observable power_change;
+		struct observable geometry_change;
 	} observable;
 };
 

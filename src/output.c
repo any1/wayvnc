@@ -47,6 +47,9 @@ static void output_handle_geometry(void* data, struct wl_output* wl_output,
 {
 	struct output* output = data;
 
+	if (transform != (int32_t)output->transform)
+		output->geometry_changed = true;
+
 	output->transform = transform;
 
 	strlcpy(output->make, make, sizeof(output->make));
@@ -61,7 +64,13 @@ static void output_handle_mode(void* data, struct wl_output* wl_output,
 
 static void output_handle_done(void* data, struct wl_output* wl_output)
 {
-	 // noop
+	struct output* output = data;
+
+	if (output->geometry_changed) {
+		observable_notify(&output->image_source.observable.geometry_change,
+				NULL);
+		output->geometry_changed = false;
+	}
 }
 
 static void output_handle_scale(void* data, struct wl_output* wl_output,
@@ -96,15 +105,23 @@ void output_logical_position(void* data, struct zxdg_output_v1* xdg_output,
                              int32_t x, int32_t y)
 {
 	struct output* output = data;
+
+	if (x != (int32_t)output->x || y != (int32_t)output->y)
+		output->geometry_changed = true;
+
 	output->x = x;
 	output->y = y;
-	nvnc_log(NVNC_LOG_DEBUG, "output geometry: %d, %d", x, y);
 }
 
 void output_logical_size(void* data, struct zxdg_output_v1* xdg_output,
                          int32_t width, int32_t height)
 {
 	struct output* output = data;
+
+	if (width != (int32_t)output->width ||
+			height != (int32_t)output->height)
+		output->geometry_changed = true;
+
 	output->width = width;
 	output->height = height;
 }

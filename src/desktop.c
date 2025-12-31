@@ -167,6 +167,16 @@ static void desktop_image_source_output_power_change(struct observer* observer,
 	}
 }
 
+static void desktop_image_source_output_geometry_change(struct observer* observer,
+		void *arg)
+{
+	struct desktop_output* event_source = wl_container_of(observer,
+			event_source, geometry_change_observer);
+	struct desktop* desktop = event_source->desktop;
+	observable_notify(&desktop->image_source.observable.geometry_change,
+			NULL);
+}
+
 static struct desktop_output *desktop_output_create(struct output* output,
 		struct desktop* desktop)
 {
@@ -180,6 +190,10 @@ static struct desktop_output *desktop_output_create(struct output* output,
 	observer_init(&self->power_change_observer,
 			&output->image_source.observable.power_change,
 			desktop_image_source_output_power_change);
+
+	observer_init(&self->geometry_change_observer,
+			&output->image_source.observable.geometry_change,
+			desktop_image_source_output_geometry_change);
 
 	struct desktop_capture* capture = desktop->capture;
 	if (capture) {
@@ -199,6 +213,7 @@ static void desktop_output_destroy(struct desktop_output* self)
 {
 	screencopy_destroy(self->sc);
 	observer_deinit(&self->power_change_observer);
+	observer_deinit(&self->geometry_change_observer);
 	free(self);
 }
 
@@ -214,6 +229,8 @@ static void desktop_image_source_output_added(struct observer* observer,
 	assert(desktop_output);
 
 	LIST_INSERT_HEAD(&self->outputs, desktop_output, link);
+
+	observable_notify(&self->image_source.observable.geometry_change, NULL);
 }
 
 static void desktop_image_source_output_removed(struct observer* observer,
@@ -232,6 +249,8 @@ static void desktop_image_source_output_removed(struct observer* observer,
 
 	LIST_REMOVE(desktop_output, link);
 	desktop_output_destroy(desktop_output);
+
+	observable_notify(&self->image_source.observable.geometry_change, NULL);
 }
 
 static void desktop_image_source_deinit(struct image_source* base)

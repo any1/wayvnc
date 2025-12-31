@@ -46,6 +46,8 @@ struct output {
 	uint32_t x;
 	uint32_t y;
 
+	bool geometry_changed;
+
 	enum wl_output_transform transform;
 
 	char make[256];
