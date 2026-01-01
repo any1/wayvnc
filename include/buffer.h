@@ -105,7 +105,8 @@ struct wv_buffer_config {
 };
 
 struct wv_buffer_pool {
-	struct wv_buffer_queue queue;
+	struct wv_buffer_queue free;
+	struct wv_buffer_queue taken;
 	struct wv_buffer_config config;
 #ifdef ENABLE_SCREENCOPY_DMABUF
 	struct wv_gbm_device* gbm;

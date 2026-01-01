@@ -493,7 +493,8 @@ struct wv_buffer_pool* wv_buffer_pool_create(
 	if (!self)
 		return NULL;
 
-	TAILQ_INIT(&self->queue);
+	TAILQ_INIT(&self->free);
+	TAILQ_INIT(&self->taken);
 
 	if (config)
 		wv_buffer_pool_reconfig(self, config);
@@ -501,12 +502,31 @@ struct wv_buffer_pool* wv_buffer_pool_create(
 	return self;
 }
 
+void wv_buffer_pool__on_release(struct nvnc_fb* fb, void* context)
+{
+	struct wv_buffer* buffer = nvnc_get_userdata(fb);
+	struct wv_buffer_pool* pool = context;
+
+	if (pool) {
+		wv_buffer_pool_release(pool, buffer);
+	} else {
+		wv_buffer_destroy(buffer);
+	}
+}
+
 static void wv_buffer_pool_clear(struct wv_buffer_pool* pool)
 {
-	while (!TAILQ_EMPTY(&pool->queue)) {
-		struct wv_buffer* buffer = TAILQ_FIRST(&pool->queue);
-		TAILQ_REMOVE(&pool->queue, buffer, link);
+	while (!TAILQ_EMPTY(&pool->free)) {
+		struct wv_buffer* buffer = TAILQ_FIRST(&pool->free);
+		TAILQ_REMOVE(&pool->free, buffer, link);
 		wv_buffer_destroy(buffer);
+	}
+
+	while (!TAILQ_EMPTY(&pool->taken)) {
+		struct wv_buffer* buffer = TAILQ_FIRST(&pool->taken);
+		TAILQ_REMOVE(&pool->taken, buffer, link);
+		nvnc_fb_set_release_fn(buffer->nvnc_fb,
+				wv_buffer_pool__on_release, NULL);
 	}
 }
 
@@ -669,20 +689,13 @@ static bool wv_buffer_pool_match_buffer(struct wv_buffer_pool* pool,
 	return false;
 }
 
-void wv_buffer_pool__on_release(struct nvnc_fb* fb, void* context)
-{
-	struct wv_buffer* buffer = nvnc_get_userdata(fb);
-	struct wv_buffer_pool* pool = context;
-
-	wv_buffer_pool_release(pool, buffer);
-}
-
 struct wv_buffer* wv_buffer_pool_acquire(struct wv_buffer_pool* pool)
 {
-	struct wv_buffer* buffer = TAILQ_FIRST(&pool->queue);
+	struct wv_buffer* buffer = TAILQ_FIRST(&pool->free);
 	if (buffer) {
 		assert(wv_buffer_pool_match_buffer(pool, buffer));
-		TAILQ_REMOVE(&pool->queue, buffer, link);
+		TAILQ_REMOVE(&pool->free, buffer, link);
+		TAILQ_INSERT_TAIL(&pool->taken, buffer, link);
 		return buffer;
 	}
 
@@ -695,16 +708,20 @@ struct wv_buffer* wv_buffer_pool_acquire(struct wv_buffer_pool* pool)
 		nvnc_fb_set_release_fn(buffer->nvnc_fb,
 				wv_buffer_pool__on_release, pool);
 
+	TAILQ_INSERT_TAIL(&pool->taken, buffer, link);
+
 	return buffer;
 }
 
 void wv_buffer_pool_release(struct wv_buffer_pool* pool,
 		struct wv_buffer* buffer)
 {
+	TAILQ_REMOVE(&pool->taken, buffer, link);
+
 	wv_buffer_damage_clear(buffer);
 
 	if (wv_buffer_pool_match_buffer(pool, buffer)) {
-		TAILQ_INSERT_TAIL(&pool->queue, buffer, link);
+		TAILQ_INSERT_TAIL(&pool->free, buffer, link);
 	} else {
 		wv_buffer_destroy(buffer);
 	}
