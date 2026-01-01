@@ -35,7 +35,7 @@ project.
 
 #### For Arch Linux
 ```
-pacman -S base-devel libglvnd libxkbcommon pixman gnutls jansson
+sudo pacman -S base-devel libglvnd libxkbcommon pixman gnutls jansson
 ```
 
 #### For Fedora 37
