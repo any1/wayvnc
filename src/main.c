@@ -978,6 +978,9 @@ static void on_desktop_output_destroyed(struct observer* observer, void* data)
 	nvnc_remove_display(wayvnc->nvnc, self->nvnc_display);
 	wayvnc_display_destroy(self);
 
+	if (!wl_list_empty(&wayland->outputs))
+		return;
+
 	if (wayvnc->start_detached) {
 		nvnc_log(NVNC_LOG_WARNING, "No desktop outputs left. Detaching...");
 		wayland_detach(wayvnc);
