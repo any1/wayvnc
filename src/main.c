@@ -1335,8 +1335,7 @@ void on_capture_done(enum screencopy_result result, struct wv_buffer* buffer,
 
 	switch (result) {
 	case SCREENCOPY_FATAL:
-		nvnc_log(NVNC_LOG_ERROR, "Fatal error while capturing. Exiting...");
-		wayvnc_exit(self);
+		nvnc_log(NVNC_LOG_ERROR, "Failed to capture image. The source probably went away");
 		break;
 	case SCREENCOPY_FAILED:
 		wayvnc_restart_capture(self);
@@ -1801,8 +1800,7 @@ static void on_cursor_capture_done(enum screencopy_result result,
 
 	switch (result) {
 	case SCREENCOPY_FATAL:
-		nvnc_log(NVNC_LOG_ERROR, "Fatal error while capturing. Exiting...");
-		wayvnc_exit(self);
+		nvnc_log(NVNC_LOG_ERROR, "Failed to capture cursor. The source probably went away");
 		break;
 	case SCREENCOPY_FAILED:
 		wayvnc_start_cursor_capture(self, true);
