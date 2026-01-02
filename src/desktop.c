@@ -257,6 +257,9 @@ static void desktop_image_source_deinit(struct image_source* base)
 {
 	struct desktop* self = desktop_from_image_source(base);
 
+	if (self->capture)
+		self->capture->desktop = NULL;
+
 	while (!LIST_EMPTY(&self->outputs)) {
 		struct desktop_output* output = LIST_FIRST(&self->outputs);
 		LIST_REMOVE(output, link);
@@ -391,7 +394,8 @@ static int desktop_capture_start(struct screencopy* base, bool immediate)
 {
 	struct desktop_capture* self = (struct desktop_capture*)base;
 	struct desktop* desktop = self->desktop;
-	assert(desktop);
+	if (!desktop)
+		return -1;
 
 	struct desktop_output* desktop_output;
 	LIST_FOREACH(desktop_output, &desktop->outputs, link) {
@@ -412,7 +416,8 @@ static void desktop_capture_stop(struct screencopy* base)
 {
 	struct desktop_capture* self = (struct desktop_capture*)base;
 	struct desktop* desktop = self->desktop;
-	assert(desktop);
+	if (!desktop)
+		return;
 
 	struct desktop_output* desktop_output;
 	LIST_FOREACH(desktop_output, &desktop->outputs, link) {
@@ -426,7 +431,8 @@ static enum screencopy_capabilitites desktop_capture_get_caps(
 {
 	struct desktop_capture* self = (struct desktop_capture*)base;
 	struct desktop* desktop = self->desktop;
-	assert(desktop);
+	if (!desktop)
+		return 0;
 
 	if (LIST_EMPTY(&desktop->outputs)) {
 		nvnc_log(NVNC_LOG_ERROR, "Whoops. No outputs. Can't get capabilities");
