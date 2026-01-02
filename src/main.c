@@ -154,6 +154,7 @@ struct wayvnc {
 
 	// image source observers
 	struct observer power_change_observer;
+	struct observer destruction_observer;
 };
 
 struct wayvnc_client {
@@ -270,6 +271,7 @@ static void on_wayland_destroyed(struct observer* observer, void* data)
 	observer_deinit(&self->wayland_destroy_observer);
 
 	observer_deinit(&self->power_change_observer);
+	observer_deinit(&self->destruction_observer);
 
 	// Screen blanking is required to release wl_shm of linux_dmabuf.
 	if (self->nvnc)
@@ -285,9 +287,6 @@ static void on_wayland_destroyed(struct observer* observer, void* data)
 		}
 	}
 
-	// TODO: Destroy image source?
-	self->image_source = NULL;
-
 	screencopy_stop(self->screencopy);
 	screencopy_destroy(self->screencopy);
 	self->screencopy = NULL;
@@ -295,6 +294,9 @@ static void on_wayland_destroyed(struct observer* observer, void* data)
 	screencopy_stop(self->cursor_sc);
 	screencopy_destroy(self->cursor_sc);
 	self->cursor_sc = NULL;
+
+	if (image_source_is_desktop(self->image_source))
+		image_source_destroy(self->image_source);
 
 	if (self->performance_ticker) {
 		aml_stop(aml_get_default(), self->performance_ticker);
@@ -1855,6 +1857,7 @@ static bool configure_cursor_sc(struct wayvnc* self,
 
 	screencopy_stop(self->cursor_sc);
 	screencopy_destroy(self->cursor_sc);
+	self->cursor_sc = NULL;
 
 	struct seat* seat = client->seat;
 	assert(seat);
@@ -1919,15 +1922,27 @@ static void on_toplevel_closed(struct toplevel* toplevel)
 	wayvnc_exit(self);
 }
 
+static void on_image_source_destroyed(struct observer* observer, void* arg)
+{
+	struct wayvnc* self = wl_container_of(observer, self,
+			destruction_observer);
+	self->image_source = NULL;
+}
+
 void set_image_source(struct wayvnc* self, struct image_source* image_source)
 {
 	if (self->image_source) {
 		observer_deinit(&self->power_change_observer);
+		observer_deinit(&self->destruction_observer);
 	}
 	self->image_source = image_source;
 	observer_init(&self->power_change_observer,
 			&image_source->observable.power_change,
 			on_image_source_power_change);
+
+	observer_init(&self->destruction_observer,
+			&image_source->observable.destroyed,
+			on_image_source_destroyed);
 
 	if (image_source_is_toplevel(image_source)) {
 		struct toplevel* toplevel =
@@ -2349,8 +2364,6 @@ int main(int argc, char* argv[])
 	if (!self.rate_limiter)
 		goto rate_limiter_failure;
 
-	struct desktop* desktop = NULL;
-
 	if (!start_detached) {
 		if (init_wayland(&self, NULL) < 0) {
 			nvnc_log(NVNC_LOG_ERROR, "Failed to initialise wayland");
@@ -2366,7 +2379,7 @@ int main(int argc, char* argv[])
 			}
 			set_image_source(&self, &out->image_source);
 		} else if (use_desktop_capture) {
-			desktop = desktop_new(&wayland->outputs);
+			struct desktop* desktop = desktop_new(&wayland->outputs);
 			if (!desktop) {
 				nvnc_log(NVNC_LOG_ERROR, "Failed to set up desktop capture");
 				goto wayland_failure;
@@ -2491,11 +2504,6 @@ int main(int argc, char* argv[])
 
 	nvnc_log(NVNC_LOG_INFO, "Exiting...");
 
-	desktop_destroy(desktop);
-
-	if (wayland)
-		screencopy_stop(self.screencopy);
-
 	ctl_server_destroy(self.ctl);
 	self.ctl = NULL;
 
@@ -2504,8 +2512,6 @@ int main(int argc, char* argv[])
 	self.nvnc = NULL;
 	wayland_detach(&self);
 
-	if (self.screencopy)
-		screencopy_destroy(self.screencopy);
 	aml_stop(aml, self.rate_limiter);
 	aml_unref(self.rate_limiter);
 	aml_unref(aml);
@@ -2522,7 +2528,6 @@ nvnc_failure:
 	self.nvnc = NULL;
 ctl_server_failure:
 screencopy_failure:
-	desktop_destroy(desktop);
 	wayland_detach(&self);
 wayland_failure:
 rate_limiter_failure:
