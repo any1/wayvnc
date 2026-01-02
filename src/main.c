@@ -332,6 +332,8 @@ static int init_wayland(struct wayvnc* self, const char* display)
 		flags |= WAYLAND_FLAG_ENABLE_TOPLEVEL_CAPTURE;
 
 	wayland = wayland_connect(display, flags);
+	if (!wayland)
+		return -1;
 
 	observer_init(&self->output_added_observer,
 			&wayland->observable.output_added, on_output_added);
