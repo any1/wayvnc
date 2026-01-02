@@ -1816,38 +1816,42 @@ static void on_cursor_capture_done(enum screencopy_result result,
 	}
 }
 
-static double rate_format(const void* userdata, enum wv_buffer_type type,
-		enum wv_buffer_domain domain, uint32_t format,
-		uint64_t modifier)
+static enum nvnc_fb_type buffer_type_to_nvnc_fb_type(enum wv_buffer_type type)
 {
-	const struct wayvnc* self = userdata;
-
-	enum nvnc_fb_type fb_type = NVNC_FB_UNSPEC;
 	switch (type) {
 	case WV_BUFFER_SHM:
-		fb_type = NVNC_FB_SIMPLE;
-		break;
+		return NVNC_FB_SIMPLE;
 #ifdef ENABLE_SCREENCOPY_DMABUF
 	case WV_BUFFER_DMABUF:
-		fb_type = NVNC_FB_GBM_BO;
-		break;
+		return NVNC_FB_GBM_BO;
 #endif
 	case WV_BUFFER_UNSPEC:;
 	}
+	return NVNC_FB_UNSPEC;
+}
+
+static double rate_output_format(const void* userdata,
+		enum wv_buffer_type type, uint32_t format, uint64_t modifier)
+{
+	const struct wayvnc* self = userdata;
+
+	enum nvnc_fb_type fb_type = buffer_type_to_nvnc_fb_type(type);
 	assert(fb_type != NVNC_FB_UNSPEC);
 
-	switch (domain) {
-	case WV_BUFFER_DOMAIN_OUTPUT:
-		return nvnc_rate_pixel_format(self->nvnc, fb_type, format,
-				modifier);
-	case WV_BUFFER_DOMAIN_CURSOR:
-		return nvnc_rate_cursor_pixel_format(self->nvnc, fb_type, format,
-				modifier);
-	case WV_BUFFER_DOMAIN_UNSPEC:;
-	}
+	return nvnc_rate_pixel_format(self->nvnc, fb_type, format,
+			modifier);
+}
 
-	abort();
-	return -1;
+static double rate_cursor_format(const void* userdata,
+		enum wv_buffer_type type, uint32_t format, uint64_t modifier)
+{
+	const struct wayvnc* self = userdata;
+
+	enum nvnc_fb_type fb_type = buffer_type_to_nvnc_fb_type(type);
+	assert(fb_type != NVNC_FB_UNSPEC);
+
+	return nvnc_rate_cursor_pixel_format(self->nvnc, fb_type, format,
+			modifier);
 }
 
 static bool configure_cursor_sc(struct wayvnc* self,
@@ -1875,7 +1879,7 @@ static bool configure_cursor_sc(struct wayvnc* self,
 	}
 
 	self->cursor_sc->on_done = on_cursor_capture_done;
-	self->cursor_sc->rate_format = rate_format;
+	self->cursor_sc->rate_format = rate_cursor_format;
 	self->cursor_sc->userdata = self;
 
 	self->cursor_sc->rate_limit = self->max_rate * 2;
@@ -1898,7 +1902,7 @@ bool configure_screencopy(struct wayvnc* self)
 	}
 
 	self->screencopy->on_done = on_capture_done;
-	self->screencopy->rate_format = rate_format;
+	self->screencopy->rate_format = rate_output_format;
 	self->screencopy->userdata = self;
 
 	/* Because screencopy (at least the way it's implemented in wlroots),

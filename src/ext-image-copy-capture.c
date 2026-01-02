@@ -214,9 +214,6 @@ static void ext_image_copy_capture_schedule_capture(
 		return;
 	}
 
-	self->buffer->domain = self->is_cursor_session ? WV_BUFFER_DOMAIN_CURSOR :
-		WV_BUFFER_DOMAIN_OUTPUT;
-
 	self->frame = ext_image_copy_capture_session_v1_create_frame(self->session);
 	assert(self->frame);
 
@@ -364,28 +361,23 @@ static void session_handle_dimensions(void *data,
 }
 
 static double rate_format(const struct ext_image_copy_capture* self,
-		enum wv_buffer_type type, enum wv_buffer_domain domain,
-		uint32_t format, uint64_t modifier)
+		enum wv_buffer_type type, uint32_t format, uint64_t modifier)
 {
 #ifdef ENABLE_SCREENCOPY_DMABUF
 	if (type == WV_BUFFER_DMABUF && !self->parent.enable_linux_dmabuf) {
 		return 0;
 	}
 #endif
-	return self->parent.rate_format(self->parent.userdata, type, domain,
-			format, modifier);
+	return self->parent.rate_format(self->parent.userdata, type, format,
+			modifier);
 }
 
 static void rate_formats_in_array(const struct ext_image_copy_capture* self,
 		struct format_array* array, enum wv_buffer_type type)
 {
-	enum wv_buffer_domain domain = WV_BUFFER_DOMAIN_OUTPUT;
-	if (self->is_cursor_session)
-		domain = WV_BUFFER_DOMAIN_CURSOR;
-
 	for (int i = 0; i < array->len; ++i) {
 		struct format_entry* entry = &array->entries[i];
-		entry->score = rate_format(self, type, domain, entry->format,
+		entry->score = rate_format(self, type, entry->format,
 				entry->modifier);
 
 		nvnc_trace("Format:modifier %.4s:%"PRIx64" score: %f",
@@ -552,9 +544,7 @@ static void frame_handle_ready(void *data,
 
 	assert(self->buffer);
 
-	enum wv_buffer_domain domain = self->is_cursor_session ?
-		WV_BUFFER_DOMAIN_CURSOR : WV_BUFFER_DOMAIN_OUTPUT;
-	wv_buffer_registry_damage_all(&self->buffer->frame_damage, domain);
+	wv_buffer_pool_damage_all(self->pool, &self->buffer->frame_damage);
 	pixman_region_clear(&self->buffer->buffer_damage);
 
 	struct wv_buffer* buffer = self->buffer;

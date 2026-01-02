@@ -51,10 +51,6 @@
 
 extern struct wayland* wayland;
 
-LIST_HEAD(wv_buffer_list, wv_buffer);
-
-static struct wv_buffer_list buffer_registry;
-
 static bool modifiers_match(const uint64_t* a, int a_len, const uint64_t* b,
 		int b_len)
 {
@@ -171,8 +167,6 @@ struct wv_buffer* wv_buffer_create_shm(const struct wv_buffer_config* config)
 	pixman_region_init(&self->frame_damage);
 	pixman_region_init_rect(&self->buffer_damage, 0, 0, config->width,
 			config->height);
-
-	LIST_INSERT_HEAD(&buffer_registry, self, registry_link);
 
 	observer_init(&self->wayland_destroy_observer,
 			&wayland->observable.destroyed,
@@ -379,8 +373,6 @@ static struct wv_buffer* wv_buffer_create_dmabuf(
 	self->gbm = gbm;
 	wv_gbm_device_ref(gbm);
 
-	LIST_INSERT_HEAD(&buffer_registry, self, registry_link);
-
 	observer_init(&self->wayland_destroy_observer,
 			&wayland->observable.destroyed,
 			wv_buffer_handle_wayland_destroyed);
@@ -447,7 +439,6 @@ static void wv_buffer_destroy(struct wv_buffer* self)
 {
 	pixman_region_fini(&self->buffer_damage);
 	pixman_region_fini(&self->frame_damage);
-	LIST_REMOVE(self, registry_link);
 
 	nvnc_fb_unref(self->nvnc_fb);
 	observer_deinit(&self->wayland_destroy_observer);
@@ -727,15 +718,14 @@ void wv_buffer_pool_release(struct wv_buffer_pool* pool,
 	}
 }
 
-void wv_buffer_registry_damage_all(struct pixman_region16* region,
-		enum wv_buffer_domain domain)
+void wv_buffer_pool_damage_all(struct wv_buffer_pool* self,
+		struct pixman_region16* region)
 {
-	if (domain == WV_BUFFER_DOMAIN_UNSPEC)
-		return;
-
 	struct wv_buffer *buffer;
-	LIST_FOREACH(buffer, &buffer_registry, registry_link)
-		if (buffer->domain == domain)
+	TAILQ_FOREACH(buffer, &self->free, link)
+			pixman_region_union(&buffer->buffer_damage,
+					&buffer->buffer_damage, region);
+	TAILQ_FOREACH(buffer, &self->taken, link)
 			pixman_region_union(&buffer->buffer_damage,
 					&buffer->buffer_damage, region);
 }

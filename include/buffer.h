@@ -40,12 +40,6 @@ enum wv_buffer_type {
 #endif
 };
 
-enum wv_buffer_domain {
-	WV_BUFFER_DOMAIN_UNSPEC = 0,
-	WV_BUFFER_DOMAIN_OUTPUT,
-	WV_BUFFER_DOMAIN_CURSOR,
-};
-
 #ifdef ENABLE_SCREENCOPY_DMABUF
 struct wv_gbm_device {
 	atomic_int ref;
@@ -57,7 +51,6 @@ struct wv_gbm_device {
 struct wv_buffer {
 	enum wv_buffer_type type;
 	TAILQ_ENTRY(wv_buffer) link;
-	LIST_ENTRY(wv_buffer) registry_link;
 
 	struct nvnc_fb* nvnc_fb;
 	struct wl_buffer* wl_buffer;
@@ -69,8 +62,6 @@ struct wv_buffer {
 	bool y_inverted;
 
 	struct observer wayland_destroy_observer;
-
-	enum wv_buffer_domain domain;
 
 	struct pixman_region16 frame_damage;
 	struct pixman_region16 buffer_damage;
@@ -129,5 +120,5 @@ struct wv_buffer* wv_buffer_pool_acquire(struct wv_buffer_pool* pool);
 void wv_buffer_pool_release(struct wv_buffer_pool* pool,
 		struct wv_buffer* buffer);
 
-void wv_buffer_registry_damage_all(struct pixman_region16* region,
-		enum wv_buffer_domain domain);
+void wv_buffer_pool_damage_all(struct wv_buffer_pool* pool,
+		struct pixman_region16* region);

@@ -61,8 +61,7 @@ struct screencopy {
 	void (*cursor_hotspot)(int x, int y, void* userdata);
 
 	double (*rate_format)(const void* userdata, enum wv_buffer_type type,
-			enum wv_buffer_domain domain, uint32_t format,
-			uint64_t modifier);
+			uint32_t format, uint64_t modifier);
 
 	void* userdata;
 };

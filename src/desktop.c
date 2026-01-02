@@ -28,8 +28,7 @@ static void desktop_capture_handle_done(enum screencopy_result result,
 		struct wv_buffer* buffer, struct image_source* source,
 		void* userdata);
 static double desktop_capture_rate_format(const void* userdata,
-		enum wv_buffer_type type, enum wv_buffer_domain domain,
-		uint32_t format, uint64_t modifier);
+		enum wv_buffer_type type, uint32_t format, uint64_t modifier);
 
 extern struct wayland* wayland;
 
@@ -328,13 +327,12 @@ static void desktop_capture_handle_done(enum screencopy_result result,
 }
 
 static double desktop_capture_rate_format(const void* userdata,
-		enum wv_buffer_type type, enum wv_buffer_domain domain,
-		uint32_t format, uint64_t modifier)
+		enum wv_buffer_type type, uint32_t format, uint64_t modifier)
 {
 	const struct desktop_capture* self = userdata;
 	if (self->base.rate_format)
-		return self->base.rate_format(self->base.userdata, type, domain,
-				format, modifier);
+		return self->base.rate_format(self->base.userdata, type, format,
+				modifier);
 	return 1;
 }
 
