@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2022 Jim Ramsay
- * Copyright (c) 2023 Andri Yngvason
+ * Copyright (c) 2023 - 2026 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -18,6 +18,7 @@
 #pragma once
 
 #include "output.h"
+#include "image-source.h"
 
 #include <sys/socket.h>
 
@@ -47,7 +48,8 @@ struct ctl_server_output {
 
 struct ctl_server_actions {
 	void* userdata;
-	struct cmd_response* (*on_attach)(struct ctl*, const char* display);
+	struct cmd_response* (*on_attach)(struct ctl*, const char* display,
+			enum image_source_type, const char* image_source_name);
 	struct cmd_response* (*on_detach)(struct ctl*);
 	struct cmd_response* (*on_output_cycle)(struct ctl*,
 			enum output_cycle_direction direction);

@@ -33,6 +33,13 @@ enum image_source_power_state {
 	IMAGE_SOURCE_POWER_ON,
 };
 
+enum image_source_type {
+	IMAGE_SOURCE_TYPE_UNSPEC = 0,
+	IMAGE_SOURCE_TYPE_DESKTOP,
+	IMAGE_SOURCE_TYPE_OUTPUT,
+	IMAGE_SOURCE_TYPE_TOPLEVEL,
+};
+
 struct image_source {
 	struct image_source_impl* impl;
 

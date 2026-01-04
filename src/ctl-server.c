@@ -36,6 +36,7 @@
 #include "json-ipc.h"
 #include "util.h"
 #include "strlcpy.h"
+#include "image-source.h"
 
 #define FAILED_TO(action) \
 	nvnc_log(NVNC_LOG_ERROR, "Failed to " action ": %m");
@@ -52,6 +53,8 @@ struct cmd {
 struct cmd_attach {
 	struct cmd cmd;
 	char display[128];
+	enum image_source_type image_source_type;
+	char image_source_name[128];
 };
 
 struct cmd_help {
@@ -122,12 +125,30 @@ static struct cmd_attach* cmd_attach_new(json_t* args,
 		struct jsonipc_error* err)
 {
 	const char* display = NULL;
-	if (json_unpack(args, "{s:s}", "display", &display) == -1) {
+	const char* is_desktop = false; // TODO: This should NOT be a string
+	const char* output = NULL;
+	const char* toplevel = NULL;
+	if (json_unpack(args, "{s:s, s?s, s?s, s?s}",
+				"display", &display,
+				"desktop", &is_desktop,
+				"output", &output,
+				"toplevel", &toplevel) == -1) {
 		jsonipc_error_printf(err, EINVAL, "Missing display name");
 		return NULL;
 	}
 	struct cmd_attach* cmd = calloc(1, sizeof(*cmd));
 	strlcpy(cmd->display, display, sizeof(cmd->display));
+	if (is_desktop) {
+		cmd->image_source_type = IMAGE_SOURCE_TYPE_DESKTOP;
+	} else if (output) {
+		cmd->image_source_type = IMAGE_SOURCE_TYPE_OUTPUT;
+		strlcpy(cmd->image_source_name, output,
+				sizeof(cmd->image_source_name));
+	} else if (toplevel) {
+		cmd->image_source_type = IMAGE_SOURCE_TYPE_TOPLEVEL;
+		strlcpy(cmd->image_source_name, toplevel,
+				sizeof(cmd->image_source_name));
+	}
 	return cmd;
 }
 
@@ -477,7 +498,8 @@ static struct cmd_response* ctl_server_dispatch_cmd(struct ctl* self,
 	switch (cmd->type) {
 	case CMD_ATTACH:{
 		struct cmd_attach* c = (struct cmd_attach*)cmd;
-		response = self->actions.on_attach(self, c->display);
+		response = self->actions.on_attach(self, c->display,
+				c->image_source_type, c->image_source_name);
 		break;
 		}
 	case CMD_HELP:{

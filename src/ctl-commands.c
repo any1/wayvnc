@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2022-2023 Jim Ramsay
- * Copyright (c) 2023 Andri Yngvason
+ * Copyright (c) 2023 - 2026 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -26,6 +26,9 @@ struct cmd_info ctl_command_list[] = {
 		{
 			{ "display", "Display name", "<name>",
 				.positional = true },
+			{ "desktop", "Capture all outputs" },
+			{ "output", "Capture a specific output", "<name>" },
+			{ "toplevel", "Capture a toplevel", "<identifier>" },
 			{},
 		}
 
