@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Andri Yngvason
+ * Copyright (c) 2025 - 2026 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -32,6 +32,7 @@ struct desktop_output {
 	struct observer power_change_observer;
 	struct observer geometry_change_observer;
 	struct screencopy* sc;
+	struct screencopy* cursor_sc;
 };
 
 LIST_HEAD(desktop_output_list, desktop_output);
@@ -44,11 +45,13 @@ struct desktop {
 	struct observer output_removed_observer;
 
 	struct desktop_capture* capture;
+	struct desktop_capture* cursor_capture;
 };
 
 struct desktop_capture {
 	struct screencopy base;
 	struct desktop* desktop;
+	struct wl_seat* seat;
 	bool render_cursor;
 };
 

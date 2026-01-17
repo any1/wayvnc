@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Andri Yngvason
+ * Copyright (c) 2025 - 2026 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -205,12 +205,25 @@ static struct desktop_output *desktop_output_create(struct output* output,
 		self->sc = sc;
 	}
 
+	struct desktop_capture* cursor_capture = desktop->cursor_capture;
+	if (cursor_capture) {
+		struct screencopy *sc = screencopy_create_cursor(
+				&output->image_source, cursor_capture->seat);
+
+		sc->userdata = cursor_capture;
+		sc->on_done = desktop_capture_handle_done;
+		sc->rate_format = desktop_capture_rate_format;
+		sc->enable_linux_dmabuf = false;
+		self->cursor_sc = sc;
+	}
+
 	return self;
 }
 
 static void desktop_output_destroy(struct desktop_output* self)
 {
 	screencopy_destroy(self->sc);
+	screencopy_destroy(self->cursor_sc);
 	observer_deinit(&self->power_change_observer);
 	observer_deinit(&self->geometry_change_observer);
 	free(self);
@@ -370,18 +383,65 @@ static struct screencopy* desktop_capture_create(struct image_source* source,
 	return (struct screencopy*)self;
 }
 
+static struct screencopy* desktop_capture_create_cursor(
+		struct image_source* source, struct wl_seat* seat)
+{
+	assert(image_source_is_desktop(source));
+
+	struct desktop_capture* self = calloc(1, sizeof(*self));
+	if (!self)
+		return NULL;
+
+	self->base.impl = &desktop_capture_impl;
+	self->base.rate_limit = 30;
+
+	struct desktop* desktop = desktop_from_image_source(source);
+	self->desktop = desktop;
+
+	assert(!desktop->cursor_capture);
+	desktop->cursor_capture = self;
+
+	// TODO: Do something when seat goes away
+	self->seat = seat;
+
+	struct desktop_output* desktop_output;
+	LIST_FOREACH(desktop_output, &desktop->outputs, link) {
+		struct output* output = desktop_output->output;
+		struct screencopy *sc = screencopy_create_cursor(
+				&output->image_source, seat);
+
+		sc->userdata = self;
+		sc->on_done = desktop_capture_handle_done;
+		sc->rate_format = desktop_capture_rate_format;
+		sc->enable_linux_dmabuf = false;
+		desktop_output->cursor_sc = sc;
+	}
+
+	return (struct screencopy*)self;
+}
+
 static void desktop_capture_destroy(struct screencopy* base)
 {
 	struct desktop_capture* self = (struct desktop_capture*)base;
 
 	struct desktop* desktop = self->desktop;
-	if (desktop) {
+	if (desktop && desktop->capture == self) {
 		desktop->capture = NULL;
 
 		struct desktop_output* desktop_output;
 		LIST_FOREACH(desktop_output, &desktop->outputs, link) {
 			screencopy_destroy(desktop_output->sc);
 			desktop_output->sc = NULL;
+		}
+	}
+
+	if (desktop && desktop->cursor_capture == self) {
+		desktop->cursor_capture = NULL;
+
+		struct desktop_output* desktop_output;
+		LIST_FOREACH(desktop_output, &desktop->outputs, link) {
+			screencopy_destroy(desktop_output->cursor_sc);
+			desktop_output->cursor_sc = NULL;
 		}
 	}
 
@@ -397,7 +457,14 @@ static int desktop_capture_start(struct screencopy* base, bool immediate)
 
 	struct desktop_output* desktop_output;
 	LIST_FOREACH(desktop_output, &desktop->outputs, link) {
-		struct screencopy* sc = desktop_output->sc;
+		struct screencopy* sc;
+		if (self == desktop->capture) {
+			sc = desktop_output->sc;
+		} else {
+			assert(self == desktop->cursor_capture);
+			sc = desktop_output->cursor_sc;
+		}
+
 		sc->rate_limit = base->rate_limit;
 		sc->enable_linux_dmabuf = base->enable_linux_dmabuf;
 
@@ -419,7 +486,13 @@ static void desktop_capture_stop(struct screencopy* base)
 
 	struct desktop_output* desktop_output;
 	LIST_FOREACH(desktop_output, &desktop->outputs, link) {
-		struct screencopy* sc = desktop_output->sc;
+		struct screencopy* sc;
+		if (self == desktop->capture) {
+			sc = desktop_output->sc;
+		} else {
+			assert(self == desktop->cursor_capture);
+			sc = desktop_output->cursor_sc;
+		}
 		screencopy_stop(sc);
 	}
 }
@@ -443,6 +516,7 @@ static enum screencopy_capabilitites desktop_capture_get_caps(
 
 struct screencopy_impl desktop_capture_impl = {
 	.create = desktop_capture_create,
+	.create_cursor = desktop_capture_create_cursor,
 	.destroy = desktop_capture_destroy,
 	.start = desktop_capture_start,
 	.stop = desktop_capture_stop,
