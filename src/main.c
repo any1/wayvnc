@@ -2099,7 +2099,7 @@ static bool wayland_attach(struct wayvnc* self, const char* display,
 
 	nvnc_log(NVNC_LOG_DEBUG, "Attaching to %s", display);
 
-	if (init_wayland(self, NULL) < 0) {
+	if (init_wayland(self, display) < 0) {
 		nvnc_log(NVNC_LOG_ERROR, "Failed to initialise wayland");
 		goto failure;
 	}
