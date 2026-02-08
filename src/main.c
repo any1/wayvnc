@@ -656,7 +656,7 @@ static void on_client_cut_text(struct nvnc_client* nvnc_client,
 {
 	struct wayvnc_client* client = nvnc_get_userdata(nvnc_client);
 
-	if (client->data_control.manager) {
+	if (client->data_control.protocol != DATA_CONTROL_PROTOCOL_NONE) {
 		data_control_to_clipboard(&client->data_control, text, len);
 	}
 }
@@ -1487,9 +1487,8 @@ static void client_detach_wayland(struct wayvnc_client* self)
 		pointer_destroy(&self->pointer);
 	self->pointer.pointer = NULL;
 
-	if (self->data_control.manager)
+	if (self->data_control.protocol != DATA_CONTROL_PROTOCOL_NONE)
 		data_control_destroy(&self->data_control);
-	self->data_control.manager = NULL;
 	self->data_control.protocol = DATA_CONTROL_PROTOCOL_NONE;
 }
 
@@ -1568,7 +1567,7 @@ static void client_destroy(void* obj)
 	if (self->pointer.pointer)
 		pointer_destroy(&self->pointer);
 
-	if (self->data_control.manager)
+	if (self->data_control.protocol != DATA_CONTROL_PROTOCOL_NONE)
 		data_control_destroy(&self->data_control);
 
 	free(self);
@@ -1773,22 +1772,23 @@ static void reinitialise_pointers(struct wayvnc* self)
 static void client_init_data_control(struct wayvnc_client* self)
 {
 	struct wayvnc* wayvnc = self->server;
+	struct zwlr_data_control_manager_v1* wlr_manager =
+		wayland->zwlr_data_control_manager_v1;
+	struct ext_data_control_manager_v1* ext_manager =
+		wayland->ext_data_control_manager_v1;
 	enum data_control_protocol protocol = DATA_CONTROL_PROTOCOL_NONE;
-	void* manager = NULL;
 
-	if (wayland->ext_data_control_manager_v1) {
+	if (ext_manager) {
 		protocol = DATA_CONTROL_PROTOCOL_EXT;
-		manager = wayland->ext_data_control_manager_v1;
-	} else if (wayland->zwlr_data_control_manager_v1) {
+	} else if (wlr_manager) {
 		protocol = DATA_CONTROL_PROTOCOL_WLR;
-		manager = wayland->zwlr_data_control_manager_v1;
 	}
 
-	if (!manager)
+	if (protocol == DATA_CONTROL_PROTOCOL_NONE)
 		return;
 
-	data_control_init(&self->data_control, protocol, manager,
-			wayvnc->nvnc, self->seat->wl_seat);
+	data_control_init(&self->data_control, protocol, wlr_manager, ext_manager,
+		wayvnc->nvnc, self->seat->wl_seat);
 }
 
 void log_image_source(struct wayvnc* self)

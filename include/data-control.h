@@ -24,6 +24,14 @@
 
 struct wl_display;
 struct wl_seat;
+struct zwlr_data_control_manager_v1;
+struct zwlr_data_control_device_v1;
+struct zwlr_data_control_source_v1;
+struct zwlr_data_control_offer_v1;
+struct ext_data_control_manager_v1;
+struct ext_data_control_device_v1;
+struct ext_data_control_source_v1;
+struct ext_data_control_offer_v1;
 struct receive_context;
 struct send_context;
 
@@ -42,11 +50,20 @@ struct data_control {
 	struct receive_context_list receive_contexts;
 	struct send_context_list send_contexts;
 	enum data_control_protocol protocol;
-	void* manager;
-	void* device;
-	void* selection;
-	void* primary_selection;
-	void* offer;
+	struct {
+		struct zwlr_data_control_manager_v1* manager;
+		struct zwlr_data_control_device_v1* device;
+		struct zwlr_data_control_source_v1* selection;
+		struct zwlr_data_control_source_v1* primary_selection;
+		struct zwlr_data_control_offer_v1* offer;
+	} wlr;
+	struct {
+		struct ext_data_control_manager_v1* manager;
+		struct ext_data_control_device_v1* device;
+		struct ext_data_control_source_v1* selection;
+		struct ext_data_control_source_v1* primary_selection;
+		struct ext_data_control_offer_v1* offer;
+	} ext;
 	bool is_own_offer;
 	const char* mime_type;
 	/* x-wayvnc-client-(8 hexadecimal digits) + \0 */
@@ -56,6 +73,8 @@ struct data_control {
 };
 
 void data_control_init(struct data_control* self, enum data_control_protocol protocol,
-		void* manager, struct nvnc* server, struct wl_seat* seat);
+		struct zwlr_data_control_manager_v1* wlr_manager,
+		struct ext_data_control_manager_v1* ext_manager,
+		struct nvnc* server, struct wl_seat* seat);
 void data_control_destroy(struct data_control* self);
 void data_control_to_clipboard(struct data_control* self, const char* text, size_t len);
