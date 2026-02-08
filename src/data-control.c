@@ -682,9 +682,13 @@ void data_control_to_clipboard(struct data_control* self, const char* text, size
 	memcpy(self->cb_data, text, len);
 	self->cb_len = len;
 	// Set copy/paste buffer
-	if (!set_selection(self, false))
+	if (!set_selection(self, false)) {
+		nvnc_log(NVNC_LOG_ERROR, "Failed to set clipboard selection");
 		return;
+	}
 	// Set highlight/middle_click buffer
-	if (!set_selection(self, true))
+	if (!set_selection(self, true)) {
+		nvnc_log(NVNC_LOG_ERROR, "Failed to set primary selection");
 		return;
+	}
 }
