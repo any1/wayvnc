@@ -17,27 +17,36 @@
 #pragma once
 
 #include <neatvnc.h>
-
-#include "wlr-data-control-unstable-v1.h"
+#include <stdbool.h>
+#include <stddef.h>
 
 #include "sys/queue.h"
 
+struct wl_display;
+struct wl_seat;
 struct receive_context;
 struct send_context;
 
 LIST_HEAD(receive_context_list, receive_context);
 LIST_HEAD(send_context_list, send_context);
 
+enum data_control_protocol {
+	DATA_CONTROL_PROTOCOL_NONE = 0,
+	DATA_CONTROL_PROTOCOL_WLR,
+	DATA_CONTROL_PROTOCOL_EXT,
+};
+
 struct data_control {
 	struct wl_display* wl_display;
 	struct nvnc* server;
 	struct receive_context_list receive_contexts;
 	struct send_context_list send_contexts;
-	struct zwlr_data_control_manager_v1* manager;
-	struct zwlr_data_control_device_v1* device;
-	struct zwlr_data_control_source_v1* selection;
-	struct zwlr_data_control_source_v1* primary_selection;
-	struct zwlr_data_control_offer_v1* offer;
+	enum data_control_protocol protocol;
+	void* manager;
+	void* device;
+	void* selection;
+	void* primary_selection;
+	void* offer;
 	bool is_own_offer;
 	const char* mime_type;
 	/* x-wayvnc-client-(8 hexadecimal digits) + \0 */
@@ -46,6 +55,7 @@ struct data_control {
 	size_t cb_len;
 };
 
-void data_control_init(struct data_control* self, struct nvnc* server, struct wl_seat* seat);
+void data_control_init(struct data_control* self, enum data_control_protocol protocol,
+		void* manager, struct nvnc* server, struct wl_seat* seat);
 void data_control_destroy(struct data_control* self);
 void data_control_to_clipboard(struct data_control* self, const char* text, size_t len);

@@ -1490,6 +1490,7 @@ static void client_detach_wayland(struct wayvnc_client* self)
 	if (self->data_control.manager)
 		data_control_destroy(&self->data_control);
 	self->data_control.manager = NULL;
+	self->data_control.protocol = DATA_CONTROL_PROTOCOL_NONE;
 }
 
 static unsigned next_client_id = 1;
@@ -1772,13 +1773,22 @@ static void reinitialise_pointers(struct wayvnc* self)
 static void client_init_data_control(struct wayvnc_client* self)
 {
 	struct wayvnc* wayvnc = self->server;
+	enum data_control_protocol protocol = DATA_CONTROL_PROTOCOL_NONE;
+	void* manager = NULL;
 
-	if (!wayland->zwlr_data_control_manager_v1)
+	if (wayland->ext_data_control_manager_v1) {
+		protocol = DATA_CONTROL_PROTOCOL_EXT;
+		manager = wayland->ext_data_control_manager_v1;
+	} else if (wayland->zwlr_data_control_manager_v1) {
+		protocol = DATA_CONTROL_PROTOCOL_WLR;
+		manager = wayland->zwlr_data_control_manager_v1;
+	}
+
+	if (!manager)
 		return;
 
-	self->data_control.manager = wayland->zwlr_data_control_manager_v1;
-	data_control_init(&self->data_control, wayvnc->nvnc,
-			self->seat->wl_seat);
+	data_control_init(&self->data_control, protocol, manager,
+			wayvnc->nvnc, self->seat->wl_seat);
 }
 
 void log_image_source(struct wayvnc* self)

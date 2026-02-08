@@ -32,6 +32,7 @@
 #include "ext-foreign-toplevel-list-v1.h"
 #include "ext-image-capture-source-v1.h"
 #include "ext-image-copy-capture-v1.h"
+#include "ext-data-control-v1.h"
 #include "ext-transient-seat-v1.h"
 #include "linux-dmabuf-unstable-v1.h"
 #include "virtual-keyboard-unstable-v1.h"
@@ -88,6 +89,9 @@ static bool registry_add_input(void* data, struct wl_registry* registry,
 		return true;
 
 	if (CHECK_BIND(zwp_virtual_keyboard_manager_v1, 1))
+		return true;
+
+	if (CHECK_BIND(ext_data_control_manager_v1, 1))
 		return true;
 
 	if (CHECK_BIND(zwlr_data_control_manager_v1, 2))

@@ -28,6 +28,7 @@
 	X(ext_image_copy_capture_manager_v1) \
 	X(ext_output_image_capture_source_manager_v1) \
 	X(ext_transient_seat_manager_v1) \
+	X(ext_data_control_manager_v1) \
 	X(wl_shm) \
 	X(zwlr_data_control_manager_v1) \
 	X(zwlr_output_power_manager_v1) \
@@ -50,6 +51,7 @@ struct ext_foreign_toplevel_list_v1;
 struct ext_image_copy_capture_manager_v1;
 struct ext_output_image_capture_source_manager_v1;
 struct ext_transient_seat_manager_v1;
+struct ext_data_control_manager_v1;
 struct wl_shm;
 struct zwlr_data_control_manager_v1;
 struct zwlr_output_power_manager_v1;

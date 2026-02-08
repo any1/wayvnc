@@ -27,6 +27,8 @@
 #include <neatvnc.h>
 
 #include "data-control.h"
+#include "ext-data-control-v1.h"
+#include "wlr-data-control-unstable-v1.h"
 
 static const char custom_mime_type_data[] = "wayvnc";
 
@@ -48,6 +50,32 @@ struct send_context {
 	size_t length;
 	size_t index;
 };
+
+static bool data_control_is_wlr(const struct data_control* self)
+{
+	return self->protocol == DATA_CONTROL_PROTOCOL_WLR;
+}
+
+static void data_control_offer_receive(struct data_control* self, void* offer, int fd);
+static void data_control_offer_destroy(struct data_control* self, void* offer);
+static void data_control_offer_add_listener(struct data_control* self, void* offer);
+static void data_control_source_destroy(struct data_control* self, void* source);
+static void data_control_source_offer(struct data_control* self, void* source,
+		const char* mime_type);
+static void data_control_source_add_listener(struct data_control* self, void* source);
+static void data_control_device_destroy(struct data_control* self, void* device);
+static void data_control_device_set_selection(struct data_control* self, void* source);
+static void data_control_device_set_primary_selection(struct data_control* self, void* source);
+static void* data_control_manager_create_data_source(struct data_control* self);
+static void* data_control_manager_get_data_device(struct data_control* self,
+		struct wl_seat* seat);
+
+static const struct zwlr_data_control_offer_v1_listener wlr_data_control_offer_listener;
+static const struct ext_data_control_offer_v1_listener ext_data_control_offer_listener;
+static const struct zwlr_data_control_device_v1_listener wlr_data_control_device_listener;
+static const struct ext_data_control_device_v1_listener ext_data_control_device_listener;
+static const struct zwlr_data_control_source_v1_listener wlr_data_control_source_listener;
+static const struct ext_data_control_source_v1_listener ext_data_control_source_listener;
 
 static void destroy_receive_context(struct receive_context* ctx)
 {
@@ -129,10 +157,8 @@ static int dont_block(int fd)
 	return fcntl(fd, F_SETFL, ret | O_NONBLOCK);
 }
 
-static void receive_data(void* data,
-	struct zwlr_data_control_offer_v1* offer)
+static void receive_data(struct data_control* self, void* offer)
 {
-	struct data_control* self = data;
 	int pipe_fd[2];
 
 	if (pipe(pipe_fd) == -1) {
@@ -155,7 +181,7 @@ static void receive_data(void* data,
 		return;
 	}
 
-	zwlr_data_control_offer_v1_receive(offer, self->mime_type, pipe_fd[1]);
+	data_control_offer_receive(self, offer, pipe_fd[1]);
 	close(pipe_fd[1]);
 
 	ctx->fd = pipe_fd[0];
@@ -187,12 +213,9 @@ open_memstream_failure:
 	close(pipe_fd[0]);
 }
 
-static void data_control_offer(void* data,
-	struct zwlr_data_control_offer_v1* zwlr_data_control_offer_v1,
-	const char* mime_type)
+static void data_control_offer_handle(struct data_control* self, void* offer,
+		const char* mime_type)
 {
-	struct data_control* self = data;
-
 	if (strcmp(mime_type, self->custom_mime_type_name) == 0) {
 		self->is_own_offer = true;
 		return;
@@ -202,89 +225,155 @@ static void data_control_offer(void* data,
 		return;
 
 	if (strcmp(mime_type, self->mime_type) == 0)
-		self->offer = zwlr_data_control_offer_v1;
+		self->offer = offer;
 }
 
-struct zwlr_data_control_offer_v1_listener data_control_offer_listener = {
-	data_control_offer
+static void data_control_offer_wlr(void* data,
+	struct zwlr_data_control_offer_v1* offer,
+	const char* mime_type)
+{
+	data_control_offer_handle(data, offer, mime_type);
+}
+
+static void data_control_offer_ext(void* data,
+	struct ext_data_control_offer_v1* offer,
+	const char* mime_type)
+{
+	data_control_offer_handle(data, offer, mime_type);
+}
+
+static const struct zwlr_data_control_offer_v1_listener wlr_data_control_offer_listener = {
+	.offer = data_control_offer_wlr
 };
 
-static void data_control_device_offer(void* data,
-	struct zwlr_data_control_device_v1* zwlr_data_control_device_v1,
-	struct zwlr_data_control_offer_v1* id)
+static const struct ext_data_control_offer_v1_listener ext_data_control_offer_listener = {
+	.offer = data_control_offer_ext
+};
+
+static void data_control_device_offer_handle(struct data_control* self, void* offer)
 {
-	if (!id)
+	if (!offer)
 		return;
 
-	zwlr_data_control_offer_v1_add_listener(id, &data_control_offer_listener, data);
+	data_control_offer_add_listener(self, offer);
 }
 
-static void data_control_device_selection(void* data,
-	struct zwlr_data_control_device_v1* zwlr_data_control_device_v1,
-	struct zwlr_data_control_offer_v1* id)
+static void data_control_device_selection_handle(struct data_control* self, void* offer)
 {
-	struct data_control* self = data;
-
-	if (!id) {
+	if (!offer) {
 		if (self->offer) {
-			zwlr_data_control_offer_v1_destroy(self->offer);
+			data_control_offer_destroy(self, self->offer);
 			self->offer = NULL;
 			self->is_own_offer = false;
 		}
 		return;
 	}
 
-	if (id == self->offer && !self->is_own_offer)
-		receive_data(data, id);
+	if (offer == self->offer && !self->is_own_offer)
+		receive_data(self, offer);
 
-	zwlr_data_control_offer_v1_destroy(id);
+	data_control_offer_destroy(self, offer);
 	self->offer = NULL;
 	self->is_own_offer = false;
 }
 
-static void data_control_device_finished(void* data,
-	struct zwlr_data_control_device_v1* zwlr_data_control_device_v1)
+static void data_control_device_finished_handle(struct data_control* self,
+		void* device)
 {
-	zwlr_data_control_device_v1_destroy(zwlr_data_control_device_v1);
+	data_control_device_destroy(self, device);
 }
 
-static void data_control_device_primary_selection(void* data,
-	struct zwlr_data_control_device_v1* zwlr_data_control_device_v1,
-	struct zwlr_data_control_offer_v1* id)
+static void data_control_device_primary_selection_handle(struct data_control* self,
+		void* offer)
 {
-	struct data_control* self = data;
-
-	if (!id) {
+	if (!offer) {
 		if (self->offer) {
-			zwlr_data_control_offer_v1_destroy(self->offer);
+			data_control_offer_destroy(self, self->offer);
 			self->offer = NULL;
 			self->is_own_offer = false;
 		}
 		return;
 	}
 
-	if (id == self->offer && !self->is_own_offer)
-		receive_data(data, id);
+	if (offer == self->offer && !self->is_own_offer)
+		receive_data(self, offer);
 
-	zwlr_data_control_offer_v1_destroy(id);
+	data_control_offer_destroy(self, offer);
 	self->offer = NULL;
 	self->is_own_offer = false;
 }
 
-static struct zwlr_data_control_device_v1_listener data_control_device_listener = {
-	.data_offer = data_control_device_offer,
-	.selection = data_control_device_selection,
-	.finished = data_control_device_finished,
-	.primary_selection = data_control_device_primary_selection
+static void data_control_device_offer_wlr(void* data,
+	struct zwlr_data_control_device_v1* device,
+	struct zwlr_data_control_offer_v1* offer)
+{
+	data_control_device_offer_handle(data, offer);
+}
+
+static void data_control_device_offer_ext(void* data,
+	struct ext_data_control_device_v1* device,
+	struct ext_data_control_offer_v1* offer)
+{
+	data_control_device_offer_handle(data, offer);
+}
+
+static void data_control_device_selection_wlr(void* data,
+	struct zwlr_data_control_device_v1* device,
+	struct zwlr_data_control_offer_v1* offer)
+{
+	data_control_device_selection_handle(data, offer);
+}
+
+static void data_control_device_selection_ext(void* data,
+	struct ext_data_control_device_v1* device,
+	struct ext_data_control_offer_v1* offer)
+{
+	data_control_device_selection_handle(data, offer);
+}
+
+static void data_control_device_finished_wlr(void* data,
+	struct zwlr_data_control_device_v1* device)
+{
+	data_control_device_finished_handle(data, device);
+}
+
+static void data_control_device_finished_ext(void* data,
+	struct ext_data_control_device_v1* device)
+{
+	data_control_device_finished_handle(data, device);
+}
+
+static void data_control_device_primary_selection_wlr(void* data,
+	struct zwlr_data_control_device_v1* device,
+	struct zwlr_data_control_offer_v1* offer)
+{
+	data_control_device_primary_selection_handle(data, offer);
+}
+
+static void data_control_device_primary_selection_ext(void* data,
+	struct ext_data_control_device_v1* device,
+	struct ext_data_control_offer_v1* offer)
+{
+	data_control_device_primary_selection_handle(data, offer);
+}
+
+static const struct zwlr_data_control_device_v1_listener wlr_data_control_device_listener = {
+	.data_offer = data_control_device_offer_wlr,
+	.selection = data_control_device_selection_wlr,
+	.finished = data_control_device_finished_wlr,
+	.primary_selection = data_control_device_primary_selection_wlr
 };
 
-static void
-data_control_source_send(void* data,
-	struct zwlr_data_control_source_v1* zwlr_data_control_source_v1,
-	const char* mime_type,
-	int32_t fd)
+static const struct ext_data_control_device_v1_listener ext_data_control_device_listener = {
+	.data_offer = data_control_device_offer_ext,
+	.selection = data_control_device_selection_ext,
+	.finished = data_control_device_finished_ext,
+	.primary_selection = data_control_device_primary_selection_ext
+};
+
+static void data_control_source_send_handle(struct data_control* self,
+		const char* mime_type, int32_t fd)
 {
-	struct data_control* self = data;
 	const char* d = self->cb_data;
 	size_t len = self->cb_len;
 	int ret;
@@ -359,54 +448,238 @@ ctx_alloc_failure:
 	nvnc_log(NVNC_LOG_ERROR, "Clipboard write incomplete");
 }
 
-static void data_control_source_cancelled(void* data,
-	struct zwlr_data_control_source_v1* zwlr_data_control_source_v1)
+static void data_control_source_cancelled_handle(struct data_control* self,
+		void* source)
 {
-	struct data_control* self = data;
-
-	if (self->selection == zwlr_data_control_source_v1) {
+	if (self->selection == source) {
 		self->selection = NULL;
 	}
-	if (self->primary_selection == zwlr_data_control_source_v1) {
+	if (self->primary_selection == source) {
 		self->primary_selection = NULL;
 	}
-	zwlr_data_control_source_v1_destroy(zwlr_data_control_source_v1);
+	data_control_source_destroy(self, source);
 }
 
-struct zwlr_data_control_source_v1_listener data_control_source_listener = {
-	.send = data_control_source_send,
-	.cancelled = data_control_source_cancelled
+static void data_control_source_send_wlr(void* data,
+	struct zwlr_data_control_source_v1* source,
+	const char* mime_type, int32_t fd)
+{
+	data_control_source_send_handle(data, mime_type, fd);
+}
+
+static void data_control_source_send_ext(void* data,
+	struct ext_data_control_source_v1* source,
+	const char* mime_type, int32_t fd)
+{
+	data_control_source_send_handle(data, mime_type, fd);
+}
+
+static void data_control_source_cancelled_wlr(void* data,
+	struct zwlr_data_control_source_v1* source)
+{
+	data_control_source_cancelled_handle(data, source);
+}
+
+static void data_control_source_cancelled_ext(void* data,
+	struct ext_data_control_source_v1* source)
+{
+	data_control_source_cancelled_handle(data, source);
+}
+
+static const struct zwlr_data_control_source_v1_listener wlr_data_control_source_listener = {
+	.send = data_control_source_send_wlr,
+	.cancelled = data_control_source_cancelled_wlr
 };
 
-static struct zwlr_data_control_source_v1* set_selection(struct data_control* self, bool primary) {
-	struct zwlr_data_control_source_v1* selection;
-	selection = zwlr_data_control_manager_v1_create_data_source(self->manager);
+static const struct ext_data_control_source_v1_listener ext_data_control_source_listener = {
+	.send = data_control_source_send_ext,
+	.cancelled = data_control_source_cancelled_ext
+};
+
+static void data_control_offer_receive(struct data_control* self, void* offer, int fd)
+{
+	if (data_control_is_wlr(self)) {
+		zwlr_data_control_offer_v1_receive(
+			(struct zwlr_data_control_offer_v1*)offer,
+			self->mime_type, fd);
+		return;
+	}
+
+	ext_data_control_offer_v1_receive(
+		(struct ext_data_control_offer_v1*)offer,
+		self->mime_type, fd);
+}
+
+static void data_control_offer_destroy(struct data_control* self, void* offer)
+{
+	if (data_control_is_wlr(self)) {
+		zwlr_data_control_offer_v1_destroy(
+			(struct zwlr_data_control_offer_v1*)offer);
+		return;
+	}
+
+	ext_data_control_offer_v1_destroy(
+		(struct ext_data_control_offer_v1*)offer);
+}
+
+static void data_control_offer_add_listener(struct data_control* self, void* offer)
+{
+	if (data_control_is_wlr(self)) {
+		zwlr_data_control_offer_v1_add_listener(
+			(struct zwlr_data_control_offer_v1*)offer,
+			&wlr_data_control_offer_listener, self);
+		return;
+	}
+
+	ext_data_control_offer_v1_add_listener(
+		(struct ext_data_control_offer_v1*)offer,
+		&ext_data_control_offer_listener, self);
+}
+
+static void data_control_source_destroy(struct data_control* self, void* source)
+{
+	if (data_control_is_wlr(self)) {
+		zwlr_data_control_source_v1_destroy(
+			(struct zwlr_data_control_source_v1*)source);
+		return;
+	}
+
+	ext_data_control_source_v1_destroy(
+		(struct ext_data_control_source_v1*)source);
+}
+
+static void data_control_source_offer(struct data_control* self, void* source,
+		const char* mime_type)
+{
+	if (data_control_is_wlr(self)) {
+		zwlr_data_control_source_v1_offer(
+			(struct zwlr_data_control_source_v1*)source,
+			mime_type);
+		return;
+	}
+
+	ext_data_control_source_v1_offer(
+		(struct ext_data_control_source_v1*)source,
+		mime_type);
+}
+
+static void data_control_source_add_listener(struct data_control* self, void* source)
+{
+	if (data_control_is_wlr(self)) {
+		zwlr_data_control_source_v1_add_listener(
+			(struct zwlr_data_control_source_v1*)source,
+			&wlr_data_control_source_listener, self);
+		return;
+	}
+
+	ext_data_control_source_v1_add_listener(
+		(struct ext_data_control_source_v1*)source,
+		&ext_data_control_source_listener, self);
+}
+
+static void data_control_device_destroy(struct data_control* self, void* device)
+{
+	if (data_control_is_wlr(self)) {
+		zwlr_data_control_device_v1_destroy(
+			(struct zwlr_data_control_device_v1*)device);
+		return;
+	}
+
+	ext_data_control_device_v1_destroy(
+		(struct ext_data_control_device_v1*)device);
+}
+
+static void data_control_device_set_selection(struct data_control* self, void* source)
+{
+	if (data_control_is_wlr(self)) {
+		zwlr_data_control_device_v1_set_selection(
+			(struct zwlr_data_control_device_v1*)self->device,
+			(struct zwlr_data_control_source_v1*)source);
+		return;
+	}
+
+	ext_data_control_device_v1_set_selection(
+		(struct ext_data_control_device_v1*)self->device,
+		(struct ext_data_control_source_v1*)source);
+}
+
+static void data_control_device_set_primary_selection(struct data_control* self, void* source)
+{
+	if (data_control_is_wlr(self)) {
+		zwlr_data_control_device_v1_set_primary_selection(
+			(struct zwlr_data_control_device_v1*)self->device,
+			(struct zwlr_data_control_source_v1*)source);
+		return;
+	}
+
+	ext_data_control_device_v1_set_primary_selection(
+		(struct ext_data_control_device_v1*)self->device,
+		(struct ext_data_control_source_v1*)source);
+}
+
+static void* data_control_manager_create_data_source(struct data_control* self)
+{
+	if (data_control_is_wlr(self))
+		return zwlr_data_control_manager_v1_create_data_source(
+			(struct zwlr_data_control_manager_v1*)self->manager);
+
+	return ext_data_control_manager_v1_create_data_source(
+		(struct ext_data_control_manager_v1*)self->manager);
+}
+
+static void* data_control_manager_get_data_device(struct data_control* self,
+		struct wl_seat* seat)
+{
+	if (data_control_is_wlr(self))
+		return zwlr_data_control_manager_v1_get_data_device(
+			(struct zwlr_data_control_manager_v1*)self->manager,
+			seat);
+
+	return ext_data_control_manager_v1_get_data_device(
+		(struct ext_data_control_manager_v1*)self->manager,
+		seat);
+}
+
+static void* set_selection(struct data_control* self, bool primary)
+{
+	void* selection = data_control_manager_create_data_source(self);
 	if (selection == NULL) {
-		nvnc_log(NVNC_LOG_ERROR, "zwlr_data_control_manager_v1_create_data_source() failed");
+		nvnc_log(NVNC_LOG_ERROR, "data_control_manager_create_data_source() failed");
 		free(self->cb_data);
 		self->cb_data = NULL;
 		return NULL;
 	}
 
-	zwlr_data_control_source_v1_add_listener(selection, &data_control_source_listener, self);
-	zwlr_data_control_source_v1_offer(selection, self->mime_type);
-	zwlr_data_control_source_v1_offer(selection, self->custom_mime_type_name);
+	data_control_source_add_listener(self, selection);
+	data_control_source_offer(self, selection, self->mime_type);
+	data_control_source_offer(self, selection, self->custom_mime_type_name);
 
 	if (primary)
-		zwlr_data_control_device_v1_set_primary_selection(self->device, selection);
+		data_control_device_set_primary_selection(self, selection);
 	else
-		zwlr_data_control_device_v1_set_selection(self->device, selection);
+		data_control_device_set_selection(self, selection);
 
 	return selection;
 }
 
-void data_control_init(struct data_control* self, struct nvnc* server, struct wl_seat* seat)
+void data_control_init(struct data_control* self, enum data_control_protocol protocol,
+		void* manager, struct nvnc* server, struct wl_seat* seat)
 {
+	self->protocol = protocol;
+	self->manager = manager;
 	self->server = server;
 	LIST_INIT(&self->receive_contexts);
 	LIST_INIT(&self->send_contexts);
-	self->device = zwlr_data_control_manager_v1_get_data_device(self->manager, seat);
-	zwlr_data_control_device_v1_add_listener(self->device, &data_control_device_listener, self);
+	self->device = data_control_manager_get_data_device(self, seat);
+	if (data_control_is_wlr(self)) {
+		zwlr_data_control_device_v1_add_listener(
+			(struct zwlr_data_control_device_v1*)self->device,
+			&wlr_data_control_device_listener, self);
+	} else {
+		ext_data_control_device_v1_add_listener(
+			(struct ext_data_control_device_v1*)self->device,
+			&ext_data_control_device_listener, self);
+	}
 	self->selection = NULL;
 	self->primary_selection = NULL;
 	self->offer = NULL;
@@ -428,14 +701,17 @@ void data_control_destroy(struct data_control* self)
 		destroy_send_context(LIST_FIRST(&self->send_contexts));
 	}
 	if (self->selection) {
-		zwlr_data_control_source_v1_destroy(self->selection);
+		data_control_source_destroy(self, self->selection);
 		self->selection = NULL;
 	}
 	if (self->primary_selection) {
-		zwlr_data_control_source_v1_destroy(self->primary_selection);
+		data_control_source_destroy(self, self->primary_selection);
 		self->primary_selection = NULL;
 	}
-	zwlr_data_control_device_v1_destroy(self->device);
+	if (self->device) {
+		data_control_device_destroy(self, self->device);
+		self->device = NULL;
+	}
 	free(self->cb_data);
 }
 

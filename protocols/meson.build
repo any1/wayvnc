@@ -23,6 +23,7 @@ client_protocols = [
 	'virtual-keyboard-unstable-v1.xml',
 	'xdg-output-unstable-v1.xml',
 	'linux-dmabuf-unstable-v1.xml',
+	'ext-data-control-v1.xml',
 	'wlr-data-control-unstable-v1.xml',
 	'wlr-output-management-unstable-v1.xml',
 	'wlr-output-power-management-unstable-v1.xml',
