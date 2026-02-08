@@ -682,7 +682,9 @@ void data_control_to_clipboard(struct data_control* self, const char* text, size
 	memcpy(self->cb_data, text, len);
 	self->cb_len = len;
 	// Set copy/paste buffer
-	set_selection(self, false);
+	if (!set_selection(self, false))
+		return;
 	// Set highlight/middle_click buffer
-	set_selection(self, true);
+	if (!set_selection(self, true))
+		return;
 }
