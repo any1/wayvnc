@@ -736,7 +736,7 @@ static int wayvnc_display_blank(struct wayvnc* self,
 	int height = 720;
 
 	if (display->image_source) {
-		if (image_source_get_transformed_dimensions(self->image_source,
+		if (image_source_get_transformed_dimensions(display->image_source,
 				&width, &height)) {
 		} else if (display->last_frame_info.is_set) {
 			width = display->last_frame_info.width;
