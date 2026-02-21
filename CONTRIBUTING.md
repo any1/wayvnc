@@ -1,5 +1,18 @@
 # Contributing to wayvnc
 
+## LLM/AI
+
+It's OK to use an LLM to generate code, but you need to fully understand the
+generated code in detail and as a whole. Beware that LLMs often present
+falsehoods as truths. To counter this, you need to do your own research to
+verify that what the LLM gives you is correct.
+
+For example, if you are implementing a feature that is described on the
+[RFB specification](https://github.com/rfbproto/rfbproto/blob/master/rfbproto.rst),
+you need to read and understand the relevant sections of the specification. You
+can use an LLM to help you find the relevant sections, but do not rely on
+summaries alone.
+
 ## Commit Messages
 
 Please, try to write good commit messages. Do your best to follow these 7 rules,
