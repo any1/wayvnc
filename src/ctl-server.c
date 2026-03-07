@@ -57,6 +57,13 @@ struct cmd_attach {
 	char image_source_name[128];
 };
 
+struct cmd_auth_reply {
+	struct cmd cmd;
+	uint32_t reply_token;
+	bool is_accepted;
+	char reason[256];
+};
+
 struct cmd_help {
 	struct cmd cmd;
 	char id[64];
@@ -149,6 +156,30 @@ static struct cmd_attach* cmd_attach_new(json_t* args,
 		strlcpy(cmd->image_source_name, toplevel,
 				sizeof(cmd->image_source_name));
 	}
+	return cmd;
+}
+
+static struct cmd_auth_reply* cmd_auth_reply_new(json_t* args,
+		struct jsonipc_error* err)
+{
+	int reply_token = 0;
+	int accepted = 0;
+	int rejected = 1;
+	const char* reason = NULL;
+	if (json_unpack(args, "{s:i, s?b, s?b, s?s}",
+				"reply-token", &reply_token,
+				"accept", &accepted,
+				"reject", &rejected,
+				"reason", &reason) == -1) {
+		jsonipc_error_printf(err, EINVAL, "Invalid authentication reply");
+		return NULL;
+	}
+	struct cmd_auth_reply* cmd = calloc(1, sizeof(*cmd));
+	cmd->reply_token = reply_token;
+	cmd->is_accepted = accepted & !rejected;
+	if (!reason)
+		reason = "Invalid user credentials";
+	strlcpy(cmd->reason, reason, sizeof(cmd->reason));
 	return cmd;
 }
 
@@ -247,6 +278,9 @@ static struct cmd* parse_command(struct jsonipc_request* ipc,
 	switch (cmd_type) {
 	case CMD_ATTACH:
 		cmd = (struct cmd*)cmd_attach_new(ipc->params, err);
+		break;
+	case CMD_AUTH_REPLY:
+		cmd = (struct cmd*)cmd_auth_reply_new(ipc->params, err);
 		break;
 	case CMD_HELP:
 		cmd = (struct cmd*)cmd_help_new(ipc->params, err);
@@ -500,6 +534,11 @@ static struct cmd_response* ctl_server_dispatch_cmd(struct ctl* self,
 		struct cmd_attach* c = (struct cmd_attach*)cmd;
 		response = self->actions.on_attach(self, c->display,
 				c->image_source_type, c->image_source_name);
+		break;
+		}
+	case CMD_AUTH_REPLY:{
+		struct cmd_auth_reply* c = (struct cmd_auth_reply*)cmd;
+		response = self->actions.on_auth_reply(self, c->reply_token, c->is_accepted, c->reason);
 		break;
 		}
 	case CMD_HELP:{
@@ -1066,4 +1105,12 @@ void ctl_server_event_output_removed(struct ctl* self, const char* name)
 {
 	ctl_server_enqueue_event(self, EVT_OUTPUT_REMOVED,
 			json_pack("{s:s}", "name", name));
+}
+
+void ctl_server_event_auth_request(struct ctl* self, uint32_t reply_token,
+		const char* username, const char* password)
+{
+	ctl_server_enqueue_event(self, EVT_AUTH_REQUEST,
+			json_pack("{s:I, s:s, s:s}", reply_token, username,
+				password));
 }

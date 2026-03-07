@@ -21,6 +21,7 @@
 #include "image-source.h"
 
 #include <sys/socket.h>
+#include <stdbool.h>
 
 struct ctl;
 struct cmd_response;
@@ -50,6 +51,8 @@ struct ctl_server_actions {
 	void* userdata;
 	struct cmd_response* (*on_attach)(struct ctl*, const char* display,
 			enum image_source_type, const char* image_source_name);
+	struct cmd_response* (*on_auth_reply)(struct ctl*, uint32_t reply_token,
+			bool is_accepted, const char* reason);
 	struct cmd_response* (*on_detach)(struct ctl*);
 	struct cmd_response* (*on_output_cycle)(struct ctl*,
 			enum output_cycle_direction direction);
@@ -96,3 +99,6 @@ void ctl_server_event_detached(struct ctl*);
 
 void ctl_server_event_output_added(struct ctl*, const char* name);
 void ctl_server_event_output_removed(struct ctl*, const char* name);
+
+void ctl_server_event_auth_request(struct ctl*, uint32_t reply_token,
+		const char* username, const char* password);

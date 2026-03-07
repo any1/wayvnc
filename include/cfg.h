@@ -30,6 +30,7 @@
 	X(string, address) \
 	X(uint, port) \
 	X(bool, enable_pam) \
+	X(bool, enable_scripted_auth) \
 	X(string, xkb_rules) \
 	X(string, xkb_model) \
 	X(string, xkb_layout) \

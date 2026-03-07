@@ -65,6 +65,8 @@
 #include "pam_auth.h"
 #endif
 
+#define PENDING_CLIENTS_MAX 8
+
 #define DEFAULT_ADDRESS "127.0.0.1"
 #define DEFAULT_PORT 5900
 
@@ -158,6 +160,8 @@ struct wayvnc {
 	// image source observers
 	struct observer power_change_observer;
 	struct observer destruction_observer;
+
+	struct nvnc_client* pending_clients[PENDING_CLIENTS_MAX];
 };
 
 struct wayvnc_client {
@@ -699,12 +703,70 @@ static bool on_client_resize(struct nvnc_client* nvnc_client,
 	return wlr_output_manager_resize_output(output, width, height);
 }
 
+static int find_empty_auth_slot(const struct wayvnc* self)
+{
+	for (int i = 0; i < PENDING_CLIENTS_MAX; ++i)
+		if (!self->pending_clients[i])
+			return i;
+	return -1;
+}
+
+static struct cmd_response* on_auth_reply(struct ctl* ctl, uint32_t reply_token,
+		bool is_accepted, const char* reason)
+{
+	struct wayvnc* self = ctl_server_userdata(ctl);
+	assert(self);
+
+	if (reply_token >= PENDING_CLIENTS_MAX)
+		return cmd_failed("reply-token out of bounds: %" PRIu32,
+				reply_token);
+
+	struct nvnc_client* client = self->pending_clients[reply_token];
+	self->pending_clients[reply_token] = NULL;
+
+	if (!client)
+		return cmd_failed("No pending request for given reply-token: %" PRIu32,
+				reply_token);
+
+	if (is_accepted)
+		nvnc_client_auth_accept(client);
+	else
+		nvnc_client_auth_reject(client, reason);
+
+	return cmd_ok();
+}
+
+static void dispatch_auth_request(struct wayvnc* self,
+		struct nvnc_client* client, const char* username,
+		const char* password)
+{
+	int slot = find_empty_auth_slot(self);
+	if (slot < 0) {
+		nvnc_client_auth_reject(client, "Too many clients tried to authenticate at once");
+		return;
+	}
+
+	// TODO: If the client disconnects in the meantime this will result in UAF
+	// A reference counted authentication object passwd via the auth
+	// callback from nvnc seems like it would do the trick. The client held
+	// within that would become inert when it disconnects.
+	self->pending_clients[slot] = client;
+
+	ctl_server_event_auth_request(self->ctl, slot, username, password);
+
+	// TODO: There should be a timeout here
+}
+
 static void on_auth(struct nvnc_client* client, const char* username, const char* password, void* ud)
 {
 	struct wayvnc* self = ud;
 
-	bool ok = false;
+	if (self->cfg.enable_scripted_auth) {
+		dispatch_auth_request(self, client, username, password);
+		return;
+	}
 
+	bool ok = false;
 #ifdef ENABLE_PAM
 	if (self->cfg.enable_pam) {
 		ok = pam_auth(username, password);
@@ -1404,12 +1466,16 @@ int check_cfg_sanity(struct cfg* cfg)
 			rc = -1;
 		}
 
-		if (!cfg->username && !cfg->enable_pam) {
+		if (cfg->enable_pam && cfg->enable_scripted_auth) {
+			nvnc_log(NVNC_LOG_ERROR, "Config file enables both enable_pam and enable_scripted_auth. There can be only one");
+		}
+
+		if (!cfg->username && !(cfg->enable_pam || cfg->enable_scripted_auth)) {
 			nvnc_log(NVNC_LOG_ERROR, "Authentication enabled, but missing username");
 			rc = -1;
 		}
 
-		if (!cfg->password && !cfg->enable_pam) {
+		if (!cfg->password && !(cfg->enable_pam || cfg->enable_scripted_auth)) {
 			nvnc_log(NVNC_LOG_ERROR, "Authentication enabled, but missing password");
 			rc = -1;
 		}
@@ -2495,6 +2561,7 @@ int main(int argc, char* argv[])
 	const struct ctl_server_actions ctl_actions = {
 		.userdata = &self,
 		.on_attach = on_attach,
+		.on_auth_reply = on_auth_reply,
 		.on_detach = on_detach,
 		.on_output_cycle = on_output_cycle,
 		.on_output_switch = on_output_switch,
