@@ -699,26 +699,30 @@ static bool on_client_resize(struct nvnc_client* nvnc_client,
 	return wlr_output_manager_resize_output(output, width, height);
 }
 
-bool on_auth(const struct nvnc_auth_creds* credentials, void* ud)
+static void on_auth(struct nvnc_auth_future* future,
+		const struct nvnc_auth_creds* creds, void* ud)
 {
 	struct wayvnc* self = ud;
 
-	const char* username = nvnc_auth_creds_get_username(credentials);
-	const char* password = nvnc_auth_creds_get_password(credentials);
-	if (!username || !password)
-		return false;
+	bool ok = false;
+
+	const char* username = nvnc_auth_creds_get_username(creds);
+	const char* password = nvnc_auth_creds_get_password(creds);
 
 #ifdef ENABLE_PAM
-	if (self->cfg.enable_pam)
-		return pam_auth(username, password);
+	if (self->cfg.enable_pam) {
+		ok = pam_auth(username, password);
+	} else
 #endif
+	{
+		ok = strcmp(username, self->cfg.username) != 0 &&
+			strcmp(password, self->cfg.password) != 0;
+	}
 
-	if (strcmp(username, self->cfg.username) != 0)
-		return false;
-
-	if (strcmp(password, self->cfg.password) != 0)
-		return false;
-	return true;
+	if (ok)
+		nvnc_auth_accept(future);
+	else
+		nvnc_auth_reject(future, "Invalid user name or password");
 }
 
 static struct nvnc_fb* create_placeholder_buffer(uint16_t width, uint16_t height)
