@@ -33,6 +33,17 @@ struct cmd_info ctl_command_list[] = {
 		}
 
 	},
+	[CMD_AUTH_REPLY] = { "auth-reply",
+		"Reply to an authentication request",
+		{
+			{ "reply-token", "Reply token from request", "<number>",
+				.positional = true },
+			{ "accept", "Accept the user" },
+			{ "reject", "Reject the user" },
+			{ "reason", "Reason for rejection", "<string>" },
+			{},
+		}
+	},
 	[CMD_DETACH] = { "detach",
 		"Detach from the wayland compositor",
 		{{}},
@@ -119,6 +130,14 @@ struct cmd_info ctl_command_list[] = {
 	{},
 
 struct cmd_info ctl_event_list[] = {
+	[EVT_AUTH_REQUEST] = {"auth-request",
+		"Sent by wayvnc request user authentication via the auth-reply command",
+		{
+			{ "reply-token", "Reply token", "<number>" },
+			{ "username", "Username", "<string>" },
+			{ "password", "Password", "<string>" },
+		},
+	},
 	[EVT_CAPTURE_CHANGED] = {"capture-changed",
 		"Sent by wayvnc when the captured output is changed",
 		{
