@@ -699,21 +699,26 @@ static bool on_client_resize(struct nvnc_client* nvnc_client,
 	return wlr_output_manager_resize_output(output, width, height);
 }
 
-bool on_auth(const char* username, const char* password, void* ud)
+static void on_auth(struct nvnc_client* client, const char* username, const char* password, void* ud)
 {
 	struct wayvnc* self = ud;
 
+	bool ok = false;
+
 #ifdef ENABLE_PAM
-	if (self->cfg.enable_pam)
-		return pam_auth(username, password);
+	if (self->cfg.enable_pam) {
+		ok = pam_auth(username, password);
+	} else
 #endif
+	{
+		ok = strcmp(username, self->cfg.username) != 0 &&
+			strcmp(password, self->cfg.password) != 0;
+	}
 
-	if (strcmp(username, self->cfg.username) != 0)
-		return false;
-
-	if (strcmp(password, self->cfg.password) != 0)
-		return false;
-	return true;
+	if (ok)
+		nvnc_client_auth_accept(client);
+	else
+		nvnc_client_auth_reject(client, "Invalid user name or password");
 }
 
 static struct nvnc_fb* create_placeholder_buffer(uint16_t width, uint16_t height)
