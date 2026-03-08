@@ -699,9 +699,14 @@ static bool on_client_resize(struct nvnc_client* nvnc_client,
 	return wlr_output_manager_resize_output(output, width, height);
 }
 
-bool on_auth(const char* username, const char* password, void* ud)
+bool on_auth(const struct nvnc_auth_creds* credentials, void* ud)
 {
 	struct wayvnc* self = ud;
+
+	const char* username = nvnc_auth_creds_get_username(credentials);
+	const char* password = nvnc_auth_creds_get_password(credentials);
+	if (!username || !password)
+		return false;
 
 #ifdef ENABLE_PAM
 	if (self->cfg.enable_pam)
