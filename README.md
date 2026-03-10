@@ -172,6 +172,26 @@ rsa_private_key_file=rsa_key.pem
 You may also add credentials for TLS in combination with RSA. The client will
 choose.
 
+#### DES Authentication (Legacy)
+
+:warning: DES authentication provides **no encryption** of the VNC session. It
+uses an outdated challenge-response scheme where only the first 8 characters of
+the password are used. This is **not secure** by any modern standard.
+
+This option exists solely for compatibility with VNC clients that support DES
+but do not support the absence of authentication, such as macOS Screen Sharing.
+
+If you need to support such clients, add the following to your config:
+```
+enable_auth=true
+password=p455w0rd
+relax_encryption=true
+allow_broken_crypto=true
+```
+
+On a network you do not fully trust, use SSH tunneling or a VPN to provide
+encryption.
+
 ### wayvncctl control socket
 
 To facilitate runtime interaction and control, wayvnc opens a unix domain socket

@@ -156,6 +156,16 @@ considered to be part of the key or the value.
 *username*
 	Choose a username for authentication.
 
+*allow_broken_crypto*
+	Allow the use of insecure cryptographic methods such as DES
+	authentication. When enabled, legacy VNC clients that do not support
+	modern security types can authenticate using the *password* field.
+	Use only for legacy client compatibility on a trusted network.
+
+	DES authentication requires *password* to be set in the configuration
+	and cannot use PAM. Due to the DES key size limitation, only the first
+	8 characters of the password are used for DES authentication.
+
 *use_relative_paths*
 	Make file paths relative to the location of the config file.
 
