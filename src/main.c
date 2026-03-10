@@ -705,6 +705,11 @@ bool on_auth(const struct nvnc_auth_creds* credentials, void* ud)
 
 	const char* username = nvnc_auth_creds_get_username(credentials);
 	const char* password = nvnc_auth_creds_get_password(credentials);
+
+	if (!password && self->cfg.password)
+		return nvnc_auth_creds_verify(credentials,
+				self->cfg.password);
+
 	if (!username || !password)
 		return false;
 
@@ -1088,6 +1093,9 @@ static int init_nvnc(struct wayvnc* self)
 	if (self->cfg.enable_auth) {
 		auth_flags |= NVNC_AUTH_REQUIRE_AUTH;
 	}
+	if (self->cfg.allow_broken_crypto) {
+		auth_flags |= NVNC_AUTH_ALLOW_BROKEN_CRYPTO;
+	}
 	if (!self->cfg.relax_encryption) {
 		auth_flags |= NVNC_AUTH_REQUIRE_ENCRYPTION;
 	}
@@ -1391,6 +1399,13 @@ int wayvnc_usage(struct option_parser* parser, FILE* stream, int rc)
 
 int check_cfg_sanity(struct cfg* cfg)
 {
+	if (cfg->allow_broken_crypto) {
+		nvnc_log(NVNC_LOG_WARNING, "Broken cryptography is enabled; DES authentication is insecure by modern standards");
+		if (cfg->password && strlen(cfg->password) > 8) {
+			nvnc_log(NVNC_LOG_WARNING, "Password is longer than 8 characters; only the first 8 will be used for DES authentication");
+		}
+	}
+
 	if (cfg->enable_auth) {
 		int rc = 0;
 
@@ -1404,7 +1419,7 @@ int check_cfg_sanity(struct cfg* cfg)
 			rc = -1;
 		}
 
-		if (!cfg->username && !cfg->enable_pam) {
+		if (!cfg->username && !cfg->enable_pam && !cfg->allow_broken_crypto) {
 			nvnc_log(NVNC_LOG_ERROR, "Authentication enabled, but missing username");
 			rc = -1;
 		}
