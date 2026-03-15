@@ -4,8 +4,85 @@ import asyncio
 import json
 import re
 import os
+import signal
 import glob
+import dbus # dependency: python3-dbus
+import pamela # dependency: python3-pamela
 from pathlib import Path
+
+class Greeter:
+	def __init__(self, bus, username, password):
+		self.username = username
+		self.password = password
+
+		systemd = bus.get_object('org.freedesktop.systemd1', '/org/freedesktop/systemd1')
+		unit_path = dbus.Interface(systemd, 'org.freedesktop.systemd1.Manager').GetUnit('greetd.service')
+		unit = bus.get_object('org.freedesktop.systemd1', unit_path)
+		props = dbus.Interface(unit, 'org.freedesktop.DBus.Properties')
+		pid = props.Get('org.freedesktop.systemd1.Service', 'MainPID')
+		self.socket_path = f'/run/greetd-{pid}.sock'
+
+	async def send_recv(self, msg):
+		data = json.dumps(msg).encode()
+		self.writer.write(len(data).to_bytes(4, 'little') + data)
+		await self.writer.drain()
+		header = await self.reader.readexactly(4)
+		return json.loads(await self.reader.readexactly(int.from_bytes(header, 'little')))
+
+	async def create_session(self):
+		return await self.send_recv({'type': 'create_session', 'username': self.username})
+
+	async def post_auth_message_response(self, response):
+		return await self.send_recv({'type': 'post_auth_message_response', 'response': response})
+
+	async def start_session(self, cmd):
+		return await self.send_recv({'type': 'start_session', 'cmd': cmd})
+
+	async def cancel_session(self):
+		return await self.send_recv({'type': 'cancel_session'})
+
+	def killall(self, name):
+		for pid_path in Path('/proc').glob('[0-9]*/comm'):
+			if pid_path.read_text().strip() == name:
+				os.kill(int(pid_path.parent.name), signal.SIGTERM)
+
+	async def authenticate(self):
+		self.reader, self.writer = await asyncio.open_unix_connection(self.socket_path)
+		try:
+			response = await self.create_session()
+
+			while response['type'] == 'auth_message':
+				reply = self.password if response['auth_message_type'] == 'secret' else None
+				response = await self.post_auth_message_response(reply)
+
+			if response['type'] == 'error':
+				error_type = response.get("error_type", "unknown")
+				description = response.get("description", "")
+				await self.cancel_session()
+				print(f'Authentication failure: {error_type}: {description}')
+				return False
+
+			if response['type'] != 'success':
+				print("Unexpected response type: {}".format(response['type']))
+				await self.cancel_session()
+				return False
+
+			# TODO: We should get the correct cmd from some config
+			response = await self.start_session(['labwc --merge-config'])
+			if response['type'] != 'success':
+				return False
+
+			# The session runs after the greeter exits, so it needs
+			# a little help.
+			# TODO: Perhaps figure out the current greeter instead
+			# of hardcoding?
+			self.killall('gtkgreet')
+			self.killall('agreety')
+
+			return True
+		finally:
+			self.writer.close()
+			await self.writer.wait_closed()
 
 class Program:
 	command_seq = 0
@@ -16,6 +93,32 @@ class Program:
 	reply_queue = asyncio.Queue()
 	decoder = json.JSONDecoder()
 	tasks = []
+	bus = dbus.SystemBus()
+
+	# TODO: Is there an async interface in the dbus module?
+	def get_session_property(self, session_path, property_name):
+		session = self.bus.get_object('org.freedesktop.login1', session_path)
+		props = dbus.Interface(session, 'org.freedesktop.DBus.Properties')
+		return props.Get('org.freedesktop.login1.Session', property_name)
+
+	def get_active_wayland_session_user(self):
+		manager = self.bus.get_object('org.freedesktop.login1', '/org/freedesktop/login1')
+		manager_iface = dbus.Interface(manager, 'org.freedesktop.login1.Manager')
+
+		for _session_id, _uid, session_username, _seat, session_path in manager_iface.ListSessions():
+			try:
+				if self.get_session_property(session_path, 'Type') != 'wayland':
+					continue
+				if not bool(self.get_session_property(session_path, 'Active')):
+					continue
+				if self.get_session_property(session_path, 'Class') == 'greeter':
+					continue
+			except dbus.DBusException:
+				continue
+
+			return session_username
+
+		return None
 
 	async def read_message(self):
 		while True:
@@ -42,7 +145,7 @@ class Program:
 
 		reply = await self.reply_queue.get()
 		self.reply_queue.task_done()
-		return reply['code'] == 0
+		return reply['code'] == 0, reply.get('data')
 
 	async def attach(self, display):
 		# TODO: It would be better to pass the socket on to wayvnc as a file descriptor
@@ -64,10 +167,72 @@ class Program:
 		while not await self.attach_any():
 			await asyncio.sleep(1.0)
 
+	async def auth_accept(self, reply_token):
+		return await self.send_command('auth-reply', {
+			'reply-token': '{}'.format(reply_token),
+			'accept': '1'})
+
+	async def auth_reject(self, reply_token, reason):
+		return await self.send_command('auth-reply', {
+			'reply-token': '{}'.format(reply_token),
+			'reject': '1',
+			'reason': reason})
+
+	async def handle_auth_via_greeter(self, reply_token, username, password):
+		greeter = Greeter(self.bus, username, password)
+		if await greeter.authenticate():
+			await self.auth_accept(reply_token)
+		else:
+			await self.auth_reject(reply_token, "Invalid username or password")
+
+	async def handle_auth_via_pam(self, reply_token, username, password):
+		ok = False
+		try:
+			ok = pamela.authenticate(username, password, 'wayvnc') is None
+		except:
+			pass
+
+		if ok:
+			await self.auth_accept(reply_token)
+		else:
+			await self.auth_reject(reply_token, "Invalid username or password")
+
+	async def handle_auth_request(self, params):
+		reply_token = params['reply-token']
+		username = params['username']
+		password = params['password']
+
+		active_user = self.get_active_wayland_session_user()
+		if active_user is None:
+			await self.handle_auth_via_greeter(reply_token, username, password)
+			await asyncio.sleep(1.0)
+			await self.attach_any() # TODO: Needs to be more robust
+		elif active_user == username:
+			await self.handle_auth_via_pam(reply_token, username, password)
+		else:
+			await self.auth_reject(reply_token, "Another user is already logged in")
+
+	async def list_clients(self):
+		return await self.send_command('client-list')
+
+	async def disconnect_client(self, identifier):
+		reply = await self.send_command('client-disconnect',
+				  {'id': identifier })
+
+	async def handle_detachment(self, message):
+		# Compositor went away, so we should kick the user
+		ok, clients = await self.list_clients()
+		if ok:
+			await asyncio.gather(*[self.disconnect_client(c['id']) for c in clients])
+
 	async def process_message(self, message):
 		method = message['method']
-		if (method == 'detached'):
-			await self.attach_any_with_retry()
+		params = message['params']
+
+		if (method == 'auth-request'):
+			await self.handle_auth_request(params)
+		elif (method == 'detached'):
+			await self.handle_detachment(params)
 
 	async def message_processor(self):
 		while True:
@@ -81,7 +246,9 @@ class Program:
 		self.reader, self.writer = await asyncio.open_unix_connection("/tmp/wayvnc/wayvncctl.sock")
 		self.tasks.append(asyncio.create_task(self.message_processor()))
 
-		await self.attach_any_with_retry()
+		if self.get_active_wayland_session_user() != None:
+			await self.attach_any()
+
 		await self.send_command("event-receive")
 
 		while True:
