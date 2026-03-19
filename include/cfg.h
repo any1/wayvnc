@@ -22,6 +22,7 @@
 #define X_CFG_LIST \
 	X(bool, enable_auth) \
 	X(bool, relax_encryption) \
+	X(bool, allow_broken_crypto) \
 	X(string, private_key_file) \
 	X(string, certificate_file) \
 	X(string, rsa_private_key_file) \
