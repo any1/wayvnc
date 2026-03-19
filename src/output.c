@@ -270,7 +270,7 @@ struct output* output_first(struct wl_list* list)
 	wl_list_for_each(output, list, link)
 		return output;
 
-	return output;
+	return NULL;
 }
 
 struct output* output_last(struct wl_list* list)
@@ -280,7 +280,7 @@ struct output* output_last(struct wl_list* list)
 	wl_list_for_each_reverse(output, list, link)
 		return output;
 
-	return output;
+	return NULL;
 }
 
 struct output* output_cycle(const struct wl_list* list,
