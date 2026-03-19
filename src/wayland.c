@@ -228,8 +228,8 @@ static void registry_remove(void* data, struct wl_registry* registry,
 
 	struct output* out = output_find_by_id(&self->outputs, id);
 	if (out) {
-		wl_list_remove(&out->link);
 		observable_notify(&self->observable.output_removed, out);
+		wl_list_remove(&out->link);
 		output_destroy(out);
 		return;
 	}
@@ -237,8 +237,8 @@ static void registry_remove(void* data, struct wl_registry* registry,
 	struct seat* seat = seat_find_by_id(&self->seats, id);
 	if (seat) {
 		nvnc_log(NVNC_LOG_INFO, "Seat %s went away", seat->name);
-		wl_list_remove(&seat->link);
 		observable_notify(&self->observable.seat_removed, seat);
+		wl_list_remove(&seat->link);
 		seat_destroy(seat);
 		return;
 	}
