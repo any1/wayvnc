@@ -41,6 +41,20 @@
 
 set -e
 
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+RESET='\033[0m'
+
+print_ok()
+{
+	printf "  ${GREEN}Ok${RESET}\n";
+}
+
+print_fail()
+{
+	printf "${RED}Fail${RESET}: %s\n" "$*" >&2
+}
+
 INTEGRATION_ROOT=$(realpath "$(dirname "$0")")
 REPO_ROOT=$(realpath "$INTEGRATION_ROOT/../..")
 WAYVNC_BUILD_DIR=${WAYVNC_BUILD_DIR:-$(realpath "$REPO_ROOT/build")}
@@ -91,7 +105,7 @@ wait_until() {
 	local last
 	until last=$(eval "$*" 2>&1); do
 		if ! timeout_check; then
-			echo "Timeout waiting for $*" >&2
+			print_fail "Timeout waiting for $*"
 			printf "%s\n" "$last" >&2
 			return 1
 		fi
@@ -176,11 +190,11 @@ verify_events() {
 	done <"$WAYVNCCTL_EVENTS"
 	if [[ $i -lt ${#expected[@]} ]]; then
 		while [[ $i -lt ${#expected[@]} ]]; do
-			echo "  Missing: ${expected[$((i++))]}"
+			print_fail "  Missing: ${expected[$((i++))]}"
 		done
 		return 1
 	fi
-	echo "Ok"
+	print_ok
 }
 
 cleanup() {
@@ -218,7 +232,7 @@ test_version_ipc() {
 	version=$($WAYVNCCTL --json version)
 	[[ -n $version ]]
 	echo "  version IPC returned data"
-	echo "ok"
+	print_ok
 }
 
 sway_active_outputs() {
@@ -239,7 +253,7 @@ test_output_list_ipc() {
 	wayvnc_capturing=$(jq -r '.[] | select(.captured == true).name' <<<"$wayvnc_json")
 	echo "  Capturing: $wayvnc_capturing=~$expected_capture"
 	[[ $wayvnc_capturing == "$expected_capture" ]]
-	echo "ok"
+	print_ok
 }
 
 verify_wayvnc_exited() {
@@ -252,7 +266,7 @@ test_exit_ipc() {
 	$WAYVNCCTL wayvnc-exit &>/dev/null
 	verify_wayvnc_exited
 	echo "  wayvnc is shutdown"
-	echo "ok"
+	print_ok
 }
 
 client() {
@@ -265,7 +279,7 @@ test_client_connect() {
 	client key ctrl-t
 	echo "  Looking for the result..."
 	[[ -f $XDG_RUNTIME_DIR/test.txt ]]
-	echo "Ok"
+	print_ok
 }
 
 output_count() {
@@ -280,7 +294,7 @@ sway_output_create() {
 	# shellcheck disable=SC2016
 	wait_until [[ '$(output_count)' -gt "$initial_count" ]]
 	echo "  $(sway_active_outputs | jq -r '.[-1].name')"
-	echo "Ok"
+	print_ok
 }
 
 sway_output_is_gone() {
@@ -293,7 +307,7 @@ sway_output_destroy() {
 	echo "Removing output $output"
 	$SWAYMSG output "$output" unplug >/dev/null
 	wait_until sway_output_is_gone "$output" >/dev/null
-	echo "Ok"
+	print_ok
 }
 
 smoke_test() {
