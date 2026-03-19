@@ -369,6 +369,7 @@ multioutput_test() {
 		wayvnc-startup \
 		capture-changed \
 		capture-changed \
+		output-added \
 		capture-changed
 	test_output_list_ipc HEADLESS-3
 
@@ -382,8 +383,10 @@ multioutput_test() {
 		wayvnc-startup \
 		capture-changed \
 		capture-changed \
+		output-added \
 		capture-changed \
-		capture-changed
+		capture-changed \
+		output-removed
 	wait_until test_output_list_ipc HEADLESS-1
 	stop_sway
 	verify_wayvnc_exited
@@ -391,4 +394,4 @@ multioutput_test() {
 }
 
 smoke_test
-#multioutput_test
+multioutput_test
