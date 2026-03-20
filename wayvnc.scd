@@ -132,11 +132,13 @@ considered to be part of the key or the value.
 
 *enable_auth*
 	Enable authentication and encryption. Setting this value to *true*
-	requires also setting *certificate_file*, *private_key_file*,
-	*username* and *password*.
+	requires also setting *certificate_file* and *private_key_file*.
+	Both *username* and *password* are optional and default to empty
+	strings if not set.
 
 *password*
-	Choose a password for authentication.
+	Choose a password for authentication. If not set, defaults to an
+	empty password.
 
 *port*
 	The port to which the server shall bind. Default is 5900.
@@ -154,7 +156,18 @@ considered to be part of the key or the value.
 	when *enable_auth*=true.
 
 *username*
-	Choose a username for authentication.
+	Choose a username for authentication. If not set, defaults to an
+	empty username.
+
+*allow_broken_crypto*
+	Allow the use of insecure cryptographic methods such as DES
+	authentication. When enabled, legacy VNC clients that do not support
+	modern security types can authenticate using the *password* field.
+	Use only for legacy client compatibility on a trusted network.
+
+	Incompatible with *enable_pam*. Due to the DES key size limitation,
+	only the first 8 characters of the password are used for DES
+	authentication.
 
 *use_relative_paths*
 	Make file paths relative to the location of the config file.

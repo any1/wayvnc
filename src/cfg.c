@@ -140,6 +140,7 @@ int cfg_load(struct cfg* self, const char* requested_path)
 
 	free(line);
 	fclose(stream);
+
 	return 0;
 
 failure:

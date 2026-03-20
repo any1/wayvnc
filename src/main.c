@@ -705,18 +705,28 @@ bool on_auth(const struct nvnc_auth_creds* credentials, void* ud)
 
 	const char* username = nvnc_auth_creds_get_username(credentials);
 	const char* password = nvnc_auth_creds_get_password(credentials);
+
+	const char* cfg_username = self->cfg.username ? self->cfg.username : "";
+	const char* cfg_password = self->cfg.password ? self->cfg.password : "";
+
+#ifdef ENABLE_PAM
+	if (self->cfg.enable_pam) {
+		if (!username || !password)
+			return false;
+		return pam_auth(username, password);
+	}
+#endif
+
+	if (!password)
+		return nvnc_auth_creds_verify(credentials, cfg_password);
+
 	if (!username || !password)
 		return false;
 
-#ifdef ENABLE_PAM
-	if (self->cfg.enable_pam)
-		return pam_auth(username, password);
-#endif
-
-	if (strcmp(username, self->cfg.username) != 0)
+	if (strcmp(username, cfg_username) != 0)
 		return false;
 
-	if (strcmp(password, self->cfg.password) != 0)
+	if (strcmp(password, cfg_password) != 0)
 		return false;
 	return true;
 }
@@ -1088,6 +1098,9 @@ static int init_nvnc(struct wayvnc* self)
 	if (self->cfg.enable_auth) {
 		auth_flags |= NVNC_AUTH_REQUIRE_AUTH;
 	}
+	if (self->cfg.allow_broken_crypto) {
+		auth_flags |= NVNC_AUTH_ALLOW_BROKEN_CRYPTO;
+	}
 	if (!self->cfg.relax_encryption) {
 		auth_flags |= NVNC_AUTH_REQUIRE_ENCRYPTION;
 	}
@@ -1391,6 +1404,21 @@ int wayvnc_usage(struct option_parser* parser, FILE* stream, int rc)
 
 int check_cfg_sanity(struct cfg* cfg)
 {
+	if (cfg->enable_pam && (cfg->username || cfg->password)) {
+		nvnc_log(NVNC_LOG_ERROR, "PAM authentication cannot be used together with username/password");
+		return -1;
+	}
+
+	if (cfg->allow_broken_crypto) {
+		if (cfg->enable_pam) {
+			nvnc_log(NVNC_LOG_WARNING, "allow_broken_crypto authentication modes (DES) do not work with PAM");
+		}
+		nvnc_log(NVNC_LOG_WARNING, "Broken cryptography is enabled; DES authentication is insecure by modern standards");
+		if (cfg->password && strlen(cfg->password) > 8) {
+			nvnc_log(NVNC_LOG_WARNING, "Password is longer than 8 characters; only the first 8 will be used for DES authentication");
+		}
+	}
+
 	if (cfg->enable_auth) {
 		int rc = 0;
 
@@ -1404,14 +1432,8 @@ int check_cfg_sanity(struct cfg* cfg)
 			rc = -1;
 		}
 
-		if (!cfg->username && !cfg->enable_pam) {
-			nvnc_log(NVNC_LOG_ERROR, "Authentication enabled, but missing username");
-			rc = -1;
-		}
-
 		if (!cfg->password && !cfg->enable_pam) {
-			nvnc_log(NVNC_LOG_ERROR, "Authentication enabled, but missing password");
-			rc = -1;
+			nvnc_log(NVNC_LOG_WARNING, "No password set; an empty password will be used for authentication");
 		}
 
 		if (cfg->relax_encryption) {
