@@ -393,5 +393,60 @@ multioutput_test() {
 	stop_wayvncctl_events
 }
 
+test_output_list_empty() {
+	echo "Checking output-list is empty when detached"
+	local wayvnc_json
+	wayvnc_json=$($WAYVNCCTL --json output-list)
+	[[ $(jq 'length' <<<"$wayvnc_json") -eq 0 ]]
+	echo "  output-list is empty"
+	print_ok
+}
+
+test_attach_ipc() {
+	local display=$1
+	echo "Attaching to $display"
+	$WAYVNCCTL attach "$display" &>/dev/null
+	echo "  attach IPC succeeded"
+	print_ok
+}
+
+test_detach_ipc() {
+	echo "Checking detach command"
+	$WAYVNCCTL detach &>/dev/null
+	echo "  detach IPC succeeded"
+	print_ok
+}
+
+detached_test() {
+	test_setup "detached test"
+	start_wayvncctl_events
+	start_wayvnc -D
+	test_version_ipc
+	wait_until verify_events \
+		wayvnc-startup
+	test_output_list_empty
+
+	start_sway
+	test_attach_ipc "$WAYLAND_DISPLAY"
+	wait_until test_output_list_ipc HEADLESS-1
+
+	test_detach_ipc
+	wait_until verify_events \
+		wayvnc-startup \
+		capture-changed \
+		detached
+	test_output_list_empty
+
+	test_exit_ipc
+	wait_until verify_events \
+		wayvnc-startup \
+		capture-changed \
+		detached \
+		wayvnc-shutdown
+	stop_wayvncctl_events
+	stop_sway
+}
+
 smoke_test
 multioutput_test
+detached_test
