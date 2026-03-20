@@ -311,14 +311,16 @@ sway_output_destroy() {
 }
 
 smoke_test() {
-	test_setup "smoke test"
+	local extra_test=$1
+	shift
+	test_setup "smoke test${*:+ ($*)}"
 	start_sway
 	start_wayvncctl_events
-	start_wayvnc
+	start_wayvnc "$@"
 	test_version_ipc
 	wait_until verify_events \
 		wayvnc-startup
-	test_output_list_ipc
+	$extra_test
 	test_client_connect
 	wait_until verify_events \
 		wayvnc-startup \
@@ -447,6 +449,7 @@ detached_test() {
 	stop_sway
 }
 
-smoke_test
+smoke_test test_output_list_ipc
+smoke_test true --desktop
 multioutput_test
 detached_test
