@@ -46,6 +46,8 @@ struct desktop {
 
 	struct desktop_capture* capture;
 	struct desktop_capture* cursor_capture;
+
+	bool image_copy_disable;
 };
 
 struct desktop_capture {
@@ -57,5 +59,5 @@ struct desktop_capture {
 
 struct desktop* desktop_from_image_source(const struct image_source* source);
 
-struct desktop* desktop_new(struct wl_list* output_list);
+struct desktop* desktop_new(struct wl_list* output_list, bool disableExtImageCopy);
 void desktop_destroy(struct desktop* self);

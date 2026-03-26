@@ -125,6 +125,7 @@ struct wayvnc {
 	uint32_t n_frames_sent;
 
 	bool disable_input;
+	bool image_copy_disable;
 	bool use_transient_seat;
 	bool use_toplevel;
 
@@ -1905,7 +1906,7 @@ static bool configure_cursor_sc(struct wayvnc* self,
 	}
 
 	self->cursor_sc = screencopy_create_cursor(self->image_source,
-			seat->wl_seat);
+			seat->wl_seat, self->image_copy_disable);
 	if (!self->cursor_sc) {
 		nvnc_log(NVNC_LOG_DEBUG, "Failed to capture cursor");
 		return false;
@@ -1928,7 +1929,7 @@ bool configure_screencopy(struct wayvnc* self)
 	screencopy_destroy(self->screencopy);
 
 	self->screencopy = screencopy_create(self->image_source,
-			self->overlay_cursor);
+			self->overlay_cursor, self->image_copy_disable);
 	if (!self->screencopy) {
 		nvnc_log(NVNC_LOG_ERROR, "screencopy is not supported by compositor");
 		return false;
@@ -2135,7 +2136,7 @@ static bool wayland_attach(struct wayvnc* self, const char* display,
 		set_image_source(self, &out->image_source);
 		break;
 	case IMAGE_SOURCE_TYPE_DESKTOP:;
-		struct desktop* desktop = desktop_new(&wayland->outputs);
+		struct desktop* desktop = desktop_new(&wayland->outputs, self->image_copy_disable);
 		if (!desktop) {
 			nvnc_log(NVNC_LOG_ERROR, "Failed to set up desktop capture");
 			goto failure;
@@ -2274,6 +2275,8 @@ int main(int argc, char* argv[])
 		  "Enable features that need GPU." },
 		{ 'h', "help", NULL,
 		  "Get help (this text)." },
+		{ 'i', "image-copy-disable", NULL,
+		  "Disable using ext_image_copy interface." },
 		{ 'k', "keyboard", "<layout>[-<variant>]",
 		  "Select keyboard layout with an optional variant." },
 		{ 'L', "log-level", "<level>",
@@ -2342,6 +2345,7 @@ int main(int argc, char* argv[])
 	use_external_fd = !!option_parser_get_value(&option_parser,
 			"external-listener-fd");
 	disable_input = !!option_parser_get_value(&option_parser, "disable-input");
+	self.image_copy_disable = !!option_parser_get_value(&option_parser, "image-copy-disable");
 	is_verbose = option_parser_get_value(&option_parser, "verbose");
 	log_level_name = option_parser_get_value(&option_parser, "log-level");
 	log_filter = option_parser_get_value(&option_parser, "log-filter");

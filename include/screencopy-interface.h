@@ -67,9 +67,9 @@ struct screencopy {
 };
 
 struct screencopy* screencopy_create(struct image_source* source,
-		bool render_cursor);
+		bool render_cursor, bool disableExtImageCopy);
 struct screencopy* screencopy_create_cursor(struct image_source* source,
-		struct wl_seat* seat);
+		struct wl_seat* seat, bool disableExtImageCopy);
 void screencopy_destroy(struct screencopy* self);
 
 enum screencopy_capabilitites screencopy_get_capabilities(

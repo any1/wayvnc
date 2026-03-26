@@ -27,11 +27,11 @@ extern struct screencopy_impl ext_image_copy_capture_impl;
 extern struct screencopy_impl desktop_capture_impl;
 
 struct screencopy* screencopy_create(struct image_source* source,
-		bool render_cursor)
+		bool render_cursor, bool disableExtImageCopy)
 {
 	if (image_source_is_desktop(source))
 		return desktop_capture_impl.create(source, render_cursor);
-	if (wayland->ext_image_copy_capture_manager_v1 &&
+	if (!disableExtImageCopy && wayland->ext_image_copy_capture_manager_v1 &&
 			wayland->ext_output_image_capture_source_manager_v1)
 		return ext_image_copy_capture_impl.create(source, render_cursor);
 	if (wayland->zwlr_screencopy_manager_v1)
@@ -40,11 +40,11 @@ struct screencopy* screencopy_create(struct image_source* source,
 }
 
 struct screencopy* screencopy_create_cursor(struct image_source* source,
-		struct wl_seat* seat)
+		struct wl_seat* seat, bool disableExtImageCopy)
 {
 	if (image_source_is_desktop(source))
 		return desktop_capture_impl.create_cursor(source, seat);
-	if (wayland->ext_image_copy_capture_manager_v1 &&
+	if (!disableExtImageCopy && wayland->ext_image_copy_capture_manager_v1 &&
 			wayland->ext_output_image_capture_source_manager_v1)
 		return ext_image_copy_capture_impl.create_cursor(source, seat);
 	return NULL;

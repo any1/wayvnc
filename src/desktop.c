@@ -197,7 +197,7 @@ static struct desktop_output *desktop_output_create(struct output* output,
 	struct desktop_capture* capture = desktop->capture;
 	if (capture) {
 		struct screencopy *sc = screencopy_create(&output->image_source,
-				capture->render_cursor);
+				capture->render_cursor, self->desktop->image_copy_disable);
 
 		sc->userdata = capture;
 		sc->on_done = desktop_capture_handle_done;
@@ -208,12 +208,14 @@ static struct desktop_output *desktop_output_create(struct output* output,
 	struct desktop_capture* cursor_capture = desktop->cursor_capture;
 	if (cursor_capture) {
 		struct screencopy *sc = screencopy_create_cursor(
-				&output->image_source, cursor_capture->seat);
+				&output->image_source, cursor_capture->seat, self->desktop->image_copy_disable);
 
-		sc->userdata = cursor_capture;
-		sc->on_done = desktop_capture_handle_done;
-		sc->rate_format = desktop_capture_rate_format;
-		sc->enable_linux_dmabuf = false;
+		if (sc) {
+			sc->userdata = cursor_capture;
+			sc->on_done = desktop_capture_handle_done;
+			sc->rate_format = desktop_capture_rate_format;
+			sc->enable_linux_dmabuf = false;
+		}
 		self->cursor_sc = sc;
 	}
 
@@ -296,12 +298,13 @@ bool image_source_is_desktop(const struct image_source* source)
 	return source->impl == &image_source_impl;
 }
 
-struct desktop* desktop_new(struct wl_list* output_list)
+struct desktop* desktop_new(struct wl_list* output_list, const bool disableExtImageCopy)
 {
 	struct desktop* self = calloc(1, sizeof(*self));
 	if (!self)
 		return NULL;
 
+	self->image_copy_disable = disableExtImageCopy;
 	observer_init(&self->output_added_observer,
 			&wayland->observable.output_added,
 			desktop_image_source_output_added);
@@ -372,7 +375,7 @@ static struct screencopy* desktop_capture_create(struct image_source* source,
 	LIST_FOREACH(desktop_output, &desktop->outputs, link) {
 		struct output* output = desktop_output->output;
 		struct screencopy *sc = screencopy_create(&output->image_source,
-				render_cursor);
+				render_cursor, self->desktop->image_copy_disable);
 
 		sc->userdata = self;
 		sc->on_done = desktop_capture_handle_done;
@@ -408,12 +411,14 @@ static struct screencopy* desktop_capture_create_cursor(
 	LIST_FOREACH(desktop_output, &desktop->outputs, link) {
 		struct output* output = desktop_output->output;
 		struct screencopy *sc = screencopy_create_cursor(
-				&output->image_source, seat);
+				&output->image_source, seat, self->desktop->image_copy_disable);
 
-		sc->userdata = self;
-		sc->on_done = desktop_capture_handle_done;
-		sc->rate_format = desktop_capture_rate_format;
-		sc->enable_linux_dmabuf = false;
+		if (sc) {
+			sc->userdata = self;
+			sc->on_done = desktop_capture_handle_done;
+			sc->rate_format = desktop_capture_rate_format;
+			sc->enable_linux_dmabuf = false;
+		}
 		desktop_output->cursor_sc = sc;
 	}
 
@@ -464,6 +469,9 @@ static int desktop_capture_start(struct screencopy* base, bool immediate)
 			assert(self == desktop->cursor_capture);
 			sc = desktop_output->cursor_sc;
 		}
+
+		if (!sc)
+			return -1;
 
 		sc->rate_limit = base->rate_limit;
 		sc->enable_linux_dmabuf = base->enable_linux_dmabuf;
