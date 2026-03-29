@@ -31,6 +31,7 @@ struct wl_buffer;
 struct gbm_bo;
 struct gbm_device;
 struct nvnc_fb;
+struct nvnc_buffer;
 
 enum wv_buffer_type {
 	WV_BUFFER_UNSPEC = 0,
@@ -50,9 +51,10 @@ struct wv_gbm_device {
 
 struct wv_buffer {
 	enum wv_buffer_type type;
-	TAILQ_ENTRY(wv_buffer) link;
+	LIST_ENTRY(wv_buffer) link;
 
 	struct nvnc_fb* nvnc_fb;
+	struct nvnc_buffer* buffer;
 	struct wl_buffer* wl_buffer;
 
 	void* pixels;
@@ -82,7 +84,7 @@ struct wv_buffer {
 	uint16_t y_hotspot;
 };
 
-TAILQ_HEAD(wv_buffer_queue, wv_buffer);
+LIST_HEAD(wv_buffer_list, wv_buffer);
 
 struct wv_buffer_config {
 	enum wv_buffer_type type;
@@ -96,8 +98,8 @@ struct wv_buffer_config {
 };
 
 struct wv_buffer_pool {
-	struct wv_buffer_queue free;
-	struct wv_buffer_queue taken;
+	struct nvnc_buffer_pool* nvnc_pool;
+	struct wv_buffer_list list;
 	struct wv_buffer_config config;
 #ifdef ENABLE_SCREENCOPY_DMABUF
 	struct wv_gbm_device* gbm;
@@ -111,14 +113,14 @@ void wv_buffer_damage_rect(struct wv_buffer* self, int x, int y, int width,
 void wv_buffer_damage_whole(struct wv_buffer* self);
 void wv_buffer_damage_clear(struct wv_buffer* self);
 
+void wv_buffer_release(struct wv_buffer* self);
+
 struct wv_buffer_pool* wv_buffer_pool_create(
 		const struct wv_buffer_config* config);
 void wv_buffer_pool_destroy(struct wv_buffer_pool* pool);
 bool wv_buffer_pool_reconfig(struct wv_buffer_pool* pool,
 		const struct wv_buffer_config* config);
 struct wv_buffer* wv_buffer_pool_acquire(struct wv_buffer_pool* pool);
-void wv_buffer_pool_release(struct wv_buffer_pool* pool,
-		struct wv_buffer* buffer);
 
 void wv_buffer_pool_damage_all(struct wv_buffer_pool* pool,
 		struct pixman_region16* region);

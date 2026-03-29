@@ -265,7 +265,7 @@ static void wayvnc_display_detach(struct wayvnc_display* display)
 	nvnc_trace("removing geometry observer");
 	observer_deinit(&display->geometry_change_observer);
 	if (display->next_frame) {
-		nvnc_fb_unref(display->next_frame->nvnc_fb);
+		wv_buffer_release(display->next_frame);
 		display->next_frame = NULL;
 	}
 	display->image_source = NULL;
@@ -1289,7 +1289,7 @@ static void wayvnc_display_send_next_frame(struct wayvnc* self,
 
 	wayvnc_start_capture(self);
 
-	nvnc_fb_unref(buffer->nvnc_fb);
+	wv_buffer_release(buffer);
 
 	self->last_send_time = now;
 }
@@ -1336,11 +1336,10 @@ static void wayvnc_process_frame(struct wayvnc* self, struct wv_buffer* buffer,
 		pixman_region_union(&buffer->frame_damage,
 				&buffer->frame_damage,
 				&display->next_frame->frame_damage);
-		nvnc_fb_unref(display->next_frame->nvnc_fb);
+		wv_buffer_release(display->next_frame);
 		have_pending_frame = true;
 	}
 	display->next_frame = buffer;
-	nvnc_fb_ref(buffer->nvnc_fb);
 
 	if (have_pending_frame)
 		return;

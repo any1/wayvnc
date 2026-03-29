@@ -91,7 +91,7 @@ void wlr_screencopy_stop(struct screencopy* ptr)
 	struct wlr_screencopy* self = (struct wlr_screencopy*)ptr;
 
 	if (self->front)
-		wv_buffer_pool_release(self->pool, self->front);
+		wv_buffer_release(self->front);
 	self->front = NULL;
 
 	return screencopy__stop(self);
@@ -213,7 +213,7 @@ static void screencopy_ready(void* data,
 		wv_buffer_damage_whole(self->front);
 
 	if (self->back)
-		wv_buffer_pool_release(self->pool, self->back);
+		wv_buffer_release(self->back);
 	self->back = self->front;
 	self->front = NULL;
 
@@ -236,7 +236,7 @@ static void screencopy_failed(void* data,
 	screencopy__stop(self);
 
 	if (self->front)
-		wv_buffer_pool_release(self->pool, self->front);
+		wv_buffer_release(self->front);
 	self->front = NULL;
 
 	self->status = WLR_SCREENCOPY_FAILED;
@@ -348,10 +348,9 @@ static void wlr_screencopy_destroy(struct screencopy* ptr)
 	aml_unref(self->timer);
 
 	if (self->back)
-		wv_buffer_pool_release(self->pool, self->back);
+		wv_buffer_release(self->back);
 	if (self->front)
-		wv_buffer_pool_release(self->pool, self->front);
-
+		wv_buffer_release(self->front);
 	self->back = NULL;
 	self->front = NULL;
 

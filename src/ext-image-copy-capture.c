@@ -120,8 +120,7 @@ static void ext_image_copy_capture_deinit_session(struct ext_image_copy_capture*
 		ext_image_copy_capture_cursor_session_v1_destroy(self->cursor);
 	self->cursor = NULL;
 
-	if (self->buffer)
-		wv_buffer_pool_release(self->pool, self->buffer);
+	wv_buffer_release(self->buffer);
 	self->buffer = NULL;
 }
 
@@ -573,7 +572,7 @@ static void frame_handle_failed(void *data,
 
 	assert(self->buffer);
 
-	wv_buffer_pool_release(self->pool, self->buffer);
+	wv_buffer_release(self->buffer);
 	self->buffer = NULL;
 
 	if (reason == EXT_IMAGE_COPY_CAPTURE_FRAME_V1_FAILURE_REASON_BUFFER_CONSTRAINTS) {
