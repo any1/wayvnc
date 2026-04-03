@@ -678,6 +678,7 @@ void wv_buffer_release(struct wv_buffer* self)
 {
 	if (!self)
 		return;
+	pixman_region_clear(&self->frame_damage);
 	struct nvnc_fb* fb = self->nvnc_fb;
 	self->nvnc_fb = NULL;
 	nvnc_fb_unref(fb);
