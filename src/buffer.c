@@ -660,9 +660,12 @@ struct wv_buffer* wv_buffer_pool_acquire(struct wv_buffer_pool* pool)
 
 	struct wv_buffer_config* config = &pool->config;
 
+	int bpp = pixel_size_from_fourcc(config->format);
+	assert(bpp > 0);
+
 	assert(!buffer->nvnc_fb);
 	buffer->nvnc_fb = nvnc_fb_from_buffer(nvnc_buffer, config->width,
-			config->height, config->format, config->stride);
+			config->height, config->format, config->stride / bpp);
 	assert(buffer->nvnc_fb);
 
 	// Ownership is passed over to nvnc_fb
