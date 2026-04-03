@@ -439,7 +439,8 @@ static void wv_buffer_destroy_dmabuf(struct wv_buffer* self)
 
 static void wv_buffer_destroy(struct wv_buffer* self)
 {
-	LIST_REMOVE(self, link);
+	if (self->link.le_next || self->link.le_prev)
+		LIST_REMOVE(self, link);
 
 	pixman_region_fini(&self->buffer_damage);
 	pixman_region_fini(&self->frame_damage);
@@ -503,6 +504,11 @@ struct wv_buffer_pool* wv_buffer_pool_create(
 
 void wv_buffer_pool_destroy(struct wv_buffer_pool* pool)
 {
+	while (!LIST_EMPTY(&pool->list)) {
+		struct wv_buffer* buffer = LIST_FIRST(&pool->list);
+		LIST_REMOVE(buffer, link);
+		memset(&buffer->link, 0, sizeof(buffer->link));
+	}
 	nvnc_buffer_pool_unref(pool->nvnc_pool);
 	free(pool->config.modifiers);
 #ifdef ENABLE_SCREENCOPY_DMABUF
