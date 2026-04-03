@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Andri Yngvason
+ * Copyright (c) 2025 - 2026 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -53,6 +53,10 @@ struct image_source {
 struct image_source_impl {
 	void (*get_dimensions)(const struct image_source* self,
 			int* width, int* height);
+	void (*get_buffer_dimensions)(const struct image_source* self,
+			int* width, int* height);
+	void (*get_transformed_buffer_dimensions)(const struct image_source* self,
+			int* width, int* height);
 	enum wl_output_transform (*get_transform)(const struct image_source* self);
 	enum image_source_power_state (*get_power_state)(
 			const struct image_source* self);
@@ -76,6 +80,12 @@ bool image_source_get_dimensions(const struct image_source* self,
 		int* width, int* height);
 bool image_source_get_transformed_dimensions(const struct image_source* self,
 		int* width, int* height);
+bool image_source_get_buffer_dimensions(const struct image_source* self,
+		int* width, int* height);
+bool image_source_get_transformed_buffer_dimensions(const struct image_source* self,
+		int* width, int* height);
+bool image_source_get_scale(const struct image_source* self,
+		double* h_scale, double* v_scale);
 enum wl_output_transform image_source_get_transform(
 		const struct image_source* self);
 enum image_source_power_state image_source_get_power(

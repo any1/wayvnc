@@ -60,6 +60,9 @@ static void output_handle_mode(void* data, struct wl_output* wl_output,
 			       uint32_t flags, int32_t width, int32_t height,
 			       int32_t refresh)
 {
+	struct output* output = data;
+	output->mode_width = width;
+	output->mode_height = height;
 }
 
 static void output_handle_done(void* data, struct wl_output* wl_output)
@@ -383,8 +386,20 @@ static void output_image_source_deinit(struct image_source* base)
 	wl_output_destroy(output->wl_output);
 }
 
+static void output_image_source_get_buffer_dimensions(const struct image_source* self,
+		int* width, int* height)
+{
+	struct output* output = output_from_image_source(self);
+
+	if (width)
+		*width = output->mode_width;
+	if (height)
+		*height = output->mode_height;
+}
+
 static struct image_source_impl image_source_impl = {
 	.get_dimensions = output_image_source_get_dimensions,
+	.get_buffer_dimensions = output_image_source_get_buffer_dimensions,
 	.get_transform = output_image_source_get_transform,
 	.get_power_state = output_image_source_get_power_state,
 	.describe = output_image_source_describe,

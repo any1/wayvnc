@@ -43,6 +43,9 @@ struct output {
 	uint32_t width;
 	uint32_t height;
 
+	uint32_t mode_width;
+	uint32_t mode_height;
+
 	uint32_t x;
 	uint32_t y;
 

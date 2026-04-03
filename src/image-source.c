@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 - 2025 Andri Yngvason
+ * Copyright (c) 2019 - 2026 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -147,5 +147,62 @@ bool image_source_get_transformed_dimensions(const struct image_source* self,
 		if (height)
 			*height = h;
 	}
+	return true;
+}
+
+bool image_source_get_buffer_dimensions(const struct image_source* self,
+		int* width, int* height)
+{
+	assert(self->impl);
+	if (self->impl->get_buffer_dimensions) {
+		self->impl->get_buffer_dimensions(self, width, height);
+		return true;
+	}
+	return false;
+}
+
+bool image_source_get_transformed_buffer_dimensions(
+		const struct image_source* self, int* width, int* height)
+{
+	int w, h;
+	if (!image_source_get_buffer_dimensions(self, &w, &h))
+		return false;
+	if (is_transform_90_degrees(image_source_get_transform(self))) {
+		if (width)
+			*width = h;
+		if (height)
+			*height = w;
+	} else {
+		if (width)
+			*width = w;
+		if (height)
+			*height = h;
+	}
+	return true;
+}
+
+bool image_source_get_scale(const struct image_source* self,
+		double* h_scale, double* v_scale)
+{
+	int logical_w, logical_h;
+	int buffer_w, buffer_h;
+
+	if (!image_source_get_transformed_dimensions(self,
+				&logical_w, &logical_h))
+		return false;
+
+	if (!image_source_get_transformed_buffer_dimensions(self,
+				&buffer_w, &buffer_h))
+		return false;
+
+	if (buffer_w == 0 || buffer_h == 0)
+		return false;
+
+	if (h_scale)
+		*h_scale = (double)logical_w / buffer_w;
+
+	if (v_scale)
+		*v_scale = (double)logical_h / buffer_h;
+
 	return true;
 }
