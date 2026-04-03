@@ -1825,8 +1825,21 @@ static void wayvnc_process_cursor(struct wayvnc* self, struct wv_buffer* buffer,
 {
 	nvnc_log(NVNC_LOG_DEBUG, "Got new cursor");
 	bool is_damaged = pixman_region_not_empty(&buffer->frame_damage);
-	nvnc_set_cursor(self->nvnc, buffer->nvnc_fb, buffer->x_hotspot,
-			buffer->y_hotspot, is_damaged);
+
+	double h_scale = 1.0;
+	double v_scale = 1.0;
+	image_source_get_scale(source, &h_scale, &v_scale);
+
+	nvnc_fb_set_logical_width(buffer->nvnc_fb,
+			round(h_scale * nvnc_fb_get_width(buffer->nvnc_fb)));
+	nvnc_fb_set_logical_height(buffer->nvnc_fb,
+			round(v_scale * nvnc_fb_get_height(buffer->nvnc_fb)));
+
+	int x_hotspot = round(h_scale * buffer->x_hotspot);
+	int y_hotspot = round(v_scale * buffer->y_hotspot);
+
+	nvnc_set_cursor(self->nvnc, buffer->nvnc_fb, x_hotspot, y_hotspot,
+			is_damaged);
 	wayvnc_start_cursor_capture(self, false);
 }
 
