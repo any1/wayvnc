@@ -31,5 +31,4 @@ enum wl_output_transform wv_output_transform_compose(
 		enum wl_output_transform tr_a, enum wl_output_transform tr_b);
 
 void wv_output_transform_canvas_point(enum wl_output_transform transform,
-		int canvas_width, int canvas_height,
-		int* point_x, int* point_y);
+		double* point_x, double* point_y);

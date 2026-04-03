@@ -85,18 +85,15 @@ static void pointer_set_button_mask(struct pointer* self, uint32_t t,
 	self->current_mask = mask;
 }
 
-void pointer_set(struct pointer* self, uint32_t x, uint32_t y,
+void pointer_set(struct pointer* self, double x, double y,
 		 enum nvnc_button_mask button_mask)
 {
 	uint32_t t = gettime_ms();
 
-	int width, height;
-	image_source_get_transformed_dimensions(self->image_source, &width,
-			&height);
-
 	if (x != self->current_x || y != self->current_y)
 		zwlr_virtual_pointer_v1_motion_absolute(self->pointer, t,
-		                                        x, y, width, height);
+				x * INT32_MAX, y * INT32_MAX,
+				INT32_MAX, INT32_MAX);
 
 	self->current_x = x;
 	self->current_y = y;

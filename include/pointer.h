@@ -30,12 +30,10 @@ struct pointer {
 
 	uint32_t current_x;
 	uint32_t current_y;
-
-	const struct image_source* image_source;
 };
 
 int pointer_init(struct pointer* self);
 void pointer_destroy(struct pointer* self);
 
-void pointer_set(struct pointer* self, uint32_t x, uint32_t y,
-		 enum nvnc_button_mask button_mask);
+void pointer_set(struct pointer* self, double x, double y,
+		enum nvnc_button_mask button_mask);

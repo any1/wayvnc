@@ -589,7 +589,7 @@ static struct wayvnc_display *wayvnc_display_find_by_source(struct wayvnc* self,
 	return NULL;
 }
 
-static void on_pointer_event(struct nvnc_client* client, uint16_t x, uint16_t y,
+static void on_pointer_event(struct nvnc_client* client, double x, double y,
 			     enum nvnc_button_mask button_mask)
 {
 	struct wayvnc_client* wv_client = nvnc_get_userdata(client);
@@ -599,9 +599,14 @@ static void on_pointer_event(struct nvnc_client* client, uint16_t x, uint16_t y,
 		return;
 	}
 
+	if (x < 0.0 || x > 1.0 || y < 0.0 || y > 1.0)
+		nvnc_log(NVNC_LOG_WARNING, "Got out-of-bounds cursor coordinates: %f:%f", x, y);
+
+	x = fmin(fmax(x, 0.0), 1.0);
+	y = fmin(fmax(y, 0.0), 1.0);
+
 	enum wl_output_transform transform;
-	int width = 0, height = 0;
-	if (image_source_get_dimensions(wayvnc->image_source, &width, &height)) {
+	if (image_source_get_dimensions(wayvnc->image_source, NULL, NULL)) {
 		transform = image_source_get_transform(wayvnc->image_source);
 	} else {
 		struct wayvnc_display* display = wayvnc_display_find_by_source(
@@ -609,16 +614,14 @@ static void on_pointer_event(struct nvnc_client* client, uint16_t x, uint16_t y,
 		assert(display);
 
 		if (display->last_frame_info.is_set) {
-			width = display->last_frame_info.width;
-			height = display->last_frame_info.height;
 			transform = display->last_frame_info.transform;
 		} else {
 			transform = WL_OUTPUT_TRANSFORM_NORMAL;
 		}
 	}
 
-	struct { int x, y; } xf = { x, y };
-	wv_output_transform_canvas_point(transform, width, height, &xf.x, &xf.y);
+	struct { double x, y; } xf = { x, y };
+	wv_output_transform_canvas_point(transform, &xf.x, &xf.y);
 
 	pointer_set(&wv_client->pointer, xf.x, xf.y, button_mask);
 }
@@ -1125,7 +1128,7 @@ static int init_nvnc(struct wayvnc* self)
 		}
 	}
 
-	nvnc_set_pointer_fn(self->nvnc, on_pointer_event);
+	nvnc_set_normalised_pointer_fn(self->nvnc, on_pointer_event);
 
 	nvnc_set_key_fn(self->nvnc, on_key_event);
 	nvnc_set_key_code_fn(self->nvnc, on_key_code_event);
@@ -1643,7 +1646,6 @@ static void client_init_pointer(struct wayvnc_client* self)
 		output = output_from_image_source(wayvnc->image_source);
 
 	self->pointer.vnc = self->server->nvnc;
-	self->pointer.image_source = wayvnc->image_source;
 
 	if (self->pointer.pointer)
 		pointer_destroy(&self->pointer);

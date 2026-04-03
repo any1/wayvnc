@@ -236,10 +236,9 @@ enum wl_output_transform wv_output_transform_compose(
 }
 
 void wv_output_transform_canvas_point(enum wl_output_transform transform,
-		int canvas_width, int canvas_height,
-		int* point_x, int* point_y)
+		double* point_x, double* point_y)
 {
-	struct { int x, y; } dst;
+	struct { double x, y; } dst;
 
 	switch (transform) {
 	case WL_OUTPUT_TRANSFORM_NORMAL:
@@ -248,18 +247,18 @@ void wv_output_transform_canvas_point(enum wl_output_transform transform,
 		break;
 	case WL_OUTPUT_TRANSFORM_90:
 		dst.x = *point_y;
-		dst.y = canvas_height - *point_x;
+		dst.y = 1.0 - *point_x;
 		break;
 	case WL_OUTPUT_TRANSFORM_180:
-		dst.x = canvas_width - *point_x;
-		dst.y = canvas_height - *point_y;
+		dst.x = 1.0 - *point_x;
+		dst.y = 1.0 - *point_y;
 		break;
 	case WL_OUTPUT_TRANSFORM_270:
-		dst.x = canvas_width - *point_y;
+		dst.x = 1.0 - *point_y;
 		dst.y = *point_x;
 		break;
 	case WL_OUTPUT_TRANSFORM_FLIPPED:
-		dst.x = canvas_width - *point_x;
+		dst.x = 1.0 - *point_x;
 		dst.y = *point_y;
 		break;
 	case WL_OUTPUT_TRANSFORM_FLIPPED_90:
@@ -268,11 +267,11 @@ void wv_output_transform_canvas_point(enum wl_output_transform transform,
 		break;
 	case WL_OUTPUT_TRANSFORM_FLIPPED_180:
 		dst.x = *point_x;
-		dst.y = canvas_height - *point_y;
+		dst.y = 1.0 - *point_y;
 		break;
 	case WL_OUTPUT_TRANSFORM_FLIPPED_270:
-		dst.x = canvas_width - *point_y;
-		dst.y = canvas_height - *point_x;
+		dst.x = 1.0 - *point_y;
+		dst.y = 1.0 - *point_x;
 		break;
 	}
 
