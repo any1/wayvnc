@@ -765,7 +765,7 @@ static int wayvnc_display_blank(struct wayvnc* self,
 	pixman_region_fini(&damage);
 	nvnc_fb_unref(placeholder_fb);
 
-	nvnc_set_cursor(self->nvnc, NULL, 0, 0, 0, 0, false);
+	nvnc_set_cursor(self->nvnc, NULL, 0, 0, false);
 
 	return 0;
 }
@@ -1531,7 +1531,7 @@ static void client_destroy(void* obj)
 		wayvnc->master_layout_client = NULL;
 
 	if (self == wayvnc->cursor_master) {
-		nvnc_set_cursor(wayvnc->nvnc, NULL, 0, 0, 0, 0, false);
+		nvnc_set_cursor(wayvnc->nvnc, NULL, 0, 0, false);
 		screencopy_stop(wayvnc->cursor_sc);
 		screencopy_destroy(wayvnc->cursor_sc);
 		wayvnc->cursor_sc = NULL;
@@ -1823,9 +1823,8 @@ static void wayvnc_process_cursor(struct wayvnc* self, struct wv_buffer* buffer,
 {
 	nvnc_log(NVNC_LOG_DEBUG, "Got new cursor");
 	bool is_damaged = pixman_region_not_empty(&buffer->frame_damage);
-	nvnc_set_cursor(self->nvnc, buffer->nvnc_fb, buffer->width,
-			buffer->height, buffer->x_hotspot, buffer->y_hotspot,
-			is_damaged);
+	nvnc_set_cursor(self->nvnc, buffer->nvnc_fb, buffer->x_hotspot,
+			buffer->y_hotspot, is_damaged);
 	wayvnc_start_cursor_capture(self, false);
 }
 
