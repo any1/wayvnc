@@ -1840,6 +1840,9 @@ static void wayvnc_process_cursor(struct wayvnc* self, struct wv_buffer* buffer,
 
 	nvnc_set_cursor(self->nvnc, buffer->nvnc_fb, x_hotspot, y_hotspot,
 			is_damaged);
+
+	wv_buffer_release(buffer);
+
 	wayvnc_start_cursor_capture(self, false);
 }
 
