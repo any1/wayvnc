@@ -678,8 +678,9 @@ void wv_buffer_release(struct wv_buffer* self)
 {
 	if (!self)
 		return;
-	nvnc_fb_unref(self->nvnc_fb);
+	struct nvnc_fb* fb = self->nvnc_fb;
 	self->nvnc_fb = NULL;
+	nvnc_fb_unref(fb);
 }
 
 void wv_buffer_pool_damage_all(struct wv_buffer_pool* self,
