@@ -40,11 +40,11 @@ struct output {
 
 	uint32_t id;
 
-	uint32_t width;
-	uint32_t height;
+	uint32_t logical_width;
+	uint32_t logical_height;
 
-	uint32_t mode_width;
-	uint32_t mode_height;
+	uint32_t buffer_width;
+	uint32_t buffer_height;
 
 	uint32_t x;
 	uint32_t y;

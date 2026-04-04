@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 - 2025 Andri Yngvason
+ * Copyright (c) 2019 - 2026 Andri Yngvason
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -61,8 +61,8 @@ static void output_handle_mode(void* data, struct wl_output* wl_output,
 			       int32_t refresh)
 {
 	struct output* output = data;
-	output->mode_width = width;
-	output->mode_height = height;
+	output->buffer_width = width;
+	output->buffer_height = height;
 }
 
 static void output_handle_done(void* data, struct wl_output* wl_output)
@@ -121,12 +121,12 @@ void output_logical_size(void* data, struct zxdg_output_v1* xdg_output,
 {
 	struct output* output = data;
 
-	if (width != (int32_t)output->width ||
-			height != (int32_t)output->height)
+	if (width != (int32_t)output->logical_width ||
+			height != (int32_t)output->logical_height)
 		output->geometry_changed = true;
 
-	output->width = width;
-	output->height = height;
+	output->logical_width = width;
+	output->logical_height = height;
 }
 
 void output_name(void* data, struct zxdg_output_v1* xdg_output,
@@ -335,14 +335,14 @@ static void output_image_source_get_logical_size(const struct image_source* self
 	// The output's dimensions are pre-transformed, so transform back
 	if (is_transform_90_degrees(image_source_get_transform(self))) {
 		if (width)
-			*width = output->height;
+			*width = output->logical_height;
 		if (height)
-			*height = output->width;
+			*height = output->logical_width;
 	} else {
 		if (width)
-			*width = output->width;
+			*width = output->logical_width;
 		if (height)
-			*height = output->height;
+			*height = output->logical_height;
 	}
 }
 
@@ -392,9 +392,9 @@ static void output_image_source_get_buffer_size(const struct image_source* self,
 	struct output* output = output_from_image_source(self);
 
 	if (width)
-		*width = output->mode_width;
+		*width = output->buffer_width;
 	if (height)
-		*height = output->mode_height;
+		*height = output->buffer_height;
 }
 
 static struct image_source_impl image_source_impl = {

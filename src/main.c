@@ -517,8 +517,11 @@ static int get_output_list(struct ctl* ctl,
 		strlcpy(item->name, output->name, sizeof(item->name));
 		strlcpy(item->description, output->description,
 				sizeof(item->description));
-		item->height = output->height;
-		item->width = output->width;
+		int width = 0, height = 0;
+		image_source_get_logical_size(&output->image_source, &width,
+				&height);
+		item->width = width;
+		item->height = height;
 		if (image_source_is_output(self->image_source)) {
 			struct output* source_output =
 				output_from_image_source(self->image_source);
@@ -1811,10 +1814,12 @@ void log_image_source(struct wayvnc* self)
 	struct output* output;
 	wl_list_for_each(output, &wayland->outputs, link) {
 		bool this_output = (output->id == source_output->id);
+		int width = 0, height = 0;
+		image_source_get_logical_size(&output->image_source,
+				&width, &height);
 		nvnc_log(NVNC_LOG_INFO, "%s %s %dx%d+%dx%d Power:%s",
 				this_output ? ">>" : "--",
-				output->description,
-				output->width, output->height,
+				output->description, width, height,
 				output->x, output->y,
 				image_source_power_state_name(output->power));
 	}
