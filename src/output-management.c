@@ -239,7 +239,7 @@ bool wlr_output_manager_resize_output(struct output* output,
 	if (!output_is_headless(output)) {
 		nvnc_log(NVNC_LOG_INFO,
 			"not resizing output %s: not a headless one",
-			output->name);
+			output_get_name(output));
 		return false;
 	}
 
@@ -265,7 +265,8 @@ bool wlr_output_manager_resize_output(struct output* output,
 
 		config_head = zwlr_output_configuration_v1_enable_head(
 			config, head->head);
-		if (head->name && strcmp(head->name, output->name) == 0) {
+		if (head->name && strcmp(head->name,
+					output_get_name(output)) == 0) {
 			nvnc_trace("reconfiguring output %s", head->name);
 			zwlr_output_configuration_head_v1_set_custom_mode(
 				config_head, width, height, refresh_rate);

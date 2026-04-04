@@ -115,41 +115,6 @@ void image_source_release_power_on(struct image_source* self)
 		self->impl->release_power_on(self);
 }
 
-static bool is_transform_90_degrees(enum wl_output_transform transform)
-{
-	switch (transform) {
-	case WL_OUTPUT_TRANSFORM_90:
-	case WL_OUTPUT_TRANSFORM_270:
-	case WL_OUTPUT_TRANSFORM_FLIPPED_90:
-	case WL_OUTPUT_TRANSFORM_FLIPPED_270:
-		return true;
-	default:
-		break;
-	}
-
-	return false;
-}
-
-bool image_source_get_transformed_logical_size(const struct image_source* self,
-		int* width, int* height)
-{
-	int w, h;
-	if (!image_source_get_logical_size(self, &w, &h))
-		return false;
-	if (is_transform_90_degrees(image_source_get_transform(self))) {
-		if (width)
-			*width = h;
-		if (height)
-			*height = w;
-	} else {
-		if (width)
-			*width = w;
-		if (height)
-			*height = h;
-	}
-	return true;
-}
-
 bool image_source_get_buffer_size(const struct image_source* self,
 		int* width, int* height)
 {
@@ -161,37 +126,17 @@ bool image_source_get_buffer_size(const struct image_source* self,
 	return false;
 }
 
-bool image_source_get_transformed_buffer_size(
-		const struct image_source* self, int* width, int* height)
-{
-	int w, h;
-	if (!image_source_get_buffer_size(self, &w, &h))
-		return false;
-	if (is_transform_90_degrees(image_source_get_transform(self))) {
-		if (width)
-			*width = h;
-		if (height)
-			*height = w;
-	} else {
-		if (width)
-			*width = w;
-		if (height)
-			*height = h;
-	}
-	return true;
-}
-
 bool image_source_get_scale(const struct image_source* self,
 		double* h_scale, double* v_scale)
 {
 	int logical_w, logical_h;
 	int buffer_w, buffer_h;
 
-	if (!image_source_get_transformed_logical_size(self,
+	if (!image_source_get_logical_size(self,
 				&logical_w, &logical_h))
 		return false;
 
-	if (!image_source_get_transformed_buffer_size(self,
+	if (!image_source_get_buffer_size(self,
 				&buffer_w, &buffer_h))
 		return false;
 

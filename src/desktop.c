@@ -54,8 +54,13 @@ static void desktop_image_source_get_logical_size(const struct image_source* bas
 
 	struct desktop_output* output;
 	LIST_FOREACH(output, &self->outputs, link) {
-		int w = output->output->x + output->output->logical_width;
-		int h = output->output->y + output->output->logical_height;
+		int logical_width, logical_height;
+		output_get_logical_size(output->output, &logical_width,
+				&logical_height);
+		int x, y;
+		output_get_pos(output->output, &x, &y);
+		int w = x + logical_width;
+		int h = y + logical_height;
 		if (w > width)
 			width = w;
 		if (h > height)

@@ -67,29 +67,37 @@ static void output_handle_done(void* data, struct wl_output* wl_output)
 	struct output* output = data;
 
 	bool geometry_changed = false;
-	geometry_changed |= output->transform != output->pending.transform;
-	geometry_changed |= output->logical_width != output->pending.logical_width;
-	geometry_changed |= output->logical_height != output->pending.logical_height;
-	geometry_changed |= output->buffer_width != output->pending.buffer_width;
-	geometry_changed |= output->buffer_height != output->pending.buffer_height;
-	geometry_changed |= output->x != output->pending.x;
-	geometry_changed |= output->y != output->pending.y;
+	geometry_changed |= output->state.transform != output->pending.transform;
+	geometry_changed |= output->state.logical_width != output->pending.logical_width;
+	geometry_changed |= output->state.logical_height != output->pending.logical_height;
+	geometry_changed |= output->state.buffer_width != output->pending.buffer_width;
+	geometry_changed |= output->state.buffer_height != output->pending.buffer_height;
+	geometry_changed |= output->state.x != output->pending.x;
+	geometry_changed |= output->state.y != output->pending.y;
 
-	output->logical_width = output->pending.logical_width;
-	output->logical_height = output->pending.logical_height;
-	output->buffer_width = output->pending.buffer_width;
-	output->buffer_height = output->pending.buffer_height;
-	output->x = output->pending.x;
-	output->y = output->pending.y;
-	output->transform = output->pending.transform;
-	strcpy(output->make, output->pending.make);
-	strcpy(output->model, output->pending.model);
-	strcpy(output->name, output->pending.name);
-	strcpy(output->description, output->pending.description);
+	output->state.logical_width = output->pending.logical_width;
+	output->state.logical_height = output->pending.logical_height;
+	output->state.buffer_width = output->pending.buffer_width;
+	output->state.buffer_height = output->pending.buffer_height;
+	output->state.x = output->pending.x;
+	output->state.y = output->pending.y;
+	output->state.transform = output->pending.transform;
+	strcpy(output->state.make, output->pending.make);
+	strcpy(output->state.model, output->pending.model);
+	strcpy(output->state.name, output->pending.name);
+	strcpy(output->state.description, output->pending.description);
 
-	if (geometry_changed)
+	if (geometry_changed) {
+		nvnc_trace("%s: geometry changed: logical: %"PRIu32"x%"PRIu32"+(%"PRIu32",%"PRIu32"), buffer: %"PRIu32"x%"PRIu32,
+				output->state.name,
+				output->state.logical_width,
+				output->state.logical_height, output->state.x,
+				output->state.y, output->state.buffer_width,
+				output->state.buffer_height);
+
 		observable_notify(&output->image_source.observable.geometry_change,
 				NULL);
+	}
 }
 
 static void output_handle_scale(void* data, struct wl_output* wl_output,
@@ -181,7 +189,7 @@ static void output_power_mode(void *data,
 		     uint32_t mode)
 {
 	struct output* self = data;
-	nvnc_trace("Output %s power state changed to %s", self->name,
+	nvnc_trace("Output %s power state changed to %s", self->state.name,
 			(mode == ZWLR_OUTPUT_POWER_V1_MODE_ON) ? "ON" : "OFF");
 
 	enum image_source_power_state old = self->power;
@@ -202,7 +210,8 @@ static void output_power_failed(void *data,
 		     struct zwlr_output_power_v1 *zwlr_output_power_v1)
 {
 	struct output* self = data;
-	nvnc_log(NVNC_LOG_WARNING, "Output %s power state failure", self->name);
+	nvnc_log(NVNC_LOG_WARNING, "Output %s power state failure",
+			self->state.name);
 	self->power = IMAGE_SOURCE_POWER_UNKNOWN;
 	zwlr_output_power_v1_destroy(self->wlr_output_power);
 	self->wlr_output_power = NULL;
@@ -263,7 +272,7 @@ struct output* output_find_by_name(struct wl_list* list, const char* name)
 	struct output* output;
 
 	wl_list_for_each(output, list, link)
-		if (strcmp(output->name, name) == 0)
+		if (strcmp(output->state.name, name) == 0)
 			return output;
 
 	return NULL;
@@ -315,44 +324,17 @@ void output_setup_xdg_output_managers(struct wayland* wayland,
 	}
 }
 
-static bool is_transform_90_degrees(enum wl_output_transform transform)
-{
-	switch (transform) {
-	case WL_OUTPUT_TRANSFORM_90:
-	case WL_OUTPUT_TRANSFORM_270:
-	case WL_OUTPUT_TRANSFORM_FLIPPED_90:
-	case WL_OUTPUT_TRANSFORM_FLIPPED_270:
-		return true;
-	default:
-		break;
-	}
-
-	return false;
-}
-
 static void output_image_source_get_logical_size(const struct image_source* self,
 		int* width, int* height)
 {
 	struct output* output = output_from_image_source(self);
-
-	// The output's dimensions are pre-transformed, so transform back
-	if (is_transform_90_degrees(image_source_get_transform(self))) {
-		if (width)
-			*width = output->logical_height;
-		if (height)
-			*height = output->logical_width;
-	} else {
-		if (width)
-			*width = output->logical_width;
-		if (height)
-			*height = output->logical_height;
-	}
+	output_get_logical_size(output, width, height);
 }
 
 static enum wl_output_transform output_image_source_get_transform(
 		const struct image_source* self)
 {
-	return output_from_image_source(self)->transform;
+	return output_from_image_source(self)->state.transform;
 }
 
 static enum image_source_power_state output_image_source_get_power_state(
@@ -365,7 +347,7 @@ static void output_image_source_describe(const struct image_source* self,
 		char* dst, size_t maxlen)
 {
 	struct output* output = output_from_image_source(self);
-	snprintf(dst, maxlen, "output %s", output->name);
+	snprintf(dst, maxlen, "output %s", output->state.name);
 }
 
 static int output_image_source_acquire_power_on(struct image_source* self)
@@ -393,11 +375,7 @@ static void output_image_source_get_buffer_size(const struct image_source* self,
 		int* width, int* height)
 {
 	struct output* output = output_from_image_source(self);
-
-	if (width)
-		*width = output->buffer_width;
-	if (height)
-		*height = output->buffer_height;
+	output_get_buffer_size(output, width, height);
 }
 
 static struct image_source_impl image_source_impl = {
@@ -442,6 +420,64 @@ struct output* output_new(struct wayland* wayland, struct wl_output* wl_output,
 
 bool output_is_headless(const struct output* self)
 {
-	return (strncmp(self->name, "HEADLESS-", strlen("HEADLESS-")) == 0) ||
-		(strncmp(self->name, "NOOP-", strlen("NOOP-")) == 0);
+	return (strncmp(self->state.name, "HEADLESS-", strlen("HEADLESS-")) == 0) ||
+		(strncmp(self->state.name, "NOOP-", strlen("NOOP-")) == 0);
+}
+
+void output_get_logical_size(const struct output* self,
+		int* width, int* height)
+{
+	if (width)
+		*width = self->state.logical_width;
+	if (height)
+		*height = self->state.logical_height;
+}
+
+static bool is_transform_90_degrees(enum wl_output_transform transform)
+{
+	switch (transform) {
+	case WL_OUTPUT_TRANSFORM_90:
+	case WL_OUTPUT_TRANSFORM_270:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_90:
+	case WL_OUTPUT_TRANSFORM_FLIPPED_270:
+		return true;
+	default:
+		break;
+	}
+
+	return false;
+}
+
+void output_get_buffer_size(const struct output* self,
+		int* width, int* height)
+{
+	if (is_transform_90_degrees(self->state.transform)) {
+		if (width)
+			*width = self->state.buffer_height;
+		if (height)
+			*height = self->state.buffer_width;
+	} else {
+		if (width)
+			*width = self->state.buffer_width;
+		if (height)
+			*height = self->state.buffer_height;
+	}
+}
+
+void output_get_pos(const struct output* self, int* x, int* y)
+{
+	if (x)
+		*x = self->state.x;
+	if (y)
+		*y = self->state.y;
+}
+
+const char* output_get_name(const struct output* self)
+{
+	return self->state.name;
+}
+
+const char* output_get_description(const struct output* self)
+{
+	return self->state.description;
 }

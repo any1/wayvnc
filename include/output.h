@@ -29,18 +29,19 @@ struct zxdg_output_v1;
 struct zwlr_output_power_manager_v1;
 struct zwlr_output_power_v1;
 
-#define OUTPUT_STATE_MEMBERS \
-	uint32_t logical_width; \
-	uint32_t logical_height; \
-	uint32_t buffer_width; \
-	uint32_t buffer_height; \
-	uint32_t x; \
-	uint32_t y; \
-	enum wl_output_transform transform; \
-	char make[256]; \
-	char model[256]; \
-	char name[256]; \
-	char description[256]; \
+struct output_state {
+	uint32_t logical_width;
+	uint32_t logical_height;
+	uint32_t buffer_width;
+	uint32_t buffer_height;
+	uint32_t x;
+	uint32_t y;
+	enum wl_output_transform transform;
+	char make[256];
+	char model[256];
+	char name[256];
+	char description[256];
+};
 
 struct output {
 	struct image_source image_source;
@@ -53,11 +54,8 @@ struct output {
 
 	uint32_t id;
 
-	struct {
-		OUTPUT_STATE_MEMBERS;
-	} pending;
-
-	OUTPUT_STATE_MEMBERS
+	struct output_state state;
+	struct output_state pending;
 
 	enum image_source_power_state power;
 
@@ -79,6 +77,13 @@ struct output* output_find_by_name(struct wl_list* list, const char* name);
 struct output* output_first(struct wl_list* list);
 struct output* output_last(struct wl_list* list);
 bool output_is_headless(const struct output* self);
+void output_get_logical_size(const struct output* self,
+		int* width, int* height);
+void output_get_buffer_size(const struct output* self,
+		int* width, int* height);
+void output_get_pos(const struct output* self, int* x, int* y);
+const char* output_get_name(const struct output* self);
+const char* output_get_description(const struct output* self);
 
 enum output_cycle_direction {
 	OUTPUT_CYCLE_FORWARD,

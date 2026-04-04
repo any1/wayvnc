@@ -206,7 +206,7 @@ static void on_output_added(struct observer* observer, void* data)
 	struct wayvnc* self = wl_container_of(observer, self,
 			output_added_observer);
 	struct output* output = data;
-	ctl_server_event_output_added(self->ctl, output->name);
+	ctl_server_event_output_added(self->ctl, output_get_name(output));
 
 	if (image_source_is_desktop(self->image_source)) {
 		wayvnc_desktop_display_add(self, &output->image_source);
@@ -222,12 +222,13 @@ static void on_output_removed(struct observer* observer, void* data)
 	if (image_source_is_output(self->image_source) &&
 			out == output_from_image_source(self->image_source)) {
 		nvnc_log(NVNC_LOG_WARNING, "Selected output %s went away",
-				out->name);
+				output_get_name(out));
 		switch_to_prev_output(self);
 	} else
-		nvnc_log(NVNC_LOG_INFO, "Output %s went away", out->name);
+		nvnc_log(NVNC_LOG_INFO, "Output %s went away",
+				output_get_name(out));
 
-	ctl_server_event_output_removed(self->ctl, out->name);
+	ctl_server_event_output_removed(self->ctl, output_get_name(out));
 
 	if (image_source_is_output(self->image_source) &&
 			out == output_from_image_source(self->image_source)) {
@@ -514,8 +515,8 @@ static int get_output_list(struct ctl* ctl,
 	struct output* output;
 	struct ctl_server_output* item = *outputs;
 	wl_list_for_each(output, &wayland->outputs, link) {
-		strlcpy(item->name, output->name, sizeof(item->name));
-		strlcpy(item->description, output->description,
+		strlcpy(item->name, output_get_name(output), sizeof(item->name));
+		strlcpy(item->description, output_get_description(output),
 				sizeof(item->description));
 		int width = 0, height = 0;
 		image_source_get_logical_size(&output->image_source, &width,
@@ -699,7 +700,7 @@ static bool on_client_resize(struct nvnc_client* nvnc_client,
 
 	nvnc_log(NVNC_LOG_DEBUG,
 		"Client resolution changed: %ux%u, capturing output %s which is headless: %s",
-		width, height, output->name,
+		width, height, output_get_name(output),
 		output_is_headless(output) ? "yes" : "no");
 
 	return wlr_output_manager_resize_output(output, width, height);
@@ -748,7 +749,7 @@ static int wayvnc_display_blank(struct wayvnc* self,
 	int height = 720;
 
 	if (display->image_source) {
-		if (image_source_get_transformed_logical_size(display->image_source,
+		if (image_source_get_logical_size(display->image_source,
 				&width, &height)) {
 		} else if (display->last_frame_info.is_set) {
 			width = display->last_frame_info.width;
@@ -996,10 +997,12 @@ static void on_output_geometry_change(struct observer* observer, void* data)
 	struct wayvnc_display* self = wl_container_of(observer, self,
 			geometry_change_observer);
 	struct output* output = output_from_image_source(self->image_source);
-	nvnc_display_set_position(self->nvnc_display, output->x, output->y);
+	int x, y;
+	output_get_pos(output, &x, &y);
+	nvnc_display_set_position(self->nvnc_display, x, y);
 
 	int width = 0, height = 0;
-	image_source_get_transformed_logical_size(self->image_source, &width,
+	image_source_get_logical_size(self->image_source, &width,
 			&height);
 	nvnc_display_set_logical_size(self->nvnc_display, width, height);
 
@@ -1031,14 +1034,18 @@ static bool wayvnc_desktop_display_add(struct wayvnc* self,
 		struct image_source* image_source)
 {
 	struct output* output = output_from_image_source(image_source);
+
+	int x, y;
+	output_get_pos(output, &x, &y);
+
 	struct wayvnc_display* display = wayvnc_display_add(self, image_source,
-			output->x, output->y);
+			x, y);
 	if (!display)
 		return false;
 
 	int width, height;
-	if (image_source_get_transformed_logical_size(display->image_source,
-				&width, &height)) {
+	if (image_source_get_logical_size(display->image_source, &width,
+				&height)) {
 		nvnc_display_set_logical_size(display->nvnc_display,
 				width, height);
 	}
@@ -1435,7 +1442,7 @@ static void on_perf_tick(struct aml_ticker* obj)
 
 	double total_area = 0;
 	int width, height;
-	if (image_source_get_logical_size(self->image_source, &width, &height)) {
+	if (image_source_get_buffer_size(self->image_source, &width, &height)) {
 		total_area = width * height;
 	} else {
 		struct wayvnc_display *display;
@@ -1815,12 +1822,13 @@ void log_image_source(struct wayvnc* self)
 	wl_list_for_each(output, &wayland->outputs, link) {
 		bool this_output = (output->id == source_output->id);
 		int width = 0, height = 0;
-		image_source_get_logical_size(&output->image_source,
-				&width, &height);
+		output_get_logical_size(output, &width, &height);
+		int x = 0, y = 0;
+		output_get_pos(output, &x, &y);
 		nvnc_log(NVNC_LOG_INFO, "%s %s %dx%d+%dx%d Power:%s",
 				this_output ? ">>" : "--",
-				output->description, width, height,
-				output->x, output->y,
+				output_get_description(output), width, height,
+				x, y,
 				image_source_power_state_name(output->power));
 	}
 }
@@ -2010,8 +2018,9 @@ void set_image_source(struct wayvnc* self, struct image_source* image_source)
 	}
 
 	if (self->ctl && image_source_is_output(image_source)) {
+		struct output* output = output_from_image_source(image_source);
 		ctl_server_event_capture_changed(self->ctl,
-				output_from_image_source(image_source)->name);
+				output_get_name(output));
 	}
 
 	log_image_source(self);
@@ -2022,7 +2031,7 @@ void switch_to_output(struct wayvnc* self, struct output* output)
 	assert(image_source_is_output(self->image_source));
 	if (output_from_image_source(self->image_source) == output) {
 		nvnc_log(NVNC_LOG_INFO, "Already selected output %s",
-				output->name);
+				output_get_name(output));
 		return;
 	}
 	screencopy_stop(self->screencopy);
