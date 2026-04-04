@@ -73,36 +73,6 @@ static void desktop_image_source_get_logical_size(const struct image_source* bas
 		*height_out = height;
 }
 
-static void desktop_image_source_get_buffer_size(const struct image_source* base,
-		int* width_out, int* height_out)
-{
-	struct desktop* self = desktop_from_image_source(base);
-
-	int width = 0;
-	int height = 0;
-
-	struct desktop_output* output;
-	LIST_FOREACH(output, &self->outputs, link) {
-		double h_scale = (double)output->output->buffer_width /
-			output->output->logical_width;
-		double v_scale = (double)output->output->buffer_height /
-			output->output->logical_height;
-		int w = round(output->output->x * h_scale) +
-			output->output->buffer_width;
-		int h = round(output->output->y * v_scale) +
-			output->output->buffer_height;
-		if (w > width)
-			width = w;
-		if (h > height)
-			height = h;
-	}
-
-	if (width_out)
-		*width_out = width;
-	if (height_out)
-		*height_out = height;
-}
-
 static enum image_source_power_state desktop_image_source_get_power_state(
 		const struct image_source* base)
 {
@@ -319,7 +289,6 @@ static void desktop_image_source_deinit(struct image_source* base)
 
 static struct image_source_impl image_source_impl = {
 	.get_logical_size = desktop_image_source_get_logical_size,
-	.get_buffer_size = desktop_image_source_get_buffer_size,
 	.get_power_state = desktop_image_source_get_power_state,
 	.describe = desktop_image_source_describe,
 	.acquire_power_on = desktop_image_source_acquire_power_on,
