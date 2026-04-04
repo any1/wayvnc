@@ -63,12 +63,12 @@ void image_source_destroy(struct image_source* self)
 	free(self);
 }
 
-bool image_source_get_dimensions(const struct image_source* self,
+bool image_source_get_logical_size(const struct image_source* self,
 		int* width, int *height)
 {
 	assert(self->impl);
-	if (self->impl->get_dimensions) {
-		self->impl->get_dimensions(self, width, height);
+	if (self->impl->get_logical_size) {
+		self->impl->get_logical_size(self, width, height);
 		return true;
 	}
 	return false;
@@ -130,11 +130,11 @@ static bool is_transform_90_degrees(enum wl_output_transform transform)
 	return false;
 }
 
-bool image_source_get_transformed_dimensions(const struct image_source* self,
+bool image_source_get_transformed_logical_size(const struct image_source* self,
 		int* width, int* height)
 {
 	int w, h;
-	if (!image_source_get_dimensions(self, &w, &h))
+	if (!image_source_get_logical_size(self, &w, &h))
 		return false;
 	if (is_transform_90_degrees(image_source_get_transform(self))) {
 		if (width)
@@ -150,22 +150,22 @@ bool image_source_get_transformed_dimensions(const struct image_source* self,
 	return true;
 }
 
-bool image_source_get_buffer_dimensions(const struct image_source* self,
+bool image_source_get_buffer_size(const struct image_source* self,
 		int* width, int* height)
 {
 	assert(self->impl);
-	if (self->impl->get_buffer_dimensions) {
-		self->impl->get_buffer_dimensions(self, width, height);
+	if (self->impl->get_buffer_size) {
+		self->impl->get_buffer_size(self, width, height);
 		return true;
 	}
 	return false;
 }
 
-bool image_source_get_transformed_buffer_dimensions(
+bool image_source_get_transformed_buffer_size(
 		const struct image_source* self, int* width, int* height)
 {
 	int w, h;
-	if (!image_source_get_buffer_dimensions(self, &w, &h))
+	if (!image_source_get_buffer_size(self, &w, &h))
 		return false;
 	if (is_transform_90_degrees(image_source_get_transform(self))) {
 		if (width)
@@ -187,11 +187,11 @@ bool image_source_get_scale(const struct image_source* self,
 	int logical_w, logical_h;
 	int buffer_w, buffer_h;
 
-	if (!image_source_get_transformed_dimensions(self,
+	if (!image_source_get_transformed_logical_size(self,
 				&logical_w, &logical_h))
 		return false;
 
-	if (!image_source_get_transformed_buffer_dimensions(self,
+	if (!image_source_get_transformed_buffer_size(self,
 				&buffer_w, &buffer_h))
 		return false;
 

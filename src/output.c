@@ -327,7 +327,7 @@ static bool is_transform_90_degrees(enum wl_output_transform transform)
 	return false;
 }
 
-static void output_image_source_get_dimensions(const struct image_source* self,
+static void output_image_source_get_logical_size(const struct image_source* self,
 		int* width, int* height)
 {
 	struct output* output = output_from_image_source(self);
@@ -386,7 +386,7 @@ static void output_image_source_deinit(struct image_source* base)
 	wl_output_destroy(output->wl_output);
 }
 
-static void output_image_source_get_buffer_dimensions(const struct image_source* self,
+static void output_image_source_get_buffer_size(const struct image_source* self,
 		int* width, int* height)
 {
 	struct output* output = output_from_image_source(self);
@@ -398,8 +398,8 @@ static void output_image_source_get_buffer_dimensions(const struct image_source*
 }
 
 static struct image_source_impl image_source_impl = {
-	.get_dimensions = output_image_source_get_dimensions,
-	.get_buffer_dimensions = output_image_source_get_buffer_dimensions,
+	.get_logical_size = output_image_source_get_logical_size,
+	.get_buffer_size = output_image_source_get_buffer_size,
 	.get_transform = output_image_source_get_transform,
 	.get_power_state = output_image_source_get_power_state,
 	.describe = output_image_source_describe,

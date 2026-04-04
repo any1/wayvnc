@@ -606,7 +606,7 @@ static void on_pointer_event(struct nvnc_client* client, double x, double y,
 	y = fmin(fmax(y, 0.0), 1.0);
 
 	enum wl_output_transform transform;
-	if (image_source_get_dimensions(wayvnc->image_source, NULL, NULL)) {
+	if (image_source_get_logical_size(wayvnc->image_source, NULL, NULL)) {
 		transform = image_source_get_transform(wayvnc->image_source);
 	} else {
 		struct wayvnc_display* display = wayvnc_display_find_by_source(
@@ -745,7 +745,7 @@ static int wayvnc_display_blank(struct wayvnc* self,
 	int height = 720;
 
 	if (display->image_source) {
-		if (image_source_get_transformed_dimensions(display->image_source,
+		if (image_source_get_transformed_logical_size(display->image_source,
 				&width, &height)) {
 		} else if (display->last_frame_info.is_set) {
 			width = display->last_frame_info.width;
@@ -996,7 +996,7 @@ static void on_output_geometry_change(struct observer* observer, void* data)
 	nvnc_display_set_position(self->nvnc_display, output->x, output->y);
 
 	int width = 0, height = 0;
-	image_source_get_transformed_dimensions(self->image_source, &width,
+	image_source_get_transformed_logical_size(self->image_source, &width,
 			&height);
 	nvnc_display_set_logical_size(self->nvnc_display, width, height);
 
@@ -1034,7 +1034,7 @@ static bool wayvnc_desktop_display_add(struct wayvnc* self,
 		return false;
 
 	int width, height;
-	if (image_source_get_transformed_dimensions(display->image_source,
+	if (image_source_get_transformed_logical_size(display->image_source,
 				&width, &height)) {
 		nvnc_display_set_logical_size(display->nvnc_display,
 				width, height);
@@ -1432,7 +1432,7 @@ static void on_perf_tick(struct aml_ticker* obj)
 
 	double total_area = 0;
 	int width, height;
-	if (image_source_get_dimensions(self->image_source, &width, &height)) {
+	if (image_source_get_logical_size(self->image_source, &width, &height)) {
 		total_area = width * height;
 	} else {
 		struct wayvnc_display *display;

@@ -44,7 +44,7 @@ void desktop_destroy(struct desktop *self)
 	image_source_destroy(&self->image_source);
 }
 
-static void desktop_image_source_get_dimensions(const struct image_source* base,
+static void desktop_image_source_get_logical_size(const struct image_source* base,
 		int* width_out, int* height_out)
 {
 	struct desktop* self = desktop_from_image_source(base);
@@ -68,7 +68,7 @@ static void desktop_image_source_get_dimensions(const struct image_source* base,
 		*height_out = height;
 }
 
-static void desktop_image_source_get_buffer_dimensions(const struct image_source* base,
+static void desktop_image_source_get_buffer_size(const struct image_source* base,
 		int* width_out, int* height_out)
 {
 	struct desktop* self = desktop_from_image_source(base);
@@ -313,8 +313,8 @@ static void desktop_image_source_deinit(struct image_source* base)
 }
 
 static struct image_source_impl image_source_impl = {
-	.get_dimensions = desktop_image_source_get_dimensions,
-	.get_buffer_dimensions = desktop_image_source_get_buffer_dimensions,
+	.get_logical_size = desktop_image_source_get_logical_size,
+	.get_buffer_size = desktop_image_source_get_buffer_size,
 	.get_power_state = desktop_image_source_get_power_state,
 	.describe = desktop_image_source_describe,
 	.acquire_power_on = desktop_image_source_acquire_power_on,

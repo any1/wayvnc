@@ -51,11 +51,11 @@ struct image_source {
 };
 
 struct image_source_impl {
-	void (*get_dimensions)(const struct image_source* self,
+	void (*get_logical_size)(const struct image_source* self,
 			int* width, int* height);
-	void (*get_buffer_dimensions)(const struct image_source* self,
+	void (*get_buffer_size)(const struct image_source* self,
 			int* width, int* height);
-	void (*get_transformed_buffer_dimensions)(const struct image_source* self,
+	void (*get_transformed_buffer_size)(const struct image_source* self,
 			int* width, int* height);
 	enum wl_output_transform (*get_transform)(const struct image_source* self);
 	enum image_source_power_state (*get_power_state)(
@@ -76,13 +76,13 @@ bool image_source_is_output(const struct image_source* self);
 bool image_source_is_toplevel(const struct image_source* self);
 bool image_source_is_desktop(const struct image_source* self);
 
-bool image_source_get_dimensions(const struct image_source* self,
+bool image_source_get_logical_size(const struct image_source* self,
 		int* width, int* height);
-bool image_source_get_transformed_dimensions(const struct image_source* self,
+bool image_source_get_transformed_logical_size(const struct image_source* self,
 		int* width, int* height);
-bool image_source_get_buffer_dimensions(const struct image_source* self,
+bool image_source_get_buffer_size(const struct image_source* self,
 		int* width, int* height);
-bool image_source_get_transformed_buffer_dimensions(const struct image_source* self,
+bool image_source_get_transformed_buffer_size(const struct image_source* self,
 		int* width, int* height);
 bool image_source_get_scale(const struct image_source* self,
 		double* h_scale, double* v_scale);
