@@ -47,13 +47,10 @@ static void output_handle_geometry(void* data, struct wl_output* wl_output,
 {
 	struct output* output = data;
 
-	if (transform != (int32_t)output->transform)
-		output->geometry_changed = true;
+	output->pending.transform = transform;
 
-	output->transform = transform;
-
-	strlcpy(output->make, make, sizeof(output->make));
-	strlcpy(output->model, model, sizeof(output->model));
+	strlcpy(output->pending.make, make, sizeof(output->pending.make));
+	strlcpy(output->pending.model, model, sizeof(output->pending.model));
 }
 
 static void output_handle_mode(void* data, struct wl_output* wl_output,
@@ -61,19 +58,38 @@ static void output_handle_mode(void* data, struct wl_output* wl_output,
 			       int32_t refresh)
 {
 	struct output* output = data;
-	output->buffer_width = width;
-	output->buffer_height = height;
+	output->pending.buffer_width = width;
+	output->pending.buffer_height = height;
 }
 
 static void output_handle_done(void* data, struct wl_output* wl_output)
 {
 	struct output* output = data;
 
-	if (output->geometry_changed) {
+	bool geometry_changed = false;
+	geometry_changed |= output->transform != output->pending.transform;
+	geometry_changed |= output->logical_width != output->pending.logical_width;
+	geometry_changed |= output->logical_height != output->pending.logical_height;
+	geometry_changed |= output->buffer_width != output->pending.buffer_width;
+	geometry_changed |= output->buffer_height != output->pending.buffer_height;
+	geometry_changed |= output->x != output->pending.x;
+	geometry_changed |= output->y != output->pending.y;
+
+	output->logical_width = output->pending.logical_width;
+	output->logical_height = output->pending.logical_height;
+	output->buffer_width = output->pending.buffer_width;
+	output->buffer_height = output->pending.buffer_height;
+	output->x = output->pending.x;
+	output->y = output->pending.y;
+	output->transform = output->pending.transform;
+	strcpy(output->make, output->pending.make);
+	strcpy(output->model, output->pending.model);
+	strcpy(output->name, output->pending.name);
+	strcpy(output->description, output->pending.description);
+
+	if (geometry_changed)
 		observable_notify(&output->image_source.observable.geometry_change,
 				NULL);
-		output->geometry_changed = false;
-	}
 }
 
 static void output_handle_scale(void* data, struct wl_output* wl_output,
@@ -109,11 +125,8 @@ void output_logical_position(void* data, struct zxdg_output_v1* xdg_output,
 {
 	struct output* output = data;
 
-	if (x != (int32_t)output->x || y != (int32_t)output->y)
-		output->geometry_changed = true;
-
-	output->x = x;
-	output->y = y;
+	output->pending.x = x;
+	output->pending.y = y;
 }
 
 void output_logical_size(void* data, struct zxdg_output_v1* xdg_output,
@@ -121,12 +134,8 @@ void output_logical_size(void* data, struct zxdg_output_v1* xdg_output,
 {
 	struct output* output = data;
 
-	if (width != (int32_t)output->logical_width ||
-			height != (int32_t)output->logical_height)
-		output->geometry_changed = true;
-
-	output->logical_width = width;
-	output->logical_height = height;
+	output->pending.logical_width = width;
+	output->pending.logical_height = height;
 }
 
 void output_name(void* data, struct zxdg_output_v1* xdg_output,
@@ -134,13 +143,7 @@ void output_name(void* data, struct zxdg_output_v1* xdg_output,
 {
 	struct output* self = data;
 
-	strlcpy(self->name, name, sizeof(self->name));
-	self->is_headless =
-		(strncmp(name, "HEADLESS-", strlen("HEADLESS-")) == 0) ||
-		(strncmp(name, "NOOP-", strlen("NOOP-")) == 0);
-
-	nvnc_trace("Output %u name: %s, headless: %s", self->id, self->name,
-		self->is_headless ? "yes" : "no");
+	strlcpy(self->pending.name, name, sizeof(self->pending.name));
 }
 
 void output_description(void* data, struct zxdg_output_v1* xdg_output,
@@ -148,8 +151,8 @@ void output_description(void* data, struct zxdg_output_v1* xdg_output,
 {
 	struct output* self = data;
 
-	strlcpy(self->description, description, sizeof(self->description));
-	nvnc_trace("Output %u description: %s", self->id, self->description);
+	strlcpy(self->pending.description, description,
+			sizeof(self->pending.description));
 }
 
 static const struct zxdg_output_v1_listener xdg_output_listener = {
@@ -435,4 +438,10 @@ struct output* output_new(struct wayland* wayland, struct wl_output* wl_output,
 	output_setup_xdg_output_manager(wayland, output);
 
 	return output;
+}
+
+bool output_is_headless(const struct output* self)
+{
+	return (strncmp(self->name, "HEADLESS-", strlen("HEADLESS-")) == 0) ||
+		(strncmp(self->name, "NOOP-", strlen("NOOP-")) == 0);
 }

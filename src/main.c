@@ -700,7 +700,7 @@ static bool on_client_resize(struct nvnc_client* nvnc_client,
 	nvnc_log(NVNC_LOG_DEBUG,
 		"Client resolution changed: %ux%u, capturing output %s which is headless: %s",
 		width, height, output->name,
-		output->is_headless ? "yes" : "no");
+		output_is_headless(output) ? "yes" : "no");
 
 	return wlr_output_manager_resize_output(output, width, height);
 }

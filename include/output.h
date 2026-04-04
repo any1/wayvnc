@@ -29,6 +29,19 @@ struct zxdg_output_v1;
 struct zwlr_output_power_manager_v1;
 struct zwlr_output_power_v1;
 
+#define OUTPUT_STATE_MEMBERS \
+	uint32_t logical_width; \
+	uint32_t logical_height; \
+	uint32_t buffer_width; \
+	uint32_t buffer_height; \
+	uint32_t x; \
+	uint32_t y; \
+	enum wl_output_transform transform; \
+	char make[256]; \
+	char model[256]; \
+	char name[256]; \
+	char description[256]; \
+
 struct output {
 	struct image_source image_source;
 
@@ -40,26 +53,13 @@ struct output {
 
 	uint32_t id;
 
-	uint32_t logical_width;
-	uint32_t logical_height;
+	struct {
+		OUTPUT_STATE_MEMBERS;
+	} pending;
 
-	uint32_t buffer_width;
-	uint32_t buffer_height;
+	OUTPUT_STATE_MEMBERS
 
-	uint32_t x;
-	uint32_t y;
-
-	bool geometry_changed;
-
-	enum wl_output_transform transform;
-
-	char make[256];
-	char model[256];
-	char name[256];
-	char description[256];
 	enum image_source_power_state power;
-
-	bool is_headless;
 
 	void* userdata;
 };
@@ -78,6 +78,7 @@ struct output* output_find_by_id(struct wl_list* list, uint32_t id);
 struct output* output_find_by_name(struct wl_list* list, const char* name);
 struct output* output_first(struct wl_list* list);
 struct output* output_last(struct wl_list* list);
+bool output_is_headless(const struct output* self);
 
 enum output_cycle_direction {
 	OUTPUT_CYCLE_FORWARD,

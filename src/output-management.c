@@ -236,7 +236,7 @@ bool wlr_output_manager_resize_output(struct output* output,
 		return false;
 	}
 
-	if (!output->is_headless) {
+	if (!output_is_headless(output)) {
 		nvnc_log(NVNC_LOG_INFO,
 			"not resizing output %s: not a headless one",
 			output->name);
