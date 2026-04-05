@@ -23,9 +23,15 @@
 
 #include "wlr-output-management-unstable-v1.h"
 
+struct output_manager_mode {
+	struct zwlr_output_mode_v1* mode;
+	struct wl_list link;
+};
+
 struct output_manager_head {
 	struct zwlr_output_head_v1* head;
 	struct wl_list link;
+	struct wl_list modes;
 	char* name;
 	bool enabled;
 };
@@ -63,6 +69,17 @@ static void output_head_mode(void* data,
 		struct zwlr_output_mode_v1* mode)
 {
 	nvnc_trace("Got head mode");
+	struct output_manager_head* head = data;
+
+	struct output_manager_mode* entry = calloc(1, sizeof(*entry));
+	if (!entry) {
+		nvnc_log(NVNC_LOG_ERROR, "OOM");
+		zwlr_output_mode_v1_release(mode);
+		return;
+	}
+
+	entry->mode = mode;
+	wl_list_insert(head->modes.prev, &entry->link);
 }
 
 static void output_head_enabled(void* data,
@@ -120,17 +137,29 @@ static void output_head_serial_number(void* data,
 	nvnc_trace("Got head serial number: %s", serial_number);
 }
 
-static void output_head_finished(void* data,
-		struct zwlr_output_head_v1* output_head)
+static void output_head_destroy(struct output_manager_head* head)
 {
-	nvnc_trace("head gone, removing");
-	struct output_manager_head* head = data;
-	zwlr_output_head_v1_destroy(output_head);
+	struct output_manager_mode* mode;
+	struct output_manager_mode* tmp;
+	wl_list_for_each_safe(mode, tmp, &head->modes, link) {
+		wl_list_remove(&mode->link);
+		zwlr_output_mode_v1_release(mode->mode);
+		free(mode);
+	}
+	zwlr_output_head_v1_release(head->head);
 	wl_list_remove(&head->link);
 	free(head->name);
 	head->name = NULL;
 	head->head = NULL;
 	free(head);
+}
+
+static void output_head_finished(void* data,
+		struct zwlr_output_head_v1* output_head)
+{
+	nvnc_trace("head gone, removing");
+	struct output_manager_head* head = data;
+	output_head_destroy(head);
 }
 
 struct zwlr_output_head_v1_listener wlr_output_head_listener = {
@@ -204,6 +233,7 @@ static void output_manager_head(void* data,
 	}
 
 	head->head = output_head;
+	wl_list_init(&head->modes);
 	wl_list_insert(heads.prev, &head->link);
 	nvnc_trace("New head, now at %lu", wl_list_length(&heads));
 
@@ -237,11 +267,8 @@ void wlr_output_manager_destroy(void)
 
 	struct output_manager_head* head;
 	struct output_manager_head* tmp;
-	wl_list_for_each_safe(head, tmp, &heads, link) {
-		wl_list_remove(&head->link);
-		free(head->name);
-		free(head);
-	}
+	wl_list_for_each_safe(head, tmp, &heads, link)
+		output_head_destroy(head);
 
 	zwlr_output_manager_v1_destroy(wlr_output_manager);
 	wlr_output_manager = NULL;
