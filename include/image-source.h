@@ -62,6 +62,7 @@ struct image_source_impl {
 			size_t maxlen);
 	int (*acquire_power_on)(struct image_source*);
 	void (*release_power_on)(struct image_source*);
+	double (*get_min_scale)(const struct image_source* self);
 	void (*deinit)(struct image_source*);
 };
 
@@ -80,6 +81,7 @@ bool image_source_get_buffer_size(const struct image_source* self,
 		int* width, int* height);
 bool image_source_get_scale(const struct image_source* self,
 		double* h_scale, double* v_scale);
+double image_source_get_min_scale(const struct image_source* self);
 enum wl_output_transform image_source_get_transform(
 		const struct image_source* self);
 enum image_source_power_state image_source_get_power(

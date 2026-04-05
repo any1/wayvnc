@@ -992,22 +992,36 @@ static void wayvnc_display_destroy(struct wayvnc_display* display)
 	free(display);
 }
 
+static void wayvnc_display_set_desktop_geometry(struct wayvnc_display* display,
+		double min_scale)
+{
+	struct output* output = output_from_image_source(display->image_source);
+
+	int x, y;
+	output_get_pos(output, &x, &y);
+	nvnc_display_set_position(display->nvnc_display,
+			round(x / min_scale), round(y / min_scale));
+
+	int logical_width, logical_height;
+	output_get_logical_size(output, &logical_width, &logical_height);
+	nvnc_display_set_logical_size(display->nvnc_display,
+			round(logical_width / min_scale),
+			round(logical_height / min_scale));
+}
+
 static void on_output_geometry_change(struct observer* observer, void* data)
 {
 	struct wayvnc_display* self = wl_container_of(observer, self,
 			geometry_change_observer);
-	struct output* output = output_from_image_source(self->image_source);
-	int x, y;
-	output_get_pos(output, &x, &y);
-	nvnc_display_set_position(self->nvnc_display, x, y);
 
-	int width = 0, height = 0;
-	image_source_get_logical_size(self->image_source, &width,
-			&height);
-	nvnc_display_set_logical_size(self->nvnc_display, width, height);
+	double min_scale = image_source_get_min_scale(
+			self->wayvnc->image_source);
 
-	nvnc_log(NVNC_LOG_DEBUG, "Output geometry changed: %d, %d", width,
-			height);
+	struct wayvnc_display* display;
+	LIST_FOREACH(display, &self->wayvnc->wayvnc_displays, link)
+		wayvnc_display_set_desktop_geometry(display, min_scale);
+
+	nvnc_log(NVNC_LOG_DEBUG, "Output geometry changed");
 }
 
 static void on_desktop_output_destroyed(struct observer* observer, void* data)
@@ -1033,22 +1047,13 @@ static void on_desktop_output_destroyed(struct observer* observer, void* data)
 static bool wayvnc_desktop_display_add(struct wayvnc* self,
 		struct image_source* image_source)
 {
-	struct output* output = output_from_image_source(image_source);
-
-	int x, y;
-	output_get_pos(output, &x, &y);
-
 	struct wayvnc_display* display = wayvnc_display_add(self, image_source,
-			x, y);
+			0, 0);
 	if (!display)
 		return false;
 
-	int width, height;
-	if (image_source_get_logical_size(display->image_source, &width,
-				&height)) {
-		nvnc_display_set_logical_size(display->nvnc_display,
-				width, height);
-	}
+	double min_scale = image_source_get_min_scale(self->image_source);
+	wayvnc_display_set_desktop_geometry(display, min_scale);
 
 	nvnc_trace("setting geometry observer");
 	observer_init(&display->geometry_change_observer,
@@ -1842,6 +1847,10 @@ static void wayvnc_process_cursor(struct wayvnc* self, struct wv_buffer* buffer,
 	double h_scale = 1.0;
 	double v_scale = 1.0;
 	image_source_get_scale(source, &h_scale, &v_scale);
+
+	double min_scale = image_source_get_min_scale(self->image_source);
+	h_scale /= min_scale;
+	v_scale /= min_scale;
 
 	nvnc_fb_set_logical_width(buffer->nvnc_fb,
 			round(h_scale * nvnc_fb_get_width(buffer->nvnc_fb)));

@@ -18,6 +18,7 @@
 
 #include <assert.h>
 #include <stdlib.h>
+#include <math.h>
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
@@ -150,4 +151,17 @@ bool image_source_get_scale(const struct image_source* self,
 		*v_scale = (double)logical_h / buffer_h;
 
 	return true;
+}
+
+double image_source_get_min_scale(const struct image_source* self)
+{
+	assert(self->impl);
+	if (self->impl->get_min_scale)
+		return self->impl->get_min_scale(self);
+
+	double h_scale, v_scale;
+	if (!image_source_get_scale(self, &h_scale, &v_scale))
+		return 1.0;
+
+	return fmin(h_scale, v_scale);
 }

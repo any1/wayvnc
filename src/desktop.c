@@ -19,6 +19,7 @@
 #include "wayland.h"
 
 #include <assert.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -44,10 +45,32 @@ void desktop_destroy(struct desktop *self)
 	image_source_destroy(&self->image_source);
 }
 
+static double desktop_image_source_get_min_scale(const struct image_source* base)
+{
+	struct desktop* self = desktop_from_image_source(base);
+
+	double min_scale = HUGE_VAL;
+
+	struct desktop_output* output;
+	LIST_FOREACH(output, &self->outputs, link) {
+		double h_scale, v_scale;
+		if (!image_source_get_scale(&output->output->image_source,
+					&h_scale, &v_scale))
+			continue;
+		double scale = fmin(h_scale, v_scale);
+		if (scale < min_scale)
+			min_scale = scale;
+	}
+
+	return isinf(min_scale) ? 1.0 : min_scale;
+}
+
 static void desktop_image_source_get_logical_size(const struct image_source* base,
 		int* width_out, int* height_out)
 {
 	struct desktop* self = desktop_from_image_source(base);
+
+	double min_scale = desktop_image_source_get_min_scale(base);
 
 	int width = 0;
 	int height = 0;
@@ -59,8 +82,8 @@ static void desktop_image_source_get_logical_size(const struct image_source* bas
 				&logical_height);
 		int x, y;
 		output_get_pos(output->output, &x, &y);
-		int w = x + logical_width;
-		int h = y + logical_height;
+		int w = round((x + logical_width) / min_scale);
+		int h = round((y + logical_height) / min_scale);
 		if (w > width)
 			width = w;
 		if (h > height)
@@ -289,6 +312,7 @@ static void desktop_image_source_deinit(struct image_source* base)
 
 static struct image_source_impl image_source_impl = {
 	.get_logical_size = desktop_image_source_get_logical_size,
+	.get_min_scale = desktop_image_source_get_min_scale,
 	.get_power_state = desktop_image_source_get_power_state,
 	.describe = desktop_image_source_describe,
 	.acquire_power_on = desktop_image_source_acquire_power_on,
