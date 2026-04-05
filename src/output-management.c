@@ -101,6 +101,25 @@ static void output_head_scale(void* data,
 #endif
 }
 
+static void output_head_make(void* data,
+		struct zwlr_output_head_v1* output_head, const char* make)
+{
+	nvnc_trace("Got head make: %s", make);
+}
+
+static void output_head_model(void* data,
+		struct zwlr_output_head_v1* output_head, const char* model)
+{
+	nvnc_trace("Got head model: %s", model);
+}
+
+static void output_head_serial_number(void* data,
+		struct zwlr_output_head_v1* output_head,
+		const char* serial_number)
+{
+	nvnc_trace("Got head serial number: %s", serial_number);
+}
+
 static void output_head_finished(void* data,
 		struct zwlr_output_head_v1* output_head)
 {
@@ -125,6 +144,9 @@ struct zwlr_output_head_v1_listener wlr_output_head_listener = {
 	.transform = output_head_transform,
 	.scale = output_head_scale,
 	.finished = output_head_finished,
+	.make = output_head_make,
+	.model = output_head_model,
+	.serial_number = output_head_serial_number,
 };
 
 /* config object */

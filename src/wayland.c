@@ -207,7 +207,7 @@ static void registry_add(void* data, struct wl_registry* registry,
 		nvnc_trace("Registering new wlr_output_manager");
 		struct zwlr_output_manager_v1* wlr_output_manager =
 			wl_registry_bind(registry, id,
-				&zwlr_output_manager_v1_interface, 1);
+				&zwlr_output_manager_v1_interface, 3);
 
 		// TODO: This should not be a global
 		wlr_output_manager_setup(wlr_output_manager);
