@@ -46,7 +46,8 @@
 #define MAYBE_UNUSED __attribute__((unused))
 
 #define CHECK_BIND(ext, v) ({ \
-	bool is_match = strcmp(interface, ext ## _interface.name) == 0; \
+	bool is_match = strcmp(interface, ext ## _interface.name) == 0 && \
+			(v) <= version; \
 	if (is_match) \
 		self->ext = wl_registry_bind(registry, id, \
 				&ext ## _interface, v); \
@@ -67,7 +68,8 @@ static bool registry_add_input(void* data, struct wl_registry* registry,
 	if (!is_flag_set(self, WAYLAND_FLAG_ENABLE_INPUT))
 		return false;
 
-	if (strcmp(interface, wl_seat_interface.name) == 0) {
+	if (strcmp(interface, wl_seat_interface.name) == 0 &&
+			version >= 7) {
 		struct wl_seat* wl_seat =
 			wl_registry_bind(registry, id, &wl_seat_interface, 7);
 		if (!wl_seat)
@@ -153,7 +155,8 @@ static void registry_add(void* data, struct wl_registry* registry,
 {
 	struct wayland* self = data;
 
-	if (strcmp(interface, wl_output_interface.name) == 0) {
+	if (strcmp(interface, wl_output_interface.name) == 0 &&
+			version >= 3) {
 		nvnc_trace("Registering new output %u", id);
 		struct wl_output* wl_output =
 			wl_registry_bind(registry, id, &wl_output_interface, 3);
@@ -203,7 +206,8 @@ static void registry_add(void* data, struct wl_registry* registry,
 		return;
 
 	// TODO: Move output manager global into this
-	if (strcmp(interface, zwlr_output_manager_v1_interface.name) == 0) {
+	if (strcmp(interface, zwlr_output_manager_v1_interface.name) == 0
+			&& version >= 3) {
 		nvnc_trace("Registering new wlr_output_manager");
 		struct zwlr_output_manager_v1* wlr_output_manager =
 			wl_registry_bind(registry, id,
