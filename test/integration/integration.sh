@@ -152,7 +152,7 @@ start_wayvnc() {
 	WAYVNC_PID=$!
 	# Wait for the VNC listening port
 	echo "  Started $WAYVNC_PID"
-	wait_until netcat -z -w1 $WAYVNC_ADDRESS $WAYVNC_PORT
+	wait_until nc -z -w1 $WAYVNC_ADDRESS $WAYVNC_PORT
 	echo "  Listening on $WAYVNC_ADDRESS:$WAYVNC_PORT"
 	# Wait for the control socket
 	wait_until [[ -S "$XDG_RUNTIME_DIR/wayvncctl" ]] >/dev/null
