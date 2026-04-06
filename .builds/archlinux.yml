@@ -15,6 +15,7 @@ packages:
   - jq
   - lsof
   - python-pycryptodomex # needed by vncdotool
+  - python-cryptography # needed by vncdotool
   - vncdotool
 
 sources:
