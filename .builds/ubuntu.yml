@@ -1,6 +1,7 @@
 image: ubuntu/plucky
 
 packages:
+ - gdb
  - jq
  - libavcodec-dev
  - libavfilter-dev
@@ -14,6 +15,7 @@ packages:
  - libxkbcommon-dev
  - lsof
  - meson
+ - netcat-openbsd
  - scdoc
  - sway
  - vncdotool

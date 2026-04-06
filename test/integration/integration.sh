@@ -35,7 +35,6 @@
 # - sway and swaymsg are in the $PATH
 #   - Override by setting $SWAY and $SWAYMSG
 # - jq for parsing json output is in the $PATH
-# - lsof for TCP port checking is in the $PATH
 # - vncdo for client testing is in the $PATH
 #   (pip install vncdotool)
 
@@ -53,6 +52,11 @@ print_ok()
 print_fail()
 {
 	printf "${RED}Fail${RESET}: %s\n" "$*" >&2
+}
+
+catch_crash()
+{
+	gdb -batch -ex run -ex "thread apply all bt full" --args $@
 }
 
 INTEGRATION_ROOT=$(realpath "$(dirname "$0")")
@@ -144,12 +148,11 @@ WAYVNC_PORT=5999
 start_wayvnc() {
 	echo "Starting wayvnc..."
 	WAYVNC_LOG=$XDG_RUNTIME_DIR/wayvnc.log
-	$WAYVNC "$@" -L debug "$WAYVNC_ADDRESS" "$WAYVNC_PORT" &>$WAYVNC_LOG &
+	catch_crash $WAYVNC "$@" -L debug "$WAYVNC_ADDRESS" "$WAYVNC_PORT" &>$WAYVNC_LOG &
 	WAYVNC_PID=$!
 	# Wait for the VNC listening port
 	echo "  Started $WAYVNC_PID"
-	wait_until lsof -a -p$WAYVNC_PID -iTCP@$WAYVNC_ADDRESS:$WAYVNC_PORT \
-		-sTCP:LISTEN >/dev/null
+	wait_until nc -z -w1 $WAYVNC_ADDRESS $WAYVNC_PORT
 	echo "  Listening on $WAYVNC_ADDRESS:$WAYVNC_PORT"
 	# Wait for the control socket
 	wait_until [[ -S "$XDG_RUNTIME_DIR/wayvncctl" ]] >/dev/null
