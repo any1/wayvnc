@@ -2135,7 +2135,8 @@ static struct cmd_response* on_attach(struct ctl* ctl, const char* display,
 		client_init_wayland(client);
 	}
 
-	nvnc_log(NVNC_LOG_INFO, "Attached to %s", display);
+	nvnc_log(NVNC_LOG_INFO, "Attached to %s",
+			display ? display : "default display");
 
 	if (self->nr_clients > 0) {
 		handle_first_client(self);
@@ -2164,7 +2165,8 @@ static bool wayland_attach(struct wayvnc* self, const char* display,
 		}
 	}
 
-	nvnc_log(NVNC_LOG_DEBUG, "Attaching to %s", display);
+	nvnc_log(NVNC_LOG_DEBUG, "Attaching to %s",
+			display ? display : "default display");
 
 	if (init_wayland(self, display) < 0) {
 		nvnc_log(NVNC_LOG_ERROR, "Failed to initialise wayland");
