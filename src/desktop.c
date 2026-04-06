@@ -237,12 +237,13 @@ static struct desktop_output *desktop_output_create(struct output* output,
 	if (cursor_capture) {
 		struct screencopy *sc = screencopy_create_cursor(
 				&output->image_source, cursor_capture->seat);
-
-		sc->userdata = cursor_capture;
-		sc->on_done = desktop_capture_handle_done;
-		sc->rate_format = desktop_capture_rate_format;
-		sc->enable_linux_dmabuf = false;
-		self->cursor_sc = sc;
+		if (sc) {
+			sc->userdata = cursor_capture;
+			sc->on_done = desktop_capture_handle_done;
+			sc->rate_format = desktop_capture_rate_format;
+			sc->enable_linux_dmabuf = false;
+			self->cursor_sc = sc;
+		}
 	}
 
 	return self;
@@ -438,6 +439,8 @@ static struct screencopy* desktop_capture_create_cursor(
 		struct output* output = desktop_output->output;
 		struct screencopy *sc = screencopy_create_cursor(
 				&output->image_source, seat);
+		if (!sc)
+			goto failure;
 
 		sc->userdata = self;
 		sc->on_done = desktop_capture_handle_done;
@@ -447,6 +450,15 @@ static struct screencopy* desktop_capture_create_cursor(
 	}
 
 	return (struct screencopy*)self;
+
+failure:
+	LIST_FOREACH(desktop_output, &desktop->outputs, link) {
+		screencopy_destroy(desktop_output->cursor_sc);
+		desktop_output->cursor_sc = NULL;
+	}
+	desktop->cursor_capture = NULL;
+	free(self);
+	return NULL;
 }
 
 static void desktop_capture_destroy(struct screencopy* base)
