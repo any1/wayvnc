@@ -1116,6 +1116,9 @@ static int init_nvnc(struct wayvnc* self)
 	if (self->cfg.enable_auth) {
 		auth_flags |= NVNC_AUTH_REQUIRE_AUTH;
 	}
+	if (self->cfg.enable_pam) {
+		auth_flags |= NVNC_AUTH_REQUIRE_USERNAME;
+	}
 	if (self->cfg.allow_broken_crypto) {
 		auth_flags |= NVNC_AUTH_ALLOW_BROKEN_CRYPTO;
 	}
