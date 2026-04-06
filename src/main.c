@@ -712,18 +712,28 @@ bool on_auth(const struct nvnc_auth_creds* credentials, void* ud)
 
 	const char* username = nvnc_auth_creds_get_username(credentials);
 	const char* password = nvnc_auth_creds_get_password(credentials);
-	if (!username || !password)
-		return false;
+
+	const char* cfg_username = self->cfg.username ? self->cfg.username : "";
+	const char* cfg_password = self->cfg.password ? self->cfg.password : "";
 
 #ifdef ENABLE_PAM
-	if (self->cfg.enable_pam)
+	if (self->cfg.enable_pam) {
+		if (!username || !password)
+			return false;
 		return pam_auth(username, password);
+	}
 #endif
 
-	if (strcmp(username, self->cfg.username) != 0)
+	if (!password)
+		return nvnc_auth_creds_verify(credentials, cfg_password);
+
+	if (!username)
 		return false;
 
-	if (strcmp(password, self->cfg.password) != 0)
+	if (strcmp(username, cfg_username) != 0)
+		return false;
+
+	if (strcmp(password, cfg_password) != 0)
 		return false;
 	return true;
 }
@@ -1106,6 +1116,9 @@ static int init_nvnc(struct wayvnc* self)
 	if (self->cfg.enable_auth) {
 		auth_flags |= NVNC_AUTH_REQUIRE_AUTH;
 	}
+	if (self->cfg.allow_broken_crypto) {
+		auth_flags |= NVNC_AUTH_ALLOW_BROKEN_CRYPTO;
+	}
 	if (!self->cfg.relax_encryption) {
 		auth_flags |= NVNC_AUTH_REQUIRE_ENCRYPTION;
 	}
@@ -1408,6 +1421,10 @@ int wayvnc_usage(struct option_parser* parser, FILE* stream, int rc)
 
 int check_cfg_sanity(struct cfg* cfg)
 {
+	if (cfg->allow_broken_crypto) {
+		nvnc_log(NVNC_LOG_WARNING, "Authentication enabled with allow_broken_crypto; insecure authentication methods are available");
+	}
+
 	if (cfg->enable_auth) {
 		int rc = 0;
 
@@ -1418,11 +1435,6 @@ int check_cfg_sanity(struct cfg* cfg)
 
 		if (!!cfg->certificate_file != !!cfg->private_key_file) {
 			nvnc_log(NVNC_LOG_ERROR, "Need both certificate_file and private_key_file for TLS");
-			rc = -1;
-		}
-
-		if (!cfg->username && !cfg->enable_pam) {
-			nvnc_log(NVNC_LOG_ERROR, "Authentication enabled, but missing username");
 			rc = -1;
 		}
 
