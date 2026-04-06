@@ -28,17 +28,17 @@ sources:
 tasks:
   - aml-build: |
       cd aml
-      meson setup build --prefix=/usr
+      meson setup build --prefix=/usr --buildtype=debug
       ninja -C build
       sudo ninja -C build install
   - neatvnc-build: |
       cd neatvnc
-      meson setup build --prefix=/usr -Dtests=true -Dbenchmarks=true -Dexamples=true
+      meson setup build --prefix=/usr --buildtype=debug -Dtests=true -Dbenchmarks=true -Dexamples=true
       ninja -C build
       sudo ninja -C build install
   - wayvnc-build: |
       cd wayvnc
-      meson setup build --prefix=/usr -Dtests=true
+      meson setup build --prefix=/usr --buildtype=debug -Dtests=true
       ninja -C build
   - neatvnc-test: |
       cd neatvnc
