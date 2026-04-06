@@ -32,7 +32,7 @@ tasks:
       sudo ninja -C build install
   - neatvnc-build: |
       cd neatvnc
-      meson setup build --prefix=/usr --buildtype=debug -Dtests=true -Dbenchmarks=true -Dexamples=true
+      meson setup build --prefix=/usr --buildtype=debug -Dtests=true -Dexamples=true
       ninja -C build
       sudo ninja -C build install
   - wayvnc-build: |
