@@ -19,6 +19,7 @@ packages:
   - textproc/jq
   - shells/bash
   - devel/py-pip
+  - security/py-cryptography
 
 sources:
   - http://github.com/any1/wayvnc
