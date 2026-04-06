@@ -25,23 +25,26 @@ sources:
   - http://github.com/any1/aml
 
 tasks:
-  - aml: |
+  - aml-build: |
       cd aml
-      meson --prefix=/usr build
+      meson setup build --prefix=/usr
       ninja -C build
       sudo ninja -C build install
-  - neatvnc: |
+  - neatvnc-build: |
       cd neatvnc
-      meson --prefix=/usr build
+      meson setup build --prefix=/usr -Dtests=true -Dbenchmarks=true -Dexamples=true
       ninja -C build
       sudo ninja -C build install
-  - build: |
+  - wayvnc-build: |
       cd wayvnc
-      meson --prefix=/usr build
+      meson setup build --prefix=/usr -Dtests=true
       ninja -C build
-  - test: |
+  - neatvnc-test: |
+      cd neatvnc
+      ninja -C build test
+  - wayvnc-test: |
       cd wayvnc
       ninja -C build test
-  - integration: |
+  - wayvnc-integration-test: |
       cd wayvnc
       ./test/integration/integration.sh
