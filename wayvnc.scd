@@ -170,11 +170,6 @@ considered to be part of the key or the value.
 	modern security types can authenticate using the *password* field.
 	Use only for legacy client compatibility on a trusted network.
 
-	Does not apply when *enable_pam* is enabled, as PAM overrides
-	password-based authentication. Due to the DES key size limitation,
-	only the first 8 characters of the password are used for DES
-	authentication.
-
 *use_relative_paths*
 	Make file paths relative to the location of the config file.
 
