@@ -1,0 +1,49 @@
+image: ubuntu/plucky
+
+packages:
+ - jq
+ - libavcodec-dev
+ - libavfilter-dev
+ - libavutil-dev
+ - libdrm-dev
+ - libgnutls28-dev
+ - libjansson-dev
+ - libpam0g-dev
+ - libturbojpeg0-dev
+ - libwlroots-dev
+ - libxkbcommon-dev
+ - lsof
+ - meson
+ - scdoc
+ - sway
+ - vncdotool
+
+sources:
+  - http://github.com/any1/wayvnc
+  - http://github.com/any1/neatvnc
+  - http://github.com/any1/aml
+
+tasks:
+  - aml-build: |
+      cd aml
+      meson setup build --prefix=/usr
+      ninja -C build
+      sudo ninja -C build install
+  - neatvnc-build: |
+      cd neatvnc
+      meson setup build --prefix=/usr -Dtests=true -Dbenchmarks=true -Dexamples=true
+      ninja -C build
+      sudo ninja -C build install
+  - wayvnc-build: |
+      cd wayvnc
+      meson setup build --prefix=/usr -Dtests=true
+      ninja -C build
+  - neatvnc-test: |
+      cd neatvnc
+      ninja -C build test
+  - wayvnc-test: |
+      cd wayvnc
+      ninja -C build test
+  - wayvnc-integration-test: |
+      cd wayvnc
+      ./test/integration/integration.sh
