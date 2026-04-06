@@ -119,6 +119,7 @@ start_sway() {
 	echo "Starting sway..."
 	SWAY_LOG=$XDG_RUNTIME_DIR/sway.log
 	WLR_BACKENDS=headless \
+	WLR_RENDERER=pixman \
 	WLR_LIBINPUT_NO_DEVICES=1 \
 	$SWAY &>"$SWAY_LOG" &
 	SWAY_PID=$!
