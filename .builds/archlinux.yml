@@ -2,6 +2,7 @@ image: archlinux
 
 packages:
   - base-devel
+  - gdb
   - libglvnd
   - libxkbcommon
   - pixman
@@ -13,7 +14,7 @@ packages:
   # runtime deps for integration testing:
   - sway
   - jq
-  - lsof
+  - openbsd-netcat
   - python-pycryptodomex # needed by vncdotool
   - python-cryptography # needed by vncdotool
   - vncdotool

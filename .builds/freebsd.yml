@@ -1,6 +1,7 @@
 image: freebsd/latest
 
 packages:
+  - devel/gdb
   - devel/meson
   - devel/pkgconf
   - devel/jansson
@@ -16,7 +17,6 @@ packages:
   # runtime deps for integration testing:
   - x11-wm/sway
   - textproc/jq
-  - sysutils/lsof
   - shells/bash
   - devel/py-pip
 
