@@ -738,16 +738,16 @@ bool on_auth(const struct nvnc_auth_creds* credentials, void* ud)
 	return true;
 }
 
-static struct nvnc_fb* create_placeholder_buffer(uint16_t width, uint16_t height)
+static struct nvnc_frame* create_placeholder_buffer(uint16_t width, uint16_t height)
 {
 	uint16_t stride = width;
-	struct nvnc_fb* fb = nvnc_fb_new(width, height, DRM_FORMAT_XRGB8888,
+	struct nvnc_frame* fb = nvnc_frame_new(width, height, DRM_FORMAT_XRGB8888,
 			stride);
 	if (!fb)
 		return NULL;
 
-	size_t size = nvnc_fb_get_pixel_size(fb) * height * stride;
-	memset(nvnc_fb_get_addr(fb), 0x60, size);
+	size_t size = nvnc_frame_get_pixel_size(fb) * height * stride;
+	memset(nvnc_frame_get_addr(fb), 0x60, size);
 
 	return fb;
 }
@@ -767,20 +767,14 @@ static int wayvnc_display_blank(struct wayvnc* self,
 		}
 	}
 
-	struct nvnc_fb* placeholder_fb = create_placeholder_buffer(width, height);
+	struct nvnc_frame* placeholder_fb = create_placeholder_buffer(width, height);
 	if (!placeholder_fb) {
 		nvnc_log(NVNC_LOG_ERROR, "Failed to allocate a placeholder buffer");
 		return -1;
 	}
 
-	struct pixman_region16 damage;
-	pixman_region_init_rect(&damage, 0, 0,
-			nvnc_fb_get_width(placeholder_fb),
-			nvnc_fb_get_height(placeholder_fb));
-
-	nvnc_display_feed_buffer(display->nvnc_display, placeholder_fb, &damage);
-	pixman_region_fini(&damage);
-	nvnc_fb_unref(placeholder_fb);
+	nvnc_display_feed_frame(display->nvnc_display, placeholder_fb);
+	nvnc_frame_unref(placeholder_fb);
 
 	nvnc_set_cursor(self->nvnc, NULL, 0, 0, false);
 
@@ -1288,7 +1282,7 @@ static void apply_output_transform(const struct wayvnc* self,
 		pixman_region_copy(damage, &buffer->frame_damage);
 	}
 
-	nvnc_fb_set_transform(buffer->nvnc_fb,
+	nvnc_frame_set_transform(buffer->nvnc_frame,
 			(enum nvnc_transform)buffer_transform);
 }
 
@@ -1315,11 +1309,12 @@ static void wayvnc_display_send_next_frame(struct wayvnc* self,
 	pixman_region_intersect_rect(&damage, &damage, 0, 0, buffer->width,
 			buffer->height);
 
-	nvnc_display_feed_buffer(display->nvnc_display, buffer->nvnc_fb,
-			&damage);
+	nvnc_frame_set_damage(buffer->nvnc_frame, &damage);
+	pixman_region_fini(&damage);
+
+	nvnc_display_feed_frame(display->nvnc_display, buffer->nvnc_frame);
 	self->n_frames_sent++;
 
-	pixman_region_fini(&damage);
 
 	wayvnc_start_capture(self);
 
@@ -1363,7 +1358,7 @@ static void wayvnc_process_frame(struct wayvnc* self, struct wv_buffer* buffer,
 	if (screencopy_get_capabilities(self->screencopy)
 			& SCREENCOPY_CAP_TRANSFORM)
 		display->last_frame_info.transform =
-			(enum wl_output_transform)nvnc_fb_get_transform(buffer->nvnc_fb);
+			(enum wl_output_transform)nvnc_frame_get_transform(buffer->nvnc_frame);
 
 	bool have_pending_frame = false;
 	if (display->next_frame) {
@@ -1867,15 +1862,15 @@ static void wayvnc_process_cursor(struct wayvnc* self, struct wv_buffer* buffer,
 	h_scale /= min_scale;
 	v_scale /= min_scale;
 
-	nvnc_fb_set_logical_width(buffer->nvnc_fb,
-			round(h_scale * nvnc_fb_get_width(buffer->nvnc_fb)));
-	nvnc_fb_set_logical_height(buffer->nvnc_fb,
-			round(v_scale * nvnc_fb_get_height(buffer->nvnc_fb)));
+	nvnc_frame_set_logical_width(buffer->nvnc_frame,
+			round(h_scale * nvnc_frame_get_width(buffer->nvnc_frame)));
+	nvnc_frame_set_logical_height(buffer->nvnc_frame,
+			round(v_scale * nvnc_frame_get_height(buffer->nvnc_frame)));
 
 	int x_hotspot = round(h_scale * buffer->x_hotspot);
 	int y_hotspot = round(v_scale * buffer->y_hotspot);
 
-	nvnc_set_cursor(self->nvnc, buffer->nvnc_fb, x_hotspot, y_hotspot,
+	nvnc_set_cursor(self->nvnc, buffer->nvnc_frame, x_hotspot, y_hotspot,
 			is_damaged);
 
 	wv_buffer_release(buffer);
@@ -1902,14 +1897,14 @@ static void on_cursor_capture_done(enum screencopy_result result,
 	}
 }
 
-static enum nvnc_fb_type buffer_type_to_nvnc_fb_type(enum wv_buffer_type type)
+static enum nvnc_buffer_type buffer_type_to_nvnc_buffer_type(enum wv_buffer_type type)
 {
 	switch (type) {
 	case WV_BUFFER_SHM:
-		return NVNC_FB_SIMPLE;
+		return NVNC_BUFFER_SIMPLE;
 #ifdef ENABLE_SCREENCOPY_DMABUF
 	case WV_BUFFER_DMABUF:
-		return NVNC_FB_GBM_BO;
+		return NVNC_BUFFER_GBM_BO;
 #endif
 	case WV_BUFFER_UNSPEC:;
 	}
@@ -1921,7 +1916,7 @@ static double rate_output_format(const void* userdata,
 {
 	const struct wayvnc* self = userdata;
 
-	enum nvnc_fb_type fb_type = buffer_type_to_nvnc_fb_type(type);
+	enum nvnc_buffer_type fb_type = buffer_type_to_nvnc_buffer_type(type);
 	assert(fb_type != NVNC_FB_UNSPEC);
 
 	return nvnc_rate_pixel_format(self->nvnc, fb_type, format,
@@ -1933,7 +1928,7 @@ static double rate_cursor_format(const void* userdata,
 {
 	const struct wayvnc* self = userdata;
 
-	enum nvnc_fb_type fb_type = buffer_type_to_nvnc_fb_type(type);
+	enum nvnc_buffer_type fb_type = buffer_type_to_nvnc_buffer_type(type);
 	assert(fb_type != NVNC_FB_UNSPEC);
 
 	return nvnc_rate_cursor_pixel_format(self->nvnc, fb_type, format,

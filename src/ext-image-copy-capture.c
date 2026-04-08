@@ -522,7 +522,7 @@ static void frame_handle_transform(void *data,
 	assert(self->buffer);
 
 	// TODO: Tell main.c not to override this transform
-	nvnc_fb_set_transform(self->buffer->nvnc_fb, transform);
+	nvnc_frame_set_transform(self->buffer->nvnc_frame, transform);
 }
 
 static void frame_handle_ready(void *data,
@@ -603,7 +603,7 @@ static void frame_handle_presentation_time(void *data,
 	uint64_t sec = (uint64_t)sec_hi << 32 | (uint64_t)sec_lo;
 	uint64_t pts = sec * UINT64_C(1000000) + (uint64_t)nsec / UINT64_C(1000);
 	nvnc_trace("Setting buffer pts: %" PRIu64, pts);
-	nvnc_fb_set_pts(self->buffer->nvnc_fb, pts);
+	nvnc_frame_set_pts(self->buffer->nvnc_frame, pts);
 }
 
 static struct ext_image_copy_capture_session_v1_listener session_listener = {

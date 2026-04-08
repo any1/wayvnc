@@ -669,12 +669,12 @@ struct wv_buffer* wv_buffer_pool_acquire(struct wv_buffer_pool* pool)
 	int bpp = pixel_size_from_fourcc(config->format);
 	assert(bpp > 0);
 
-	assert(!buffer->nvnc_fb);
-	buffer->nvnc_fb = nvnc_fb_from_buffer(nvnc_buffer, config->width,
+	assert(!buffer->nvnc_frame);
+	buffer->nvnc_frame = nvnc_frame_from_buffer(nvnc_buffer, config->width,
 			config->height, config->format, config->stride / bpp);
-	assert(buffer->nvnc_fb);
+	assert(buffer->nvnc_frame);
 
-	// Ownership is passed over to nvnc_fb
+	// Ownership is passed over to nvnc_frame
 	nvnc_buffer_unref(nvnc_buffer);
 
 	return buffer;
@@ -685,9 +685,9 @@ void wv_buffer_release(struct wv_buffer* self)
 	if (!self)
 		return;
 	pixman_region_clear(&self->frame_damage);
-	struct nvnc_fb* fb = self->nvnc_fb;
-	self->nvnc_fb = NULL;
-	nvnc_fb_unref(fb);
+	struct nvnc_frame* fb = self->nvnc_frame;
+	self->nvnc_frame = NULL;
+	nvnc_frame_unref(fb);
 }
 
 void wv_buffer_pool_damage_all(struct wv_buffer_pool* self,

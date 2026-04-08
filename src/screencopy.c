@@ -217,7 +217,7 @@ static void screencopy_ready(void* data,
 	self->back = self->front;
 	self->front = NULL;
 
-	nvnc_fb_set_pts(self->back->nvnc_fb, pts);
+	nvnc_frame_set_pts(self->back->nvnc_frame, pts);
 
 	self->status = WLR_SCREENCOPY_DONE;
 	self->parent.on_done(SCREENCOPY_DONE, self->back,

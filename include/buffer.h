@@ -30,7 +30,7 @@
 struct wl_buffer;
 struct gbm_bo;
 struct gbm_device;
-struct nvnc_fb;
+struct nvnc_frame;
 struct nvnc_buffer;
 
 enum wv_buffer_type {
@@ -53,7 +53,7 @@ struct wv_buffer {
 	enum wv_buffer_type type;
 	LIST_ENTRY(wv_buffer) link;
 
-	struct nvnc_fb* nvnc_fb;
+	struct nvnc_frame* nvnc_frame;
 	struct nvnc_buffer* buffer;
 	struct wl_buffer* wl_buffer;
 
