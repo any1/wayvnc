@@ -992,6 +992,8 @@ static void wayvnc_display_destroy(struct wayvnc_display* display)
 {
 	LIST_REMOVE(display, link);
 	wayvnc_display_detach(display);
+	if (display->wayvnc && display->wayvnc->nvnc)
+		nvnc_remove_display(display->wayvnc->nvnc, display->nvnc_display);
 	nvnc_display_unref(display->nvnc_display);
 	free(display);
 }
