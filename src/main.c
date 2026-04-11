@@ -1920,7 +1920,7 @@ static enum nvnc_buffer_type buffer_type_to_nvnc_buffer_type(enum wv_buffer_type
 #endif
 	case WV_BUFFER_UNSPEC:;
 	}
-	return NVNC_FB_UNSPEC;
+	return NVNC_BUFFER_UNSPEC;
 }
 
 static double rate_output_format(const void* userdata,
@@ -1929,7 +1929,7 @@ static double rate_output_format(const void* userdata,
 	const struct wayvnc* self = userdata;
 
 	enum nvnc_buffer_type fb_type = buffer_type_to_nvnc_buffer_type(type);
-	assert(fb_type != NVNC_FB_UNSPEC);
+	assert(fb_type != NVNC_BUFFER_UNSPEC);
 
 	return nvnc_rate_pixel_format(self->nvnc, fb_type, format,
 			modifier);
@@ -1941,7 +1941,7 @@ static double rate_cursor_format(const void* userdata,
 	const struct wayvnc* self = userdata;
 
 	enum nvnc_buffer_type fb_type = buffer_type_to_nvnc_buffer_type(type);
-	assert(fb_type != NVNC_FB_UNSPEC);
+	assert(fb_type != NVNC_BUFFER_UNSPEC);
 
 	return nvnc_rate_cursor_pixel_format(self->nvnc, fb_type, format,
 			modifier);
