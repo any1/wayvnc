@@ -706,10 +706,9 @@ static bool on_client_resize(struct nvnc_client* nvnc_client,
 	return wlr_output_manager_resize_output(output, width, height);
 }
 
-bool on_auth(const struct nvnc_auth_creds* credentials, void* ud)
+static bool authenticate_user(struct wayvnc* self,
+		const struct nvnc_auth_creds* credentials)
 {
-	struct wayvnc* self = ud;
-
 	const char* username = nvnc_auth_creds_get_username(credentials);
 	const char* password = nvnc_auth_creds_get_password(credentials);
 
@@ -735,7 +734,18 @@ bool on_auth(const struct nvnc_auth_creds* credentials, void* ud)
 
 	if (strcmp(password, cfg_password) != 0)
 		return false;
+
 	return true;
+}
+
+void on_auth(struct nvnc_auth_future* future,
+		const struct nvnc_auth_creds *credentials, void* ud)
+{
+	struct wayvnc* self = ud;
+	if (authenticate_user(self, credentials))
+		nvnc_auth_accept(future);
+	else
+		nvnc_auth_reject(future, "Invalid username or password");
 }
 
 static struct nvnc_frame* create_placeholder_buffer(uint16_t width, uint16_t height)
