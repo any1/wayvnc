@@ -669,34 +669,103 @@ static void on_client_cut_text(struct nvnc_client* nvnc_client,
 	}
 }
 
-static bool on_client_resize(struct nvnc_client* nvnc_client,
+static int count_displays(const struct wayvnc* self)
+{
+	int count = 0;
+	struct wayvnc_display* display;
+	LIST_FOREACH(display, &self->wayvnc_displays, link)
+		count++;
+	return count;
+}
+
+// TODO: Add some more sanity checks to this function
+static bool handle_client_resize_desktop(struct wayvnc* self,
+		struct wayvnc_client* client,
 		const struct nvnc_desktop_layout* layout)
 {
-	struct wayvnc_client* client = nvnc_get_userdata(nvnc_client);
-	struct wayvnc* self = client->server;
+	int n_displays = count_displays(self);
+	int n_layout_displays = nvnc_desktop_layout_get_display_count(layout);
 
-	uint16_t width = nvnc_desktop_layout_get_width(layout);
-	uint16_t height = nvnc_desktop_layout_get_height(layout);
 
-	if (!self->image_source)
+	if (n_layout_displays != n_displays) {
+		nvnc_log(NVNC_LOG_DEBUG, "Client referenced %d displays in layout, but we have %d displays in the layout",
+				n_layout_displays, n_displays);
 		return false;
+	}
 
-	if (image_source_is_desktop(self->image_source)) {
-		if (output_first(&wayland->outputs) != output_last(&wayland->outputs))
-			return false;
-	} else if (!image_source_is_output(self->image_source))
-		return false;
+	struct zwlr_output_configuration_v1* config =
+		wlr_output_manager_start_config();
 
-	if (self->master_layout_client && self->master_layout_client != client)
+	for (int i = 0; i < n_displays; ++i) {
+		uint16_t width, height, x, y;
+		width = nvnc_desktop_layout_get_display_width(layout, i);
+		height = nvnc_desktop_layout_get_display_height(layout, i);
+		x = nvnc_desktop_layout_get_display_x_pos(layout, i);
+		y = nvnc_desktop_layout_get_display_y_pos(layout, i);
+
+		struct nvnc_display* nvnc_display;
+		nvnc_display = nvnc_desktop_layout_get_display(layout, i);
+		if (!nvnc_display)
+			goto abort;
+
+		struct wayvnc_display* display = nvnc_get_userdata(nvnc_display);
+		nvnc_assert(display && display->nvnc_display == nvnc_display,
+				"Bad userdata for nvnc_display");
+
+		struct output* output;
+		output = output_from_image_source(display->image_source);
+
+		if (!wlr_output_manager_configure_output(config, output, width,
+					height, x, y)) {
+			nvnc_log(NVNC_LOG_ERROR, "Failed to configure output: %s",
+					output_get_name(output));
+			goto abort;
+		}
+	}
+
+	if (!wlr_output_manager_commit_config(config)) {
+		nvnc_log(NVNC_LOG_ERROR, "Failed to configure desktop layout");
 		return false;
+	}
+
+	self->master_layout_client = client;
+
+	return true;
+
+abort:
+	wlr_output_manager_abort_config(config);
+	return false;
+}
+
+static bool handle_client_resize_output(struct wayvnc* self,
+		struct wayvnc_client* client,
+		const struct nvnc_desktop_layout* layout)
+{
+	int n_displays = nvnc_desktop_layout_get_display_count(layout);
+	if (n_displays != 1) {
+		nvnc_log(NVNC_LOG_ERROR, "Client wanted to change layout for %d displays, but we only have 1",
+				n_displays);
+		return false;
+	}
+
+	struct nvnc_display* nvnc_display = nvnc_desktop_layout_get_display(
+			layout, 0);
+	if (!nvnc_display) {
+		nvnc_log(NVNC_LOG_ERROR, "Client requested to change the layout of an unknown display. The request is rejected.");
+		return false;
+	}
+
+	struct wayvnc_display* display = nvnc_get_userdata(nvnc_display);
+	nvnc_assert(display && display->nvnc_display == nvnc_display,
+			"Bad userdata for nvnc_display");
+
+	uint16_t width = nvnc_desktop_layout_get_display_width(layout, 0);
+	uint16_t height = nvnc_desktop_layout_get_display_height(layout, 0);
 
 	self->master_layout_client = client;
 
 	struct output* output;
-	if (image_source_is_output(client->server->image_source))
-		output = output_from_image_source(client->server->image_source);
-	else
-		output = output_first(&wayland->outputs);
+	output = output_from_image_source(client->server->image_source);
 
 	nvnc_log(NVNC_LOG_DEBUG,
 		"Client resolution changed: %ux%u, capturing output %s which is headless: %s",
@@ -704,6 +773,28 @@ static bool on_client_resize(struct nvnc_client* nvnc_client,
 		output_is_headless(output) ? "yes" : "no");
 
 	return wlr_output_manager_resize_output(output, width, height);
+}
+
+// TODO: Turn this into an image source method?
+static bool on_client_resize(struct nvnc_client* nvnc_client,
+		const struct nvnc_desktop_layout* layout)
+{
+	struct wayvnc_client* client = nvnc_get_userdata(nvnc_client);
+	struct wayvnc* self = client->server;
+
+	if (!self->image_source)
+		return false;
+
+	if (self->master_layout_client && self->master_layout_client != client)
+		return false;
+
+	if (image_source_is_desktop(self->image_source))
+		return handle_client_resize_desktop(self, client, layout);
+
+	if (image_source_is_output(self->image_source))
+		return handle_client_resize_output(self, client, layout);
+
+	return false;
 }
 
 static bool authenticate_user(struct wayvnc* self,
@@ -992,6 +1083,8 @@ static struct wayvnc_display* wayvnc_display_add(struct wayvnc* self,
 		free(display);
 		return NULL;
 	}
+
+	nvnc_set_userdata(display->nvnc_display, display, NULL);
 
 	nvnc_add_display(self->nvnc, display->nvnc_display);
 

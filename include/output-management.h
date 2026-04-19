@@ -21,8 +21,17 @@
 
 struct output;
 struct zwlr_output_manager_v1;
+struct zwlr_output_configuration_v1;
 
 void wlr_output_manager_setup(struct zwlr_output_manager_v1* output_manager);
+void wlr_output_manager_destroy(void);
+
+struct zwlr_output_configuration_v1* wlr_output_manager_start_config(void);
+bool wlr_output_manager_commit_config(struct zwlr_output_configuration_v1* config);
+void wlr_output_manager_abort_config(struct zwlr_output_configuration_v1* config);
+bool wlr_output_manager_configure_output(struct zwlr_output_configuration_v1* config,
+	struct output* output, uint16_t width, uint16_t height, uint16_t x,
+	uint16_t y);
+
 bool wlr_output_manager_resize_output(struct output* output,
 	uint16_t width, uint16_t height);
-void wlr_output_manager_destroy(void);

@@ -276,14 +276,52 @@ void wlr_output_manager_destroy(void)
 	last_config_serial = 0;
 }
 
-bool wlr_output_manager_resize_output(struct output* output,
-		uint16_t width, uint16_t height)
+struct zwlr_output_configuration_v1* wlr_output_manager_start_config(void)
 {
 	if (!wlr_output_manager) {
 		nvnc_log(NVNC_LOG_INFO,
 			"output-management protocol not available, not resizing output");
-		return false;
+		return NULL;
 	}
+
+	struct zwlr_output_configuration_v1* config =
+		zwlr_output_manager_v1_create_configuration(
+			wlr_output_manager, last_config_serial);
+	zwlr_output_configuration_v1_add_listener(config,
+			&wlr_output_config_listener, NULL);
+	return config;
+}
+
+bool wlr_output_manager_commit_config(
+		struct zwlr_output_configuration_v1* config)
+{
+	struct output_manager_head* head;
+	wl_list_for_each(head, &heads, link) {
+		if (head->enabled)
+			continue;
+		nvnc_trace("disabling output %s", head->name);
+		zwlr_output_configuration_v1_disable_head(
+			config, head->head);
+	}
+
+	nvnc_trace("applying new output config");
+	zwlr_output_configuration_v1_apply(config);
+	return true;
+}
+
+void wlr_output_manager_abort_config(
+		struct zwlr_output_configuration_v1* config)
+{
+	zwlr_output_configuration_v1_destroy(config);
+}
+
+bool wlr_output_manager_configure_output(
+		struct zwlr_output_configuration_v1* config,
+		struct output* output, uint16_t width, uint16_t height,
+		uint16_t x, uint16_t y)
+{
+	// TODO: This could be synced to --max-fps
+	int refresh_rate = 0;
 
 	if (!output_is_headless(output)) {
 		nvnc_log(NVNC_LOG_INFO,
@@ -292,46 +330,48 @@ bool wlr_output_manager_resize_output(struct output* output,
 		return false;
 	}
 
-	// TODO: This could be synced to --max-fps
-	int refresh_rate = 0;
-
-	struct zwlr_output_configuration_v1* config;
-	struct zwlr_output_configuration_head_v1* config_head;
-
-	config = zwlr_output_manager_v1_create_configuration(
-		wlr_output_manager, last_config_serial);
-	zwlr_output_configuration_v1_add_listener(config,
-			&wlr_output_config_listener, NULL);
+	bool found = false;
 
 	struct output_manager_head* head;
 	wl_list_for_each(head, &heads, link) {
-		if (!head->enabled) {
-			nvnc_trace("disabling output %s", head->name);
-			zwlr_output_configuration_v1_disable_head(
-				config, head->head);
+		const char* output_name = output_get_name(output);
+		if (!head->name || strcmp(head->name, output_name) != 0)
 			continue;
-		}
 
-		config_head = zwlr_output_configuration_v1_enable_head(
-			config, head->head);
-		if (head->name && strcmp(head->name,
-					output_get_name(output)) == 0) {
-			nvnc_trace("reconfiguring output %s", head->name);
-			zwlr_output_configuration_head_v1_set_custom_mode(
-				config_head, width, height, refresh_rate);
+		struct zwlr_output_configuration_head_v1* config_head =
+			zwlr_output_configuration_v1_enable_head(
+				config, head->head);
 
-			/* It doesn't make any sense to have rotation on a
-			 * headless display, so we set the transform here to be
-			 * sure.
-			 */
-			zwlr_output_configuration_head_v1_set_transform(
-					config_head, WL_OUTPUT_TRANSFORM_NORMAL);
-		}
+		nvnc_trace("reconfiguring output %s", head->name);
+		zwlr_output_configuration_head_v1_set_custom_mode(
+			config_head, width, height, refresh_rate);
+
+		zwlr_output_configuration_head_v1_set_position(config_head,
+				x, y);
+
+		/* It doesn't make any sense to have rotation on a
+		 * headless display, so we set the transform here to be
+		 * sure.
+		 */
+		zwlr_output_configuration_head_v1_set_transform(
+				config_head, WL_OUTPUT_TRANSFORM_NORMAL);
+		found = true;
 
 		zwlr_output_configuration_head_v1_destroy(config_head);
 	}
 
-	nvnc_trace("applying new output config");
-	zwlr_output_configuration_v1_apply(config);
-	return true;
+	return found;
+}
+
+bool wlr_output_manager_resize_output(struct output* output,
+		uint16_t width, uint16_t height)
+{
+	struct zwlr_output_configuration_v1* config =
+		wlr_output_manager_start_config();
+	if (!config)
+		return false;
+	if (!wlr_output_manager_configure_output(config, output, width, height,
+				0, 0))
+		return false;
+	return wlr_output_manager_commit_config(config);
 }
