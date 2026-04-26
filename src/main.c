@@ -829,14 +829,14 @@ static bool authenticate_user(struct wayvnc* self,
 	return true;
 }
 
-void on_auth(struct nvnc_auth_future* future,
-		const struct nvnc_auth_creds *credentials, void* ud)
+void on_auth(struct nvnc_auth_creds *credentials, void* ud)
 {
 	struct wayvnc* self = ud;
 	if (authenticate_user(self, credentials))
-		nvnc_auth_accept(future);
+		nvnc_auth_creds_accept(credentials);
 	else
-		nvnc_auth_reject(future, "Invalid username or password");
+		nvnc_auth_creds_reject(credentials,
+				"Invalid username or password");
 }
 
 static struct nvnc_frame* create_placeholder_buffer(uint16_t width, uint16_t height)
