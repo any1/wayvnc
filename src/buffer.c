@@ -164,7 +164,7 @@ static struct wv_buffer* wv_buffer_create_shm(
 		goto nvnc_buffer_failure;
 	}
 
-	nvnc_set_userdata(self->buffer, self, wv_buffer__handle_cleanup);
+	nvnc_buffer_set_userdata(self->buffer, self, wv_buffer__handle_cleanup);
 
 	pixman_region_init(&self->frame_damage);
 	pixman_region_init_rect(&self->buffer_damage, 0, 0, config->width,
@@ -366,7 +366,7 @@ static struct wv_buffer* wv_buffer_create_dmabuf(
 		goto nvnc_buffer_failure;
 	}
 
-	nvnc_set_userdata(self->buffer, self, wv_buffer__handle_cleanup);
+	nvnc_buffer_set_userdata(self->buffer, self, wv_buffer__handle_cleanup);
 
 	pixman_region_init(&self->frame_damage);
 	pixman_region_init_rect(&self->buffer_damage, 0, 0, config->width,
@@ -617,7 +617,7 @@ bool reconfig_render_node(struct wv_buffer_pool* pool,
 static struct nvnc_buffer* wv_buffer_pool__alloc(
 		struct nvnc_buffer_pool* nvnc_pool)
 {
-	struct wv_buffer_pool* pool = nvnc_get_userdata(nvnc_pool);
+	struct wv_buffer_pool* pool = nvnc_buffer_pool_get_userdata(nvnc_pool);
 #ifdef ENABLE_SCREENCOPY_DMABUF
 	struct wv_buffer* buffer = wv_buffer_create(&pool->config, pool->gbm);
 #else
@@ -640,7 +640,7 @@ bool wv_buffer_pool_reconfig(struct wv_buffer_pool* pool,
 
 	nvnc_buffer_pool_unref(pool->nvnc_pool);
 	pool->nvnc_pool = nvnc_buffer_pool_new(wv_buffer_pool__alloc);
-	nvnc_set_userdata(pool->nvnc_pool, pool, NULL);
+	nvnc_buffer_pool_set_userdata(pool->nvnc_pool, pool, NULL);
 
 #ifdef ENABLE_SCREENCOPY_DMABUF
 	dev_t old_node  = pool->config.node;
@@ -661,7 +661,7 @@ struct wv_buffer* wv_buffer_pool_acquire(struct wv_buffer_pool* pool)
 	if (!nvnc_buffer)
 		return NULL;
 
-	struct wv_buffer* buffer = nvnc_get_userdata(nvnc_buffer);
+	struct wv_buffer* buffer = nvnc_buffer_get_userdata(nvnc_buffer);
 	assert(buffer);
 
 	struct wv_buffer_config* config = &pool->config;

@@ -250,7 +250,7 @@ static void on_seat_removed(struct observer* observer, void* data)
 	struct nvnc_client* nvnc_client;
 	for (nvnc_client = nvnc_client_first(self->nvnc); nvnc_client;
 			nvnc_client = nvnc_client_next(nvnc_client)) {
-		struct wayvnc_client* client = nvnc_get_userdata(nvnc_client);
+		struct wayvnc_client* client = nvnc_client_get_userdata(nvnc_client);
 		assert(client);
 
 		if (client->seat == seat) {
@@ -308,7 +308,7 @@ static void on_wayland_destroyed(struct observer* observer, void* data)
 		for (nvnc_client = nvnc_client_first(self->nvnc); nvnc_client;
 				nvnc_client = nvnc_client_next(nvnc_client)) {
 			struct wayvnc_client* client =
-				nvnc_get_userdata(nvnc_client);
+				nvnc_client_get_userdata(nvnc_client);
 			client_detach_wayland(client);
 		}
 	}
@@ -484,7 +484,7 @@ static void client_info(const struct ctl_server_client* client_handle,
 {
 	const struct nvnc_client *vnc_client =
 		(const struct nvnc_client*)client_handle;
-	const struct wayvnc_client *client = nvnc_get_userdata(vnc_client);
+	const struct wayvnc_client *client = nvnc_client_get_userdata(vnc_client);
 	compose_client_info(client, info);
 }
 
@@ -547,7 +547,7 @@ static struct cmd_response* on_disconnect_client(struct ctl* ctl,
 	for (struct nvnc_client* nvnc_client = nvnc_client_first(self->nvnc);
 			nvnc_client;
 			nvnc_client = nvnc_client_next(nvnc_client)) {
-		struct wayvnc_client* client = nvnc_get_userdata(nvnc_client);
+		struct wayvnc_client* client = nvnc_client_get_userdata(nvnc_client);
 		if (client->id == id) {
 			nvnc_log(NVNC_LOG_WARNING, "Disconnecting client %d via control socket command",
 					client->id);
@@ -596,7 +596,7 @@ static struct wayvnc_display *wayvnc_display_find_by_source(struct wayvnc* self,
 static void on_pointer_event(struct nvnc_client* client, double x, double y,
 			     enum nvnc_button_mask button_mask)
 {
-	struct wayvnc_client* wv_client = nvnc_get_userdata(client);
+	struct wayvnc_client* wv_client = nvnc_client_get_userdata(client);
 	struct wayvnc* wayvnc = wv_client->server;
 
 	if (!wv_client->pointer.pointer) {
@@ -633,7 +633,7 @@ static void on_pointer_event(struct nvnc_client* client, double x, double y,
 static void on_key_event(struct nvnc_client* client, uint32_t symbol,
                          bool is_pressed)
 {
-	struct wayvnc_client* wv_client = nvnc_get_userdata(client);
+	struct wayvnc_client* wv_client = nvnc_client_get_userdata(client);
 	if (!wv_client->keyboard.virtual_keyboard) {
 		return;
 	}
@@ -647,7 +647,7 @@ static void on_key_event(struct nvnc_client* client, uint32_t symbol,
 static void on_key_code_event(struct nvnc_client* client, uint32_t code,
 		bool is_pressed)
 {
-	struct wayvnc_client* wv_client = nvnc_get_userdata(client);
+	struct wayvnc_client* wv_client = nvnc_client_get_userdata(client);
 	if (!wv_client->keyboard.virtual_keyboard) {
 		return;
 	}
@@ -661,7 +661,7 @@ static void on_key_code_event(struct nvnc_client* client, uint32_t code,
 static void on_client_cut_text(struct nvnc_client* nvnc_client,
 		const char* text, uint32_t len)
 {
-	struct wayvnc_client* client = nvnc_get_userdata(nvnc_client);
+	struct wayvnc_client* client = nvnc_client_get_userdata(nvnc_client);
 
 	if (client->data_control.wlr_manager ||
 			client->data_control.ext_manager) {
@@ -708,7 +708,7 @@ static bool handle_client_resize_desktop(struct wayvnc* self,
 		if (!nvnc_display)
 			goto abort;
 
-		struct wayvnc_display* display = nvnc_get_userdata(nvnc_display);
+		struct wayvnc_display* display = nvnc_display_get_userdata(nvnc_display);
 		nvnc_assert(display && display->nvnc_display == nvnc_display,
 				"Bad userdata for nvnc_display");
 
@@ -755,7 +755,7 @@ static bool handle_client_resize_output(struct wayvnc* self,
 		return false;
 	}
 
-	struct wayvnc_display* display = nvnc_get_userdata(nvnc_display);
+	struct wayvnc_display* display = nvnc_display_get_userdata(nvnc_display);
 	nvnc_assert(display && display->nvnc_display == nvnc_display,
 			"Bad userdata for nvnc_display");
 
@@ -779,7 +779,7 @@ static bool handle_client_resize_output(struct wayvnc* self,
 static bool on_client_resize(struct nvnc_client* nvnc_client,
 		const struct nvnc_desktop_layout* layout)
 {
-	struct wayvnc_client* client = nvnc_get_userdata(nvnc_client);
+	struct wayvnc_client* client = nvnc_client_get_userdata(nvnc_client);
 	struct wayvnc* self = client->server;
 
 	if (!self->image_source)
@@ -1084,7 +1084,7 @@ static struct wayvnc_display* wayvnc_display_add(struct wayvnc* self,
 		return NULL;
 	}
 
-	nvnc_set_userdata(display->nvnc_display, display, NULL);
+	nvnc_display_set_userdata(display->nvnc_display, display, NULL);
 
 	nvnc_add_display(self->nvnc, display->nvnc_display);
 
@@ -1726,7 +1726,7 @@ static void on_nvnc_client_new(struct nvnc_client* client)
 
 	struct wayvnc_client* wayvnc_client = client_create(self, client);
 	assert(wayvnc_client);
-	nvnc_set_userdata(client, wayvnc_client, client_destroy);
+	nvnc_client_set_userdata(client, wayvnc_client, client_destroy);
 
 	if (self->nr_clients++ == 0 && wayland) {
 		handle_first_client(self);
@@ -1902,7 +1902,7 @@ static void reinitialise_pointers(struct wayvnc* self)
 {
 	struct nvnc_client* c;
 	for (c = nvnc_client_first(self->nvnc); c; c = nvnc_client_next(c)) {
-		struct wayvnc_client* client = nvnc_get_userdata(c);
+		struct wayvnc_client* client = nvnc_client_get_userdata(c);
 		client_init_pointer(client);
 	}
 }
@@ -2231,7 +2231,7 @@ static struct cmd_response* on_attach(struct ctl* ctl, const char* display,
 	for (nvnc_client = nvnc_client_first(self->nvnc); nvnc_client;
 			nvnc_client = nvnc_client_next(nvnc_client)) {
 		struct wayvnc_client* client =
-			nvnc_get_userdata(nvnc_client);
+			nvnc_client_get_userdata(nvnc_client);
 		client_init_wayland(client);
 	}
 
