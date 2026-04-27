@@ -6,7 +6,7 @@ wayvnc - A VNC server for wlroots based Wayland compositors.
 
 # SYNOPSIS
 
-*wayvnc* [options] [address [port]]
+*wayvnc* [options] [address...]
 
 # OPTIONS
 
@@ -71,23 +71,33 @@ wayvnc - A VNC server for wlroots based Wayland compositors.
 	Set wayvnc control socket path. Default: $XDG_RUNTIME_DIR/wayvncctl
 	or /tmp/wayvncctl-$UID
 
-*-u, --unix-socket*
-	Create a UNIX domain socket instead of TCP, treating the address as a
-	path.
-
 *-v, --verbose*
 	Be more verbose. Same as setting `--log-level=info`.
 
 *-V, --version*
 	Show version info.
 
-*-w, --websocket*
-	Create a websocket.
+# ADDRESSES
 
-*-x, --external-listener-fd*
-	Have the VNC server listen on an already bound socket. The address
-	argument becomes a file descriptor which should be inherited from
-	wayvnc's parent process.
+Multiple listening addresses can be specified by appending them to the argument
+list.
+
+For a regular network address, a port number may be set by appending it to the
+address with *:* as a separator; e.g.: *localhost:5901*.
+
+IPv6 addresses must be wrapped in square brackets if a port is specified; e.g.
+*[::]:5901*.
+
+Different socket types may be specified by prefixing the address with the
+the given type name with a *:* in between; e.g. *unix:/tmp/wayvnc.sock*. The
+socket types are: tcp, unix, fd, ws, ws-unix and ws-fd.
+
+With the *fd* type, you can pass an already bound socket for the VNC server to
+listen on. The file descriptor is a numeric value inherited from wayvnc's parent
+process. Example: *fd:42*.
+
+The *ws* family of prefixes encapsulates all communication over the given socket
+using WebSocket framing. Example: *ws:0.0.0.0*.
 
 # DESCRIPTION
 
