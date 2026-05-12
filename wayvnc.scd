@@ -158,7 +158,7 @@ considered to be part of the key or the value.
 *port*
 	The port to which the server shall bind. Default is 5900.
 
-*private_key_file_file*
+*private_key_file*
 	The path to the private key file for TLS encryption. Only applicable
 	when *enable_auth*=true.
 
