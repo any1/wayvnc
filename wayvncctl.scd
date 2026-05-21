@@ -18,17 +18,17 @@ wayvncctl - A command line control client for wayvnc(1)
 	Wait for wayvnc to start up if it's not already running. Default: Exit
 	immediately with an error if wayvnc is not running.
 
-*-r,--reconnect*
+*-r, --reconnect*
 	If disconnected while waiting for events, wait for wayvnc to restart and
 	re-register for events. Default: Exit when wayvnc exits.
 
 *-j, --json*
-	Produce json output to stdout.
+	Produce JSON output to stdout.
 
 *-V, --version*
 	Show version info.
 
-*-v,--verbose*
+*-v, --verbose*
 	Be more verbose.
 
 *-h, --help*
@@ -67,7 +67,7 @@ $ wayvncctl --json event-receive
 {"method":"client-disconnected","params":{"id":"0x10ef670","address":null,"username":null,"connection_count":0}}
 ```
 
-The default human-readible output is a multi-line yaml-like format, with two
+The default human-readable output is a multi-line YAML-like format, with two
 newline characters between each event:
 
 ```
@@ -95,13 +95,13 @@ generate 2 additional events not documented in *wayvnc(1)*:
 	event registration has succeeded, both upon initial startup and on
 	subsequent registrations with _--reconnect_.
 
-	No paramerers.
+	No parameters.
 
 *wayvnc-shutdown*
 	Sent when the wayvnc control connection is dropped, usually due to
 	wayvnc exiting.
 
-	No paramerers.
+	No parameters.
 
 # EXAMPLES
 
@@ -119,7 +119,7 @@ Cycle to the next active output:
 $ wayvncctl output-cycle
 ```
 
-Get json-formatted version information:
+Get JSON-formatted version information:
 
 ```
 $ wayvncctl --json version
@@ -143,7 +143,7 @@ while IFS= read -r EVT; do
             ;;
         wayvnc-shutdown)
             connection_count_now 0
-	    ;;
+            ;;
     esac
 done < <(wayvncctl --wait --reconnect --json event-receive)
 ```

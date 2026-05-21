@@ -2,7 +2,7 @@ wayvnc(1)
 
 # NAME
 
-wayvnc - A VNC server for wlroots based Wayland compositors.
+wayvnc - A VNC server for wlroots-based Wayland compositors.
 
 # SYNOPSIS
 
@@ -89,7 +89,7 @@ IPv6 addresses must be wrapped in square brackets if a port is specified; e.g.
 *[::]:5901*.
 
 Different socket types may be specified by prefixing the address with the
-the given type name with a *:* in between; e.g. *unix:/tmp/wayvnc.sock*. The
+given type name with a *:* in between; e.g. *unix:/tmp/wayvnc.sock*. The
 socket types are: tcp, unix, fd, ws, ws-unix and ws-fd.
 
 With the *fd* type, you can pass an already bound socket for the VNC server to
@@ -101,7 +101,7 @@ using WebSocket framing. Example: *ws:0.0.0.0*.
 
 # DESCRIPTION
 
-This is a VNC server for wlroots based Wayland compositors. It attaches to a
+This is a VNC server for wlroots-based Wayland compositors. It attaches to a
 running Wayland session, creates virtual input devices and exposes a single
 display via the RFB protocol. The Wayland session may be a headless one, so it
 is also possible to run wayvnc without a physical display attached.
@@ -194,8 +194,8 @@ considered to be part of the key or the value.
 	Default: "pc105"
 
 *xkb_options*
-	A comma separated list of options, through which the user specifies
-	non-layout related preferences such as which key is the Compose key. 
+	A comma-separated list of options, through which the user specifies
+	non-layout related preferences such as which key is the Compose key.
 
 	Default: _XKB_DEFAULT_OPTIONS_ or system default.
 
@@ -227,7 +227,7 @@ certificate_file=tls_cert.pem
 
 To facilitate runtime interaction and control, wayvnc opens a unix domain socket
 at *$XDG_RUNTIME_DIR*/wayvncctl (or a fallback of /tmp/wayvncctl-*$UID*). A
-client can connect and exchange json-formatted IPC messages to query and control
+client can connect and exchange JSON-formatted IPC messages to query and control
 the running wayvnc instance.
 
 ## IPC COMMANDS
@@ -282,14 +282,14 @@ whether or not each one is currently being captured.
 
 _OUTPUT-CYCLE_
 
-For multi-output wayland displays, the *output-cycle* command switches which
+For multi-output Wayland displays, the *output-cycle* command switches which
 output is actively captured by wayvnc. Running this once will switch to the next
 available output. If no more outputs are available, it cycles back to the first
 again.
 
 _OUTPUT-SET_
 
-For multi-output wayland displays, the *output-set* command switches which
+For multi-output Wayland displays, the *output-set* command switches which
 output is actively captured by wayvnc by name.
 
 *output-name=name*
@@ -338,7 +338,7 @@ Parameters:
 
 _CLIENT-DISCONNECTED_
 
-The *client-disconnected* event is sent when a VNC cliwnt disconnects from
+The *client-disconnected* event is sent when a VNC client disconnects from
 wayvnc.
 
 Parameters:
@@ -362,7 +362,7 @@ ipc messages, but any client will work. The client initiates the connection and
 sends one or more request objects, each of which will receive a corresponding
 response object.
 
-*Note* This message format is unstable and may change substantially over the
+*Note*: This message format is unstable and may change substantially over the
 next few releases.
 
 _REQUEST_
@@ -384,7 +384,7 @@ is:
 The *method* is the name of the command to be executed. Use the *help* method to
 query a list of all valid method names.
 
-The *id* field is optional and may be any valid json number or string. If
+The *id* field is optional and may be any valid JSON number or string. If
 provided, the response to this request will contain the identical id value,
 which the client may use to coordinate multiple requests and responses.
 
@@ -415,7 +415,7 @@ request, or it may be omitted entirely if the error code alone is sufficient.
 
 _EVENTS_
 
-Events are aaynchronous messages sent from a server to all registered clients.
+Events are asynchronous messages sent from a server to all registered clients.
 The message format is identical to a _REQUEST_, but without an "id" field, and a
 client must not send a response.
 
@@ -432,7 +432,7 @@ Example event message:
 ```
 
 In order to receive any events, a client must first register to receive them by
-sending a _event-receive_ request IPC. Once the success response has been sent
+sending an _event-receive_ request IPC. Once the success response has been sent
 by the server, the client must expect that asynchronous event messages may be
 sent by the server at any time, even between a request and the associated
 response.
@@ -462,9 +462,9 @@ _XDG_RUNTIME_DIR_
 	ERROR: ../src/main.c: 1024: Failed to initialise wayland
 	```
 
-	This means that your wayland compositor does not implement the
+	This means that your Wayland compositor does not implement the
 	screencopy protocol and wayvnc won't work with it. Screencopy is
-	implemented by wlroots based compositors such as Sway and Wayfire.
+	implemented by wlroots-based compositors such as Sway and Wayfire.
 
 *How can I run wayvnc in headless mode/over an SSH session?*
 
@@ -500,7 +500,7 @@ _XDG_RUNTIME_DIR_
 # AUTHORS
 
 Maintained by Andri Yngvason <andri@yngvason.is>. Up-to-date sources can be
-found at https://github.com/any1/wayvnc and bugs reports or patches can be
+found at https://github.com/any1/wayvnc and bug reports or patches can be
 submitted to GitHub's issue tracker.
 
 # SEE ALSO
