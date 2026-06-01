@@ -213,6 +213,20 @@ static void on_output_added(struct observer* observer, void* data)
 	}
 }
 
+static void handle_wayland_detach(struct aml_idle* idle)
+{
+	struct wayvnc* self = aml_get_userdata(idle);
+	aml_stop(aml_get_default(), idle);
+	wayland_detach(self);
+}
+
+static void schedule_wayland_detach(struct wayvnc* self)
+{
+	struct aml_idle* idle = aml_idle_new(handle_wayland_detach, self, NULL);
+	aml_start(aml_get_default(), idle);
+	aml_unref(idle);
+}
+
 static void on_output_removed(struct observer* observer, void* data)
 {
 	struct wayvnc* self = wl_container_of(observer, self,
@@ -234,7 +248,7 @@ static void on_output_removed(struct observer* observer, void* data)
 			out == output_from_image_source(self->image_source)) {
 		if (self->start_detached) {
 			nvnc_log(NVNC_LOG_WARNING, "No fallback outputs left. Detaching...");
-			wayland_detach(self);
+			schedule_wayland_detach(self);
 		} else {
 			nvnc_log(NVNC_LOG_ERROR, "No fallback outputs left. Exiting...");
 			wayvnc_exit(self);
@@ -282,6 +296,7 @@ static void wayvnc_display_list_detach(struct wayvnc_display_list* list)
 static void wayland_detach(struct wayvnc* self)
 {
 	wayland_destroy(wayland);
+	wayland = NULL;
 }
 
 static void on_wayland_destroyed(struct observer* observer, void* data)
@@ -1146,7 +1161,7 @@ static void on_desktop_output_destroyed(struct observer* observer, void* data)
 
 	if (wayvnc->start_detached) {
 		nvnc_log(NVNC_LOG_WARNING, "No desktop outputs left. Detaching...");
-		wayland_detach(wayvnc);
+		schedule_wayland_detach(wayvnc);
 	} else {
 		nvnc_log(NVNC_LOG_ERROR, "No desktop outputs left. Exiting...");
 		wayvnc_exit(wayvnc);
@@ -2730,6 +2745,7 @@ int main(int argc, char* argv[])
 	nvnc_del(self.nvnc);
 	self.nvnc = NULL;
 	wayland_destroy(wayland);
+	wayland = NULL;
 
 	aml_stop(aml, self.rate_limiter);
 	aml_unref(self.rate_limiter);
