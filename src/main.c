@@ -1173,7 +1173,6 @@ static void on_desktop_output_destroyed(struct observer* observer, void* data)
 	struct wayvnc_display* self = wl_container_of(observer, self,
 			destruction_observer);
 	struct wayvnc* wayvnc = self->wayvnc;
-	nvnc_remove_display(wayvnc->nvnc, self->nvnc_display);
 	wayvnc_display_destroy(self);
 
 	if (!wayland || !wl_list_empty(&wayland->outputs))
