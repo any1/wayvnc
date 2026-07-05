@@ -14,6 +14,7 @@ class Program:
 	read_buffer = ""
 	decoder = json.JSONDecoder()
 	replies = {}
+	attaching = False
 
 	async def read_message(self):
 		while True:
@@ -53,7 +54,11 @@ class Program:
 		# TODO: It would be better to pass the socket on to wayvnc as a file descriptor
 		proc = await asyncio.create_subprocess_shell('setfacl -m "u:vnc:rwx" {} {}'.format(Path(display).parent, display))
 		await proc.wait()
-		return await self.send_command('attach', {'display': display})
+
+		self.attaching = True
+		result = await self.send_command('attach', {'display': display})
+		self.attaching = False
+		return result
 
 	async def attach_any(self):
 		for path in glob.iglob('/run/user/*/wayland-*'):
@@ -72,7 +77,10 @@ class Program:
 	async def process_message(self, message):
 		method = message['method']
 		if (method == 'detached'):
-			await self.attach_any_with_retry()
+			# Switching attachment detaches from the old compositor first;
+			# ignore the detached event our own attach produces.
+			if not self.attaching:
+				await self.attach_any_with_retry()
 
 	async def main(self):
 		self.reader, self.writer = await asyncio.open_unix_connection("/tmp/wayvnc/wayvncctl.sock")
