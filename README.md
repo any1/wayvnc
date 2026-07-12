@@ -83,6 +83,7 @@ cd -
 
 ### Configure and Build
 ```
+cd wayvnc
 meson build
 ninja -C build
 ```
