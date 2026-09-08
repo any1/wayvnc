@@ -13,6 +13,13 @@ you need to read and understand the relevant sections of the specification. You
 can use an LLM to help you find the relevant sections, but do not rely on
 summaries alone.
 
+You may enlist the help of AI to file bug reports, but do not allow an AI to
+submit a pull-request in your name. This shifts the burden of reviewing the AI's
+work to the maintainer of the project and it is not appreciated.
+
+With the exception of bug reports, no AI generated prose is allowed. This
+includes pull-request summaries, commit messages and code comments.
+
 ## Commit Messages
 
 Please, try to write good commit messages. Do your best to follow these 7 rules,
