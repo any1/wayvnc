@@ -2196,9 +2196,16 @@ void switch_to_output(struct wayvnc* self, struct output* output)
 					output_get_name(output));
 			return;
 		}
+
 		screencopy_stop(self->screencopy);
 		output_release_power_on(current_output);
+
+		struct wayvnc_display *display =
+			wayvnc_display_find_by_source(self, self->image_source);
+		assert(display);
+		display->image_source = &output->image_source;
 	}
+
 	set_image_source(self, &output->image_source);
 	configure_screencopy(self);
 	reinitialise_pointers(self);
