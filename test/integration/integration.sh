@@ -58,7 +58,8 @@ catch_crash()
 {
 	# LeakSanitizer does not work under ptrace and fails on exit
 	ASAN_OPTIONS="${ASAN_OPTIONS:+$ASAN_OPTIONS:}detect_leaks=0" \
-	gdb -batch -ex run -ex "thread apply all bt full" --args $@
+	exec gdb -batch -ex "handle SIGTERM nostop noprint pass" \
+		-ex run -ex "thread apply all bt full" --args $@
 }
 
 INTEGRATION_ROOT=$(realpath "$(dirname "$0")")
@@ -172,7 +173,8 @@ start_wayvnc() {
 stop_wayvnc() {
 	[[ -z $WAYVNC_PID ]] && return 0
 	echo "Stopping wayvnc ($WAYVNC_PID)"
-	kill "$WAYVNC_PID"
+	pkill -TERM -P "$WAYVNC_PID"
+	wait "$WAYVNC_PID" || true
 	unset WAYVNC_PID
 }
 
