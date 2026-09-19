@@ -220,6 +220,7 @@ verify_events() {
 cleanup() {
 	result=$?
 	set +e
+	stop_lingering_client
 	stop_wayvnc
 	stop_sway
 	stop_wayvncctl_events
@@ -298,6 +299,23 @@ test_exit_ipc() {
 client() {
 	VNCDO_LOG=$XDG_RUNTIME_DIR/vncdo.log
 	$VNCDO -v --server=$WAYVNC_ADDRESS::$WAYVNC_PORT "$@" &>>$VNCDO_LOG
+}
+
+LINGERING_CLIENT_PID=
+start_lingering_client() {
+	echo "Connecting a lingering client"
+	VNCDO_LOG=$XDG_RUNTIME_DIR/vncdo.log
+	$VNCDO -v --server=$WAYVNC_ADDRESS::$WAYVNC_PORT pause 60 &>>$VNCDO_LOG &
+	LINGERING_CLIENT_PID=$!
+	wait_until verify_events \
+		client-connected
+}
+
+stop_lingering_client() {
+	[[ -z $LINGERING_CLIENT_PID ]] && return 0
+	echo "Stopping lingering client ($LINGERING_CLIENT_PID)"
+	kill "$LINGERING_CLIENT_PID" 2>/dev/null || true
+	unset LINGERING_CLIENT_PID
 }
 
 test_client_connect() {
@@ -396,6 +414,7 @@ multioutput_test() {
 		return 0
 	fi
 	# Remove the output, and make sure we fallback properly
+	start_lingering_client
 	sway_output_destroy HEADLESS-3
 	wait_until verify_events \
 		capture-changed \
@@ -413,6 +432,7 @@ multioutput_test() {
 		output-removed \
 		output-removed \
 		wayvnc-shutdown
+	stop_lingering_client
 	stop_sway
 	stop_wayvncctl_events
 }
@@ -463,12 +483,17 @@ detached_test() {
 	# Reattach, then remove the last output, and make sure we detach
 	test_attach_ipc "$WAYLAND_DISPLAY"
 	wait_until test_output_list_ipc HEADLESS-1
+	wait_until verify_events \
+		capture-changed
+	start_lingering_client
 	sway_output_destroy HEADLESS-1
 	wait_until verify_events \
-		capture-changed \
 		output-removed \
 		detached
 	test_output_list_empty
+	stop_lingering_client
+	wait_until verify_events \
+		client-disconnected
 
 	test_exit_ipc
 	wait_until verify_events \
