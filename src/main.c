@@ -602,12 +602,13 @@ static struct cmd_response* on_wayvnc_exit(struct ctl* ctl)
 	return cmd_ok();
 }
 
-int init_main_loop(struct wayvnc* self)
+
+static int add_signal_handler(struct wayvnc* self, int signo)
 {
 	struct aml* loop = aml_get_default();
 
 	struct aml_signal* sig;
-	sig = aml_signal_new(SIGINT, on_signal, self, NULL);
+	sig = aml_signal_new(signo, on_signal, self, NULL);
 	if (!sig)
 		return -1;
 
@@ -616,6 +617,15 @@ int init_main_loop(struct wayvnc* self)
 	if (rc < 0)
 		return -1;
 
+	return 0;
+}
+
+static int init_main_loop(struct wayvnc* self)
+{
+	if (add_signal_handler(self, SIGINT) < 0)
+		return -1;
+	if (add_signal_handler(self, SIGTERM) < 0)
+		return -1;
 	return 0;
 }
 
