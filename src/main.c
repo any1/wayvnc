@@ -125,6 +125,7 @@ struct wayvnc {
 	uint32_t n_frames_sent;
 
 	bool disable_input;
+	bool disable_clipboard;
 	bool use_transient_seat;
 	bool use_toplevel;
 
@@ -1964,6 +1965,9 @@ static void client_init_data_control(struct wayvnc_client* self)
 {
 	struct wayvnc* wayvnc = self->server;
 
+	if (wayvnc->disable_clipboard)
+		return;
+
 	if (wayland->ext_data_control_manager_v1) {
 		self->data_control.ext_manager =
 			wayland->ext_data_control_manager_v1;
@@ -2486,6 +2490,8 @@ int main(int argc, char* argv[])
 		  "Select a config file." },
 		{ 'd', "disable-input", NULL,
 		  "Disable all remote input." },
+		{ 0, "disable-clipboard", NULL,
+		  "Disable clipboard synchronization." },
 		{ 'D', "detached", NULL,
 		  "Start detached from a compositor." },
 		{ 'e', "exit-on-disconnect", NULL,
@@ -2668,6 +2674,8 @@ int main(int argc, char* argv[])
 		return 1;
 
 	self.disable_input = disable_input;
+	self.disable_clipboard = !!option_parser_get_value(&option_parser,
+			"disable-clipboard");
 	self.use_transient_seat = use_transient_seat;
 
 	srand(time(NULL));

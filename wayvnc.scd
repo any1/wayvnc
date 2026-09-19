@@ -20,6 +20,11 @@ wayvnc - A VNC server for wlroots-based Wayland compositors.
 	Disable all remote input. This allows using wayvnc without compositor
 	support of virtual mouse / keyboard protocols.
 
+*--disable-clipboard*
+	Disable clipboard and primary-selection synchronization with VNC clients.
+	Keyboard and pointer input remain enabled. Applications on the compositor
+	can still copy and paste between themselves.
+
 *-D, --detached*
 	Start detached from a compositor. Run *wayvncctl attach* to attach to
 	a compositor.
