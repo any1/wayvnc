@@ -179,7 +179,9 @@ stop_wayvnc() {
 WAYVNCCTL_PID=
 WAYVNCCTL_LOG=$XDG_RUNTIME_DIR/wayvncctl.log
 WAYVNCCTL_EVENTS=$XDG_RUNTIME_DIR/wayvncctl.events
+WAYVNCCTL_EVENTS_CONSUMED=$XDG_RUNTIME_DIR/wayvncctl.events.consumed
 start_wayvncctl_events() {
+	echo 0 >"$WAYVNCCTL_EVENTS_CONSUMED"
 	$WAYVNCCTL --verbose --wait --reconnect --json event-receive >"$WAYVNCCTL_EVENTS" 2>"$WAYVNCCTL_LOG" &
 	WAYVNCCTL_PID=$!
 }
@@ -188,12 +190,15 @@ stop_wayvncctl_events() {
 	[[ -z $WAYVNCCTL_PID ]] && return 0
 	echo "Stopping wayvncctl event recorder ($WAYVNCCTL_PID)"
 	kill "$WAYVNCCTL_PID"
-	rm -f "$WAYVNCCTL_EVENTS" || true
+	rm -f "$WAYVNCCTL_EVENTS" "$WAYVNCCTL_EVENTS_CONSUMED" || true
 	unset WAYVNCCTL_PID
 }
 
+# Verifies the events recorded since the last successful verification
 verify_events() {
 	local expected=("$@")
+	local consumed
+	consumed=$(cat "$WAYVNCCTL_EVENTS_CONSUMED")
 	echo "Verifying recorded events"
 	local name i=0
 	while IFS= read -r EVT; do
@@ -201,13 +206,14 @@ verify_events() {
 		ex=${expected[$((i++))]}
 		echo "  Event: $name=~$ex"
 		[[ $name == "$ex" ]] || return 1
-	done <"$WAYVNCCTL_EVENTS"
+	done < <(tail -n +$((consumed + 1)) "$WAYVNCCTL_EVENTS")
 	if [[ $i -lt ${#expected[@]} ]]; then
 		while [[ $i -lt ${#expected[@]} ]]; do
 			print_fail "  Missing: ${expected[$((i++))]}"
 		done
 		return 1
 	fi
+	echo $((consumed + i)) >"$WAYVNCCTL_EVENTS_CONSUMED"
 	print_ok
 }
 
@@ -343,14 +349,10 @@ smoke_test() {
 	$extra_test
 	test_client_connect
 	wait_until verify_events \
-		wayvnc-startup \
 		client-connected \
 		client-disconnected
 	test_exit_ipc
 	wait_until verify_events \
-		wayvnc-startup \
-		client-connected \
-		client-disconnected \
 		wayvnc-shutdown
 	stop_wayvncctl_events
 	stop_sway
@@ -371,15 +373,12 @@ multioutput_test() {
 	# Test outout-cycle
 	$WAYVNCCTL output-cycle
 	wait_until verify_events \
-		wayvnc-startup \
 		capture-changed
 	test_output_list_ipc HEADLESS-2
 
 	# Test outout-cycle wraps
 	$WAYVNCCTL output-cycle
 	wait_until verify_events \
-		wayvnc-startup \
-		capture-changed \
 		capture-changed
 	test_output_list_ipc HEADLESS-1
 
@@ -388,9 +387,6 @@ multioutput_test() {
 	wait_until test_output_list_ipc HEADLESS-1
 	$WAYVNCCTL output-set HEADLESS-3
 	wait_until verify_events \
-		wayvnc-startup \
-		capture-changed \
-		capture-changed \
 		output-added \
 		capture-changed
 	test_output_list_ipc HEADLESS-3
@@ -402,11 +398,6 @@ multioutput_test() {
 	# Remove the output, and make sure we fallback properly
 	sway_output_destroy HEADLESS-3
 	wait_until verify_events \
-		wayvnc-startup \
-		capture-changed \
-		capture-changed \
-		output-added \
-		capture-changed \
 		capture-changed \
 		output-removed
 	wait_until test_output_list_ipc HEADLESS-1
@@ -419,13 +410,6 @@ multioutput_test() {
 	echo "  wayvnc exited normally"
 	print_ok
 	wait_until verify_events \
-		wayvnc-startup \
-		capture-changed \
-		capture-changed \
-		output-added \
-		capture-changed \
-		capture-changed \
-		output-removed \
 		output-removed \
 		output-removed \
 		wayvnc-shutdown
@@ -472,7 +456,6 @@ detached_test() {
 
 	test_detach_ipc
 	wait_until verify_events \
-		wayvnc-startup \
 		capture-changed \
 		detached
 	test_output_list_empty
@@ -482,9 +465,6 @@ detached_test() {
 	wait_until test_output_list_ipc HEADLESS-1
 	sway_output_destroy HEADLESS-1
 	wait_until verify_events \
-		wayvnc-startup \
-		capture-changed \
-		detached \
 		capture-changed \
 		output-removed \
 		detached
@@ -492,12 +472,6 @@ detached_test() {
 
 	test_exit_ipc
 	wait_until verify_events \
-		wayvnc-startup \
-		capture-changed \
-		detached \
-		capture-changed \
-		output-removed \
-		detached \
 		wayvnc-shutdown
 	stop_wayvncctl_events
 	stop_sway
