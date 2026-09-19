@@ -70,12 +70,20 @@ WAYVNC=${WAYVNC:-$(which wayvnc)}
 WAYVNCCTL=${WAYVNCCTL:-$(which wayvncctl)}
 SWAY=${SWAY:-$(which sway)}
 SWAYMSG=${SWAYMSG:-$(which swaymsg)}
-echo "Found: $WAYVNC $WAYVNCCTL $SWAY $SWAYMSG"
-$WAYVNC --version
-$SWAY --version
-IFS=" .-" read -r _ _ SWAYMAJOR SWAYMINOR _ < <($SWAY --version)
 VNCDO=${VNCDO:-$(which vncdo)}
-$VNCDO --version 2>/dev/null
+echo "Found: $WAYVNC $WAYVNCCTL $SWAY $SWAYMSG $VNCDO"
+
+check_tool() {
+	if ! "$@"; then
+		print_fail "Could not run $*"
+		exit 1
+	fi
+}
+
+check_tool $WAYVNC --version
+check_tool $SWAY --version
+check_tool $VNCDO --version
+IFS=" .-" read -r _ _ SWAYMAJOR SWAYMINOR _ < <($SWAY --version)
 
 export XDG_CONFIG_HOME=$INTEGRATION_ROOT/xdg_config
 export XDG_RUNTIME_DIR=/tmp/wayvnc-integration-$$
