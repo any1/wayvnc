@@ -1731,7 +1731,8 @@ static void client_destroy(void* obj)
 	if (wayvnc->nr_clients == 0 && wayland) {
 		nvnc_log(NVNC_LOG_INFO, "Stopping screen capture");
 		screencopy_stop(wayvnc->screencopy);
-		image_source_release_power_on(wayvnc->image_source);
+		if (wayvnc->image_source)
+			image_source_release_power_on(wayvnc->image_source);
 		stop_performance_ticker(wayvnc);
 	}
 
