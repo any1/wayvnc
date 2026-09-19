@@ -198,6 +198,8 @@ static bool configure_cursor_sc(struct wayvnc* self,
 		struct wayvnc_client* client);
 static bool wayvnc_desktop_display_add(struct wayvnc* self,
 		struct image_source* image_source);
+static struct wayvnc_display *wayvnc_display_find_by_source(struct wayvnc* self,
+		struct image_source *source);
 
 struct wayland* wayland = NULL;
 
@@ -268,6 +270,11 @@ static void on_output_removed(struct observer* observer, void* data)
 			out == output_from_image_source(self->image_source)) {
 		if (self->start_detached) {
 			nvnc_log(NVNC_LOG_WARNING, "No fallback outputs left. Detaching...");
+			struct wayvnc_display* display =
+				wayvnc_display_find_by_source(self,
+						self->image_source);
+			assert(display);
+			display->image_source = NULL;
 			self->image_source = NULL;
 			schedule_wayland_detach(self);
 		} else {
