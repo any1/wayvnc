@@ -56,6 +56,8 @@ print_fail()
 
 catch_crash()
 {
+	# LeakSanitizer does not work under ptrace and fails on exit
+	ASAN_OPTIONS="${ASAN_OPTIONS:+$ASAN_OPTIONS:}detect_leaks=0" \
 	gdb -batch -ex run -ex "thread apply all bt full" --args $@
 }
 
@@ -273,6 +275,12 @@ verify_wayvnc_exited() {
 	unset WAYVNC_PID
 }
 
+verify_wayvnc_exited_normally() {
+	verify_wayvnc_exited
+	# The exit status is swallowed by gdb, so check its report instead
+	grep -q "exited normally" "$WAYVNC_LOG"
+}
+
 test_exit_ipc() {
 	echo "Checking wayvnc-exit command"
 	$WAYVNCCTL wayvnc-exit &>/dev/null
@@ -402,8 +410,26 @@ multioutput_test() {
 		capture-changed \
 		output-removed
 	wait_until test_output_list_ipc HEADLESS-1
+
+	# Remove the remaining outputs, and make sure we exit normally
+	sway_output_destroy HEADLESS-2
+	sway_output_destroy HEADLESS-1
+	echo "Checking that wayvnc exits normally"
+	verify_wayvnc_exited_normally
+	echo "  wayvnc exited normally"
+	print_ok
+	wait_until verify_events \
+		wayvnc-startup \
+		capture-changed \
+		capture-changed \
+		output-added \
+		capture-changed \
+		capture-changed \
+		output-removed \
+		output-removed \
+		output-removed \
+		wayvnc-shutdown
 	stop_sway
-	verify_wayvnc_exited
 	stop_wayvncctl_events
 }
 
@@ -451,10 +477,26 @@ detached_test() {
 		detached
 	test_output_list_empty
 
+	# Reattach, then remove the last output, and make sure we detach
+	test_attach_ipc "$WAYLAND_DISPLAY"
+	wait_until test_output_list_ipc HEADLESS-1
+	sway_output_destroy HEADLESS-1
+	wait_until verify_events \
+		wayvnc-startup \
+		capture-changed \
+		detached \
+		capture-changed \
+		output-removed \
+		detached
+	test_output_list_empty
+
 	test_exit_ipc
 	wait_until verify_events \
 		wayvnc-startup \
 		capture-changed \
+		detached \
+		capture-changed \
+		output-removed \
 		detached \
 		wayvnc-shutdown
 	stop_wayvncctl_events
