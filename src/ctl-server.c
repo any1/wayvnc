@@ -552,11 +552,15 @@ static struct cmd_response* ctl_server_dispatch_cmd(struct ctl* self,
 	return response;
 }
 
+static bool client_has_pending_output(struct ctl_client* self)
+{
+	return json_array_size(self->response_queue) > 0 || self->write_len;
+}
+
 static void client_set_aml_event_mask(struct ctl_client* self)
 {
 	int mask = AML_EVENT_READ;
-	if (json_array_size(self->response_queue) > 0 ||
-			self->write_len)
+	if (client_has_pending_output(self))
 		mask |= AML_EVENT_WRITE;
 	aml_set_event_mask(self->handler, mask);
 }
@@ -638,7 +642,8 @@ static int client_enqueue_internal_error(struct ctl_client* self,
 	return result;
 }
 
-static void send_ready(struct ctl_client* client)
+// Returns the number of bytes sent, or -1 on error
+static ssize_t client_send(struct ctl_client* client)
 {
 	if (client->write_buffer) {
 		nvnc_trace("Continuing partial write (%d left)", client->write_len);
@@ -656,37 +661,51 @@ static void send_ready(struct ctl_client* client)
 		nvnc_trace("Nothing to send");
 	}
 	if (!client->write_ptr)
-		goto no_data;
+		return 0;
 	ssize_t n = send(client->fd, client->write_ptr, client->write_len,
 			MSG_NOSIGNAL|MSG_DONTWAIT);
 	if (n == -1) {
 		if (errno == EAGAIN || errno == EWOULDBLOCK) {
 			nvnc_trace("send: EAGAIN");
-			goto send_eagain;
+			return 0;
 		}
 		nvnc_log(NVNC_LOG_ERROR, "Could not send response: %m");
-		client_destroy(client);
-		return;
+		return -1;
 	}
 	nvnc_trace("sent %d/%d bytes", n, client->write_len);
 	client->write_ptr += n;
 	client->write_len -= n;
-send_eagain:
 	if (client->write_len == 0) {
 		nvnc_trace("Write buffer empty!");
 		free(client->write_buffer);
 		client->write_buffer = NULL;
 		client->write_ptr = NULL;
-		if (client->drop_after_next_send) {
-			nvnc_log(NVNC_LOG_WARNING, "Intentional disconnect");
-			client_destroy(client);
-			return;
-		}
 	} else {
 		nvnc_trace("Write buffer has %d remaining", client->write_len);
 	}
-no_data:
+	return n;
+}
+
+static void send_ready(struct ctl_client* client)
+{
+	ssize_t n = client_send(client);
+	if (n < 0) {
+		client_destroy(client);
+		return;
+	}
+	if (n > 0 && !client->write_buffer && client->drop_after_next_send) {
+		nvnc_log(NVNC_LOG_WARNING, "Intentional disconnect");
+		client_destroy(client);
+		return;
+	}
 	client_set_aml_event_mask(client);
+}
+
+static void client_flush(struct ctl_client* client)
+{
+	while (client_has_pending_output(client))
+		if (client_send(client) <= 0)
+			break;
 }
 
 static void recv_ready(struct ctl_client* client)
@@ -918,8 +937,10 @@ static void ctl_server_stop(struct ctl* self)
 	aml_unref(self->handler);
 	struct ctl_client* client;
 	struct ctl_client* tmp;
-	wl_list_for_each_safe(client, tmp, &self->clients, link)
+	wl_list_for_each_safe(client, tmp, &self->clients, link) {
+		client_flush(client);
 		client_destroy(client);
+	}
 	close(self->fd);
 	unlink(self->socket_path);
 }
