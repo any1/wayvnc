@@ -504,7 +504,57 @@ detached_test() {
 	stop_sway
 }
 
+WAYVNC_CONFIG=$XDG_RUNTIME_DIR/wayvnc.config
+verify_wayvnc_fails_with() {
+	local expected_error=$1
+	shift
+	echo "Starting wayvnc, expecting failure..."
+	WAYVNC_LOG=$XDG_RUNTIME_DIR/wayvnc.log
+	local status=0
+	timeout 5 $WAYVNC -D -C "$WAYVNC_CONFIG" -L debug \
+		"$WAYVNC_ADDRESS" "$WAYVNC_PORT" &>"$WAYVNC_LOG" || status=$?
+	echo "  Exit status: $status=~1"
+	[[ $status -eq 1 ]]
+	echo "  Error: $expected_error"
+	grep -qF "$expected_error" "$WAYVNC_LOG"
+	print_ok
+}
+
+bad_config_syntax_test() {
+	test_setup "bad config syntax test"
+	cat >"$WAYVNC_CONFIG" <<-EOF
+		address=127.0.0.1
+
+		this line has no delimiter
+	EOF
+	verify_wayvnc_fails_with "Failed to load config. Error on line 3"
+}
+
+bad_config_rsa_key_path_test() {
+	test_setup "bad config RSA key path test"
+	cat >"$WAYVNC_CONFIG" <<-EOF
+		enable_auth=true
+		password=secret
+		rsa_private_key_file=$XDG_RUNTIME_DIR/nonexistent/rsa_key.pem
+	EOF
+	verify_wayvnc_fails_with "Failed to load RSA credentials"
+}
+
+bad_config_tls_paths_test() {
+	test_setup "bad config TLS paths test"
+	cat >"$WAYVNC_CONFIG" <<-EOF
+		enable_auth=true
+		password=secret
+		private_key_file=$XDG_RUNTIME_DIR/nonexistent/key.pem
+		certificate_file=$XDG_RUNTIME_DIR/nonexistent/cert.pem
+	EOF
+	verify_wayvnc_fails_with "Failed to enable TLS authentication"
+}
+
 smoke_test test_output_list_ipc
 smoke_test true --desktop
 multioutput_test
 detached_test
+bad_config_syntax_test
+bad_config_rsa_key_path_test
+bad_config_tls_paths_test
