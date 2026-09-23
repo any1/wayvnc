@@ -1313,6 +1313,7 @@ static int init_nvnc(struct wayvnc* self)
 auth_failure:
 	wayvnc_display_list_deinit(&self->wayvnc_displays);
 	nvnc_del(self->nvnc);
+	self->nvnc = NULL;
 	return -1;
 }
 
