@@ -24,6 +24,8 @@
 #include <string.h>
 #include <neatvnc.h>
 
+#define MAYBE_UNUSED __attribute__((unused))
+
 struct toplevel* toplevel_from_image_source(const struct image_source* source)
 {
 	assert(image_source_is_toplevel(source));
@@ -68,7 +70,7 @@ static void handle_closed(void* data,
 static void handle_done(void* data,
 		struct ext_foreign_toplevel_handle_v1* handle)
 {
-	struct toplevel* self = data;
+	struct toplevel* self MAYBE_UNUSED = data;
 	nvnc_trace("Added toplevel: %s, app_id: %s, title: %s",
 			self->identifier, self->app_id, self->title);
 }
