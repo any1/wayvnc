@@ -633,11 +633,14 @@ static int ctl_client_reconnect_event_loop(struct ctl_client* self,
 static int block_until_reconnect(struct ctl_client* self,
 		struct jsonipc_request* request)
 {
-	while (ctl_client_reconnect_event_loop(self, request) != 0)
+	while (ctl_client_reconnect_event_loop(self, request) != 0) {
+		if (!self->wait_for_events)
+			return -1;
 		if (usleep(50000) == -1) {
 			DEBUG("Interrupted waiting for the IPC socket");
 			return -1;
 		}
+	}
 
 	return 0;
 }

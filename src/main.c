@@ -198,6 +198,8 @@ static bool configure_cursor_sc(struct wayvnc* self,
 		struct wayvnc_client* client);
 static bool wayvnc_desktop_display_add(struct wayvnc* self,
 		struct image_source* image_source);
+static struct wayvnc_display *wayvnc_display_find_by_source(struct wayvnc* self,
+		struct image_source *source);
 
 struct wayland* wayland = NULL;
 
@@ -268,6 +270,11 @@ static void on_output_removed(struct observer* observer, void* data)
 			out == output_from_image_source(self->image_source)) {
 		if (self->start_detached) {
 			nvnc_log(NVNC_LOG_WARNING, "No fallback outputs left. Detaching...");
+			struct wayvnc_display* display =
+				wayvnc_display_find_by_source(self,
+						self->image_source);
+			assert(display);
+			display->image_source = NULL;
 			self->image_source = NULL;
 			schedule_wayland_detach(self);
 		} else {
@@ -1306,6 +1313,7 @@ static int init_nvnc(struct wayvnc* self)
 auth_failure:
 	wayvnc_display_list_deinit(&self->wayvnc_displays);
 	nvnc_del(self->nvnc);
+	self->nvnc = NULL;
 	return -1;
 }
 
@@ -1731,7 +1739,8 @@ static void client_destroy(void* obj)
 	if (wayvnc->nr_clients == 0 && wayland) {
 		nvnc_log(NVNC_LOG_INFO, "Stopping screen capture");
 		screencopy_stop(wayvnc->screencopy);
-		image_source_release_power_on(wayvnc->image_source);
+		if (wayvnc->image_source)
+			image_source_release_power_on(wayvnc->image_source);
 		stop_performance_ticker(wayvnc);
 	}
 
@@ -2196,9 +2205,16 @@ void switch_to_output(struct wayvnc* self, struct output* output)
 					output_get_name(output));
 			return;
 		}
+
 		screencopy_stop(self->screencopy);
 		output_release_power_on(current_output);
+
+		struct wayvnc_display *display =
+			wayvnc_display_find_by_source(self, self->image_source);
+		assert(display);
+		display->image_source = &output->image_source;
 	}
+
 	set_image_source(self, &output->image_source);
 	configure_screencopy(self);
 	reinitialise_pointers(self);
