@@ -1,3 +1,9 @@
+wayvnc (0.10.2-1+rpt1) bookworm; urgency=medium
+
+  * Upgrade to v0.10.2
+
+ -- Andri Yngvason <andri@yngvason.is>  Mon, 28 Sep 2026 09:30:00 +0000
+
 wayvnc (0.10.1+rpt1) bookworm; urgency=medium
 
   * Upgrade to v0.10.1
