@@ -65,6 +65,10 @@
 #include "pam_auth.h"
 #endif
 
+#ifdef ENABLE_AUDIO
+#include "audio.h"
+#endif
+
 #define DEFAULT_ADDRESS "127.0.0.1"
 #define DEFAULT_PORT 5900
 
@@ -160,6 +164,8 @@ struct wayvnc {
 	struct observer destruction_observer;
 
 	struct aml_idle* deferred_detach;
+
+	struct audio* audio;
 };
 
 struct wayvnc_client {
@@ -173,6 +179,8 @@ struct wayvnc_client {
 	struct pointer pointer;
 	struct keyboard keyboard;
 	struct data_control data_control;
+
+	struct audio_capture* audio_capture;
 };
 
 void wayvnc_exit(struct wayvnc* self);
@@ -1250,6 +1258,21 @@ static void wayvnc_display_list_deinit(struct wayvnc_display_list* list)
 	}
 }
 
+#ifdef ENABLE_AUDIO
+static void on_audio_config(struct nvnc_client* nvnc_client,
+		const struct nvnc_audio_config* config)
+{
+	struct wayvnc_client* client = nvnc_client_get_userdata(nvnc_client);
+
+	audio_capture_destroy(client->audio_capture);
+	client->audio_capture = NULL;
+
+	if (nvnc_audio_config_is_enabled(config))
+		client->audio_capture = audio_capture_new(client->server->audio,
+				nvnc_client, config);
+}
+#endif
+
 static int init_nvnc(struct wayvnc* self)
 {
 	self->nvnc = nvnc_new();
@@ -1317,6 +1340,11 @@ static int init_nvnc(struct wayvnc* self)
 
 	nvnc_set_new_client_fn(self->nvnc, on_nvnc_client_new);
 	nvnc_set_cut_text_fn(self->nvnc, on_client_cut_text);
+
+#ifdef ENABLE_AUDIO
+	if (self->audio)
+		nvnc_set_audio_sink_config_fn(self->nvnc, on_audio_config);
+#endif
 
 	return 0;
 
@@ -1762,6 +1790,10 @@ static void client_destroy(void* obj)
 
 	if (self->data_control.wlr_manager || self->data_control.ext_manager)
 		data_control_destroy(&self->data_control);
+
+#ifdef ENABLE_AUDIO
+	audio_capture_destroy(self->audio_capture);
+#endif
 
 	free(self);
 }
@@ -2738,6 +2770,12 @@ int main(int argc, char* argv[])
 	if (!self.ctl)
 		goto ctl_server_failure;
 
+#ifdef ENABLE_AUDIO
+	self.audio = audio_new();
+	if (!self.audio)
+		nvnc_log(NVNC_LOG_WARNING, "Failed to initialise audio, continuing without it");
+#endif
+
 	if (init_nvnc(&self) < 0)
 		goto nvnc_failure;
 
@@ -2807,6 +2845,9 @@ int main(int argc, char* argv[])
 	wayvnc_display_list_deinit(&self.wayvnc_displays);
 	nvnc_del(self.nvnc);
 	self.nvnc = NULL;
+#ifdef ENABLE_AUDIO
+	audio_destroy(self.audio);
+#endif
 	wayland_destroy(wayland);
 	wayland = NULL;
 
@@ -2824,6 +2865,9 @@ nvnc_failure:
 	wayvnc_display_list_deinit(&self.wayvnc_displays);
 	nvnc_del(self.nvnc);
 	self.nvnc = NULL;
+#ifdef ENABLE_AUDIO
+	audio_destroy(self.audio);
+#endif
 ctl_server_failure:
 	wayland_detach(&self);
 wayland_failure:

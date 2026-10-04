@@ -55,6 +55,7 @@ drm = dependency('libdrm')
 xkbcommon = dependency('xkbcommon', version: '>=1.0.0')
 wayland_client = dependency('wayland-client')
 jansson = dependency('jansson')
+pipewire = dependency('libpipewire-0.3', required: get_option('audio'))
 
 aml_version = ['>=1.0.0', '<2.0.0']
 neatvnc_version = ['>=1.1', '<2.0.0']
@@ -169,6 +170,12 @@ if libpam.found()
 	dependencies += libpam
 	sources += 'src/pam_auth.c'
 	config.set('ENABLE_PAM', true)
+endif
+
+if pipewire.found()
+	dependencies += pipewire
+	sources += 'src/audio.c'
+	config.set('ENABLE_AUDIO', true)
 endif
 
 configure_file(
