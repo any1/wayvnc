@@ -22,8 +22,9 @@ c_args = [
 ]
 
 version = '"@0@"'.format(meson.project_version())
+fs = import('fs')
 git = find_program('git', native: true, required: false)
-if git.found()
+if git.found() and fs.exists('.git')
 	git_commit = run_command([git, 'rev-parse', '--short', 'HEAD'], check: false)
 	git_branch = run_command([git, 'rev-parse', '--abbrev-ref', 'HEAD'], check: false)
 	if git_commit.returncode() == 0 and git_branch.returncode() == 0
