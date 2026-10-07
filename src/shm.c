@@ -21,6 +21,7 @@
 #include <unistd.h>
 
 #include "config.h"
+#include "util.h"
 
 // Linux with glibc < 2.27 has no wrapper
 #if defined(HAVE_MEMFD) && !defined(HAVE_MEMFD_CREATE)
@@ -73,6 +74,22 @@ static int create_shm_file(void)
 
 int shm_alloc_fd(size_t size)
 {
+#if defined(__NetBSD__)
+	/* Bound allocations to 1 GiB, leaving room for page alignment. */
+	if (size > (1u << 30)) {
+		errno = EINVAL;
+		return -1;
+	}
+	/* NetBSD memfd mappings may validate the page-rounded mapping length
+	 * against the file size. Pad the file to the page size.
+	 */
+	long page_size = sysconf(_SC_PAGESIZE);
+	if (page_size <= 0) {
+		errno = EINVAL;
+		return -1;
+	}
+	size = ALIGN_UP(size, (size_t)page_size);
+#endif
 	int fd = create_shm_file();
 	if (fd < 0)
 		return -1;
