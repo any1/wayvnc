@@ -2728,7 +2728,7 @@ int main(int argc, char* argv[])
 	} else if (use_desktop_capture) {
 		self.image_source_type = IMAGE_SOURCE_TYPE_DESKTOP;
 	} else if (toplevel_id) {
-		self.image_source_type = IMAGE_SOURCE_TYPE_OUTPUT;
+		self.image_source_type = IMAGE_SOURCE_TYPE_TOPLEVEL;
 		strlcpy(self.image_source_name, toplevel_id,
 				sizeof(self.image_source_name));
 	} else {
