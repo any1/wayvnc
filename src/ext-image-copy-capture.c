@@ -81,6 +81,7 @@ struct ext_image_copy_capture {
 	struct { int x, y; } hotspot;
 
 	uint64_t last_time;
+	uint64_t last_restart_us;
 	struct aml_timer* timer;
 };
 
@@ -510,8 +511,18 @@ static void restart_session(struct ext_image_copy_capture* self)
 static void session_handle_stopped(void* data,
 		struct ext_image_copy_capture_session_v1* session)
 {
+	struct ext_image_copy_capture* self = data;
 	nvnc_log(NVNC_LOG_DEBUG, "Session %p stopped", session);
-	// TODO: Restart session if it is stopped?
+
+	/* The compositor stops capture sessions e.g. when the output is
+	 * reconfigured. Recreate the session so that frame and cursor
+	 * capturing resumes without reconnecting. Rate-limit restarts to
+	 * avoid spinning if the output is gone for good. */
+	uint64_t now = gettime_us();
+	if (now - self->last_restart_us < 2000000)
+		return;
+	self->last_restart_us = now;
+	restart_session(self);
 }
 
 static void frame_handle_transform(void *data,

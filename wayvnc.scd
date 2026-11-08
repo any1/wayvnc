@@ -53,7 +53,12 @@ wayvnc - A VNC server for wlroots-based Wayland compositors.
 	Show performance counters.
 
 *-r, --render-cursor*
-	Enable overlay cursor rendering.
+	Enable overlay cursor rendering. The cursor is burned into the
+	captured frames on the server side. Note that this disables the
+	hardware cursor on the captured output, which also disables
+	client-side cursor rendering: VNC viewers will show the rendered
+	cursor with some lag instead of a locally drawn, lag-free pointer.
+	Omit this option if your viewer supports remote cursor shapes.
 
 *-R, --disable-resizing*
 	Disable automatic desktop resizing.
