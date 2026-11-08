@@ -273,6 +273,8 @@ void wv_output_transform_canvas_point(enum wl_output_transform transform,
 		dst.x = 1.0 - *point_y;
 		dst.y = 1.0 - *point_x;
 		break;
+	default:
+		abort();
 	}
 
 	*point_x = dst.x;

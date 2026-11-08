@@ -157,8 +157,7 @@ static struct wv_buffer* wv_buffer_create_shm(
 	if (!self->wl_buffer)
 		goto shm_failure;
 
-	int bpp = pixel_size_from_fourcc(config->format);
-	assert(bpp > 0);
+	assert(pixel_size_from_fourcc(config->format) > 0);
 	self->buffer = nvnc_buffer_from_addr(self->pixels);
 	if (!self->buffer) {
 		goto nvnc_buffer_failure;
