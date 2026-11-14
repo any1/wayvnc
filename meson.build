@@ -137,6 +137,7 @@ ctlsources = [
 
 ctldependencies = [
 	jansson,
+	wayland_client,
 ]
 
 config = configuration_data()
