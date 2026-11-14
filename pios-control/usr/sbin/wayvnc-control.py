@@ -8,6 +8,33 @@ import os
 import glob
 import socket
 
+async def run_loginctl(*args):
+	proc = await asyncio.create_subprocess_exec('loginctl', *args,
+			stdout=asyncio.subprocess.PIPE,
+			stderr=asyncio.subprocess.DEVNULL)
+	out, _ = await proc.communicate()
+	return out.decode().strip() if proc.returncode == 0 else None
+
+async def get_active_session():
+	return await run_loginctl('show-seat', 'seat0',
+			'--property=ActiveSession', '--value')
+
+async def get_session_property(session, name):
+	return await run_loginctl('show-session', session,
+			'--property=' + name, '--value')
+
+async def get_active_session_user_id():
+	session = await get_active_session()
+	if not session:
+		return None
+
+	user_id = await get_session_property(session, 'User')
+	return int(user_id) if user_id and user_id.isdigit() else None
+
+def find_displays_of(user_id):
+	paths = glob.glob('/run/user/{}/wayland-*'.format(user_id))
+	return sorted(path for path in paths if not path.endswith('.lock'))
+
 class Program:
 	command_seq = 0
 	ctl_socket = None
@@ -76,10 +103,11 @@ class Program:
 		return result
 
 	async def attach_any(self):
-		for path in glob.iglob('/run/user/*/wayland-*'):
-			if path.endswith('.lock'):
-				continue
+		user_id = await get_active_session_user_id()
+		if user_id is None:
+			return False
 
+		for path in find_displays_of(user_id):
 			if await self.attach(path):
 				return True
 
