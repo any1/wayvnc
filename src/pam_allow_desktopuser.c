@@ -11,100 +11,162 @@
 #include <security/pam_modules.h>
 #include <security/pam_ext.h>
 
-static bool is_session_type_wayland(pam_handle_t* pamh, sd_bus* bus,
-		const char* session_path)
+struct session_info {
+	const char* user_name;
+	const char* seat_id;
+	const char* path;
+	char* type;
+	char* session_class;
+	bool is_active;
+};
+
+static bool read_session_string(pam_handle_t* pamh, sd_bus* bus,
+		const char* session_path, const char* property, char** value)
 {
-	char* value = NULL;
 	int ret = sd_bus_get_property_string(bus, "org.freedesktop.login1",
-			session_path, "org.freedesktop.login1.Session", "Type",
-			NULL, &value);
-	bool result = ret == 0 && value && strcmp(value, "wayland") == 0;
-	free(value);
-	return result;
+			session_path, "org.freedesktop.login1.Session", property,
+			NULL, value);
+	if (ret < 0)
+		pam_syslog(pamh, LOG_ERR, "Failed to read %s of %s: %s",
+				property, session_path, strerror(-ret));
+	return ret >= 0;
 }
 
-static bool is_session_class_greeter(pam_handle_t* pamh, sd_bus* bus,
-		const char* session_path)
-{
-	char* value = NULL;
-	int ret = sd_bus_get_property_string(bus, "org.freedesktop.login1",
-			session_path, "org.freedesktop.login1.Session", "Class",
-			NULL, &value);
-	bool result = ret == 0 && value && strcmp(value, "greeter") == 0;
-	free(value);
-	return result;
-}
-
-static bool is_session_active(pam_handle_t* pamh, sd_bus* bus,
-		const char* session_path)
+static bool read_session_active(pam_handle_t* pamh, sd_bus* bus,
+		const char* session_path, bool* is_active)
 {
 	int active = 0;
 	int ret = sd_bus_get_property_trivial(bus, "org.freedesktop.login1",
 			session_path, "org.freedesktop.login1.Session", "Active",
 			NULL, 'b', &active);
-	return ret == 0 && active != 0;
+	if (ret < 0) {
+		pam_syslog(pamh, LOG_ERR, "Failed to read Active of %s: %s",
+				session_path, strerror(-ret));
+		return false;
+	}
+	*is_active = active != 0;
+	return true;
 }
 
-static bool have_conflicting_session(pam_handle_t* pamh, sd_bus* bus,
+static bool read_session_properties(pam_handle_t* pamh, sd_bus* bus,
+		struct session_info* session)
+{
+	return read_session_string(pamh, bus, session->path, "Type",
+				&session->type) &&
+		read_session_string(pamh, bus, session->path, "Class",
+				&session->session_class) &&
+		read_session_active(pamh, bus, session->path,
+				&session->is_active);
+}
+
+static void free_session_properties(struct session_info* session)
+{
+	free(session->type);
+	free(session->session_class);
+	session->type = NULL;
+	session->session_class = NULL;
+}
+
+static bool is_session_of_other_user(const struct session_info* session,
 		const char* auth_username)
 {
-	sd_bus_error error = SD_BUS_ERROR_NULL;
-	sd_bus_message* m = NULL;
-	bool found = false;
+	return strcmp(session->user_name, auth_username) != 0;
+}
 
+static bool is_session_on_seat(const struct session_info* session)
+{
+	return session->seat_id && session->seat_id[0] != '\0';
+}
+
+static bool is_session_type_wayland(const struct session_info* session)
+{
+	return session->type && strcmp(session->type, "wayland") == 0;
+}
+
+static bool is_session_class_greeter(const struct session_info* session)
+{
+	return session->session_class &&
+		strcmp(session->session_class, "greeter") == 0;
+}
+
+static bool is_desktop_session(const struct session_info* session)
+{
+	return is_session_type_wayland(session) && session->is_active &&
+		!is_session_class_greeter(session);
+}
+
+static bool list_sessions(pam_handle_t* pamh, sd_bus* bus,
+		sd_bus_message** sessions)
+{
+	sd_bus_error error = SD_BUS_ERROR_NULL;
 	int ret = sd_bus_call_method(bus, "org.freedesktop.login1",
 			"/org/freedesktop/login1",
 			"org.freedesktop.login1.Manager", "ListSessions",
-			&error, &m, "");
+			&error, sessions, "");
 	if (ret < 0) {
 		pam_syslog(pamh, LOG_ERR, "Failed to call ListSessions: %s",
 				error.message);
-		goto done;
+		sd_bus_error_free(&error);
+		return false;
 	}
 
-	ret = sd_bus_message_enter_container(m, 'a', "(susso)");
+	ret = sd_bus_message_enter_container(*sessions, 'a', "(susso)");
 	if (ret < 0) {
 		pam_syslog(pamh, LOG_ERR, "Failed to enter session array: %s",
 				strerror(-ret));
-		goto done;
+		*sessions = sd_bus_message_unref(*sessions);
+		return false;
 	}
 
-	for (;;) {
-		if (sd_bus_message_peek_type(m, NULL, NULL) <= 0)
+	return true;
+}
+
+static int read_next_session(pam_handle_t* pamh, sd_bus_message* sessions,
+		struct session_info* session)
+{
+	int ret = sd_bus_message_read(sessions, "(susso)", NULL, NULL,
+			&session->user_name, &session->seat_id, &session->path);
+	if (ret < 0)
+		pam_syslog(pamh, LOG_ERR, "Failed to read session info: %s",
+				strerror(-ret));
+	return ret;
+}
+
+static bool check_session_conflict(pam_handle_t* pamh, sd_bus* bus,
+		struct session_info* session, const char* auth_username,
+		bool* has_conflict)
+{
+	if (!is_session_of_other_user(session, auth_username) ||
+			!is_session_on_seat(session))
+		return true;
+
+	bool ok = read_session_properties(pamh, bus, session);
+	if (ok)
+		*has_conflict = is_desktop_session(session);
+	free_session_properties(session);
+	return ok;
+}
+
+static bool query_conflicting_session(pam_handle_t* pamh, sd_bus* bus,
+		const char* auth_username, bool* has_conflict)
+{
+	sd_bus_message* sessions = NULL;
+	if (!list_sessions(pamh, bus, &sessions))
+		return false;
+
+	struct session_info session = {};
+	bool ok = true;
+	int ret = 0;
+	while (ok && !*has_conflict) {
+		ret = read_next_session(pamh, sessions, &session);
+		if (ret <= 0)
 			break;
-
-		const char* session_user_name;
-		const char* session_path;
-		if (sd_bus_message_read(m, "(susso)", NULL, NULL,
-					&session_user_name, NULL,
-					&session_path) < 0) {
-			pam_syslog(pamh, LOG_WARNING, "Failed to read session info");
-			break;
-		}
-
-		if (strcmp(session_user_name, auth_username) == 0)
-			continue;
-
-		if (!is_session_type_wayland(pamh, bus, session_path))
-			continue;
-
-		if (!is_session_active(pamh, bus, session_path))
-			continue;
-
-		if (is_session_class_greeter(pamh, bus, session_path))
-			continue;
-
-		pam_syslog(pamh, LOG_WARNING,
-				"Login for user '%s' rejected; another user is already using the desktop.",
-				auth_username);
-		found = true;
-		break;
+		ok = check_session_conflict(pamh, bus, &session,
+				auth_username, has_conflict);
 	}
 
-done:
-	sd_bus_error_free(&error);
-	sd_bus_message_unref(m);
-	return found;
+	sd_bus_message_unref(sessions);
+	return ok && ret >= 0;
 }
 
 PAM_EXTERN int pam_sm_authenticate(pam_handle_t* pamh, int flags, int argc,
@@ -124,9 +186,22 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t* pamh, int flags, int argc,
 		return PAM_SERVICE_ERR;
 	}
 
-	bool conflict = have_conflicting_session(pamh, bus, auth_username);
+	bool has_conflict = false;
+	bool ok = query_conflicting_session(pamh, bus, auth_username,
+			&has_conflict);
 	sd_bus_unref(bus);
-	return conflict ? PAM_PERM_DENIED : PAM_SUCCESS;
+
+	if (!ok)
+		return PAM_SERVICE_ERR;
+
+	if (has_conflict) {
+		pam_syslog(pamh, LOG_WARNING,
+				"Login for user '%s' rejected; another user is already using the desktop.",
+				auth_username);
+		return PAM_PERM_DENIED;
+	}
+
+	return PAM_SUCCESS;
 }
 
 PAM_EXTERN int pam_sm_acct_mgmt(pam_handle_t* pamh, int flags, int argc,
