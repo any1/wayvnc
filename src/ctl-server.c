@@ -20,6 +20,8 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <errno.h>
+#include <ctype.h>
+#include <unistd.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/stat.h>
@@ -97,6 +99,8 @@ struct ctl_client {
 	size_t write_len;
 	bool drop_after_next_send;
 	bool accept_events;
+	int received_fds[4];
+	size_t nr_received_fds;
 };
 
 struct ctl {
@@ -283,12 +287,53 @@ static struct cmd* parse_command(struct jsonipc_request* ipc,
 	return cmd;
 }
 
+static void client_keep_received_fd(struct ctl_client* self, int fd)
+{
+	size_t capacity = sizeof(self->received_fds) /
+		sizeof(self->received_fds[0]);
+	if (self->nr_received_fds == capacity) {
+		nvnc_log(NVNC_LOG_WARNING, "Too many unused file descriptors from control socket client; closing one");
+		close(fd);
+		return;
+	}
+	self->received_fds[self->nr_received_fds++] = fd;
+}
+
+static void client_keep_received_fds(struct ctl_client* self,
+		struct msghdr* msg)
+{
+	for (struct cmsghdr* cmsg = CMSG_FIRSTHDR(msg); cmsg;
+			cmsg = CMSG_NXTHDR(msg, cmsg)) {
+		if (cmsg->cmsg_level != SOL_SOCKET ||
+				cmsg->cmsg_type != SCM_RIGHTS)
+			continue;
+
+		size_t count = (cmsg->cmsg_len - CMSG_LEN(0)) / sizeof(int);
+		for (size_t i = 0; i < count; ++i) {
+			int fd;
+			memcpy(&fd, CMSG_DATA(cmsg) + i * sizeof(fd),
+					sizeof(fd));
+			client_keep_received_fd(self, fd);
+		}
+	}
+}
+
+static void client_close_unused_fds(struct ctl_client* self)
+{
+	for (size_t i = 0; i < self->nr_received_fds; ++i) {
+		nvnc_log(NVNC_LOG_WARNING, "Closing unused file descriptor from control socket client");
+		close(self->received_fds[i]);
+	}
+	self->nr_received_fds = 0;
+}
+
 static void client_destroy(struct ctl_client* self)
 {
 	nvnc_trace("Destroying client %p", self);
 	aml_stop(aml_get_default(), self->handler);
 	aml_unref(self->handler);
 	close(self->fd);
+	client_close_unused_fds(self);
 	json_array_clear(self->response_queue);
 	json_decref(self->response_queue);
 	wl_list_remove(&self->link);
@@ -318,8 +363,21 @@ static ssize_t client_read(struct ctl_client* self, struct cmd_response** err)
 		set_internal_error(err, EIO, "Buffer overflow");
 		return -1;
 	}
-	ssize_t n = recv(self->fd, self->read_buffer + self->read_len, bufferspace,
-			MSG_DONTWAIT);
+	struct iovec iov = {
+		.iov_base = self->read_buffer + self->read_len,
+		.iov_len = bufferspace,
+	};
+	union {
+		struct cmsghdr alignment;
+		char buffer[CMSG_SPACE(sizeof(self->received_fds))];
+	} control;
+	struct msghdr msg = {
+		.msg_iov = &iov,
+		.msg_iovlen = 1,
+		.msg_control = control.buffer,
+		.msg_controllen = sizeof(control.buffer),
+	};
+	ssize_t n = recvmsg(self->fd, &msg, MSG_DONTWAIT | MSG_CMSG_CLOEXEC);
 	if (n == -1) {
 		if (errno == EAGAIN || errno == EWOULDBLOCK) {
 			nvnc_trace("recv: EAGAIN");
@@ -332,6 +390,7 @@ static ssize_t client_read(struct ctl_client* self, struct cmd_response** err)
 		errno = ENOTCONN;
 		return -1;
 	}
+	client_keep_received_fds(self, &msg);
 	self->read_len += n;
 	nvnc_trace("Read %d bytes, total is now %d", n, self->read_len);
 	return n;
@@ -354,6 +413,14 @@ static json_t* client_next_object(struct ctl_client* self, struct cmd_response**
 		set_internal_error(ierr, EINVAL, err.text);
 	}
 	return root;
+}
+
+static bool client_has_incomplete_command(const struct ctl_client* self)
+{
+	for (size_t i = 0; i < self->read_len; ++i)
+		if (!isspace((unsigned char)self->read_buffer[i]))
+			return true;
+	return false;
 }
 
 static struct cmd_response* generate_help_object(const char* id, bool id_is_command)
@@ -763,6 +830,8 @@ request_parse_failed:
 		jsonipc_error_cleanup(&jipc_err);
 		json_decref(root);
 	}
+	if (!client_has_incomplete_command(client))
+		client_close_unused_fds(client);
 	if (details)
 		client_enqueue_internal_error(client, details);
 }
