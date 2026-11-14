@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import asyncio
+import codecs
 import json
 import re
 import os
@@ -13,6 +14,7 @@ class Program:
 	reader = None
 	writer = None
 	read_buffer = ""
+	utf8_decoder = codecs.getincrementaldecoder('utf-8')()
 	decoder = json.JSONDecoder()
 	replies = {}
 	attaching = False
@@ -27,7 +29,7 @@ class Program:
 				data = await self.reader.read(4096)
 				if not data:
 					raise ConnectionError("wayvnc closed the control socket")
-				self.read_buffer += data.decode('utf-8')
+				self.read_buffer += self.utf8_decoder.decode(data)
 
 	async def send_command(self, method, params = None, fd = None):
 		command_id = self.command_seq
