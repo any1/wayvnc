@@ -19,6 +19,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/stat.h>
@@ -27,6 +28,7 @@
 #include <assert.h>
 #include <jansson.h>
 #include <sys/param.h>
+#include <wayland-client-core.h>
 
 #include "json-ipc.h"
 #include "ctl-client.h"
@@ -579,8 +581,37 @@ static void send_shutdown_event(struct ctl_client* self)
 	send_local_event(self, EVT_LOCAL_SHUTDOWN);
 }
 
+static ssize_t send_with_fd(int socket, const char* data, size_t len, int fd)
+{
+	struct iovec iov = {
+		.iov_base = (char*)data,
+		.iov_len = len,
+	};
+	struct msghdr msg = {
+		.msg_iov = &iov,
+		.msg_iovlen = 1,
+	};
+	union {
+		struct cmsghdr alignment;
+		char buffer[CMSG_SPACE(sizeof(fd))];
+	} control = {};
+
+	if (fd >= 0) {
+		msg.msg_control = control.buffer;
+		msg.msg_controllen = sizeof(control.buffer);
+
+		struct cmsghdr* cmsg = CMSG_FIRSTHDR(&msg);
+		cmsg->cmsg_level = SOL_SOCKET;
+		cmsg->cmsg_type = SCM_RIGHTS;
+		cmsg->cmsg_len = CMSG_LEN(sizeof(fd));
+		memcpy(CMSG_DATA(cmsg), &fd, sizeof(fd));
+	}
+
+	return sendmsg(socket, &msg, MSG_NOSIGNAL);
+}
+
 static ssize_t ctl_client_send_request(struct ctl_client* self,
-		struct jsonipc_request* request)
+		struct jsonipc_request* request, int fd_to_pass)
 {
 	json_error_t err;
 	json_t* packed = jsonipc_request_pack(request, &err);
@@ -594,13 +625,13 @@ static ssize_t ctl_client_send_request(struct ctl_client* self,
 	json_decref(packed);
 	DEBUG(">> %.*s", len, buffer);
 
-	return send(self->fd, buffer, len, MSG_NOSIGNAL);
+	return send_with_fd(self->fd, buffer, len, fd_to_pass);
 }
 
 static struct jsonipc_response* ctl_client_run_single_command(struct ctl_client* self,
-		struct jsonipc_request* request)
+		struct jsonipc_request* request, int fd_to_pass)
 {
-	if (ctl_client_send_request(self, request) < 0)
+	if (ctl_client_send_request(self, request, fd_to_pass) < 0)
 		return NULL;
 
 	return ctl_client_wait_for_response(self);
@@ -609,7 +640,8 @@ static struct jsonipc_response* ctl_client_run_single_command(struct ctl_client*
 static int ctl_client_register_for_events(struct ctl_client* self,
 		struct jsonipc_request* request)
 {
-	struct jsonipc_response* response = ctl_client_run_single_command(self, request);
+	struct jsonipc_response* response =
+		ctl_client_run_single_command(self, request, -1);
 	if (!response)
 		return -1;
 
@@ -678,10 +710,11 @@ static int ctl_client_event_loop(struct ctl_client* self,
 }
 
 static int ctl_client_print_single_command(struct ctl_client* self,
-		enum cmd_type cmd, struct jsonipc_request* request)
+		enum cmd_type cmd, struct jsonipc_request* request,
+		int fd_to_pass)
 {
 	struct jsonipc_response* response = ctl_client_run_single_command(self,
-			request);
+			request, fd_to_pass);
 	if (!response) {
 		if (errno == ECONNRESET && cmd == CMD_WAYVNC_EXIT)
 			return 0;
@@ -851,6 +884,23 @@ static void ctl_client_destroy_cmd_parser(struct option_parser* parser)
 	free((void*)parser->options);
 }
 
+static int connect_to_wayland_display(const char* name)
+{
+	struct wl_display* display = wl_display_connect(name);
+	if (!display) {
+		ERROR("Failed to connect to wayland display \"%s\": %m",
+				name ? name : "default");
+		return -1;
+	}
+
+	int fd = fcntl(wl_display_get_fd(display), F_DUPFD_CLOEXEC, 0);
+	if (fd < 0)
+		ERROR("Failed to duplicate wayland display connection: %m");
+
+	wl_display_disconnect(display);
+	return fd;
+}
+
 int ctl_client_run_command(struct ctl_client* self,
 		struct option_parser* parent_options, unsigned flags)
 {
@@ -888,6 +938,18 @@ int ctl_client_run_command(struct ctl_client* self,
 	if (!request)
 		goto parse_failure;
 
+	int display_fd = -1;
+	if (cmd == CMD_ATTACH) {
+		const char* display =
+			option_parser_get_value(&cmd_options, "display");
+		display_fd = connect_to_wayland_display(display);
+		if (display_fd < 0) {
+			result = 1;
+			goto connect_failure;
+		}
+		json_object_del(request->params, "display");
+	}
+
 	int timeout = (flags & CTL_CLIENT_SOCKET_WAIT) ? -1 : 0;
 	result = ctl_client_connect(self, timeout);
 	if (result != 0)
@@ -898,11 +960,14 @@ int ctl_client_run_command(struct ctl_client* self,
 		result = ctl_client_event_loop(self, request);
 		break;
 	default:
-		result = ctl_client_print_single_command(self, cmd, request);
+		result = ctl_client_print_single_command(self, cmd, request,
+				display_fd);
 		break;
 	}
 
 connect_failure:
+	if (display_fd >= 0)
+		close(display_fd);
 	jsonipc_request_destroy(request);
 help_printed:
 parse_failure:

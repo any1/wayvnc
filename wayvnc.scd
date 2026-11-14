@@ -260,7 +260,9 @@ Parameters:
 	Optional: The name of the wayland display to connect to. If this is left
 	out, the client must instead pass an already connected wayland socket as
 	a file descriptor in ancillary data (*SCM_RIGHTS*) along with the
-	command.
+	command. *wayvncctl attach* always does this: it connects to the named
+	display, or to the display of its own environment if no name is given,
+	and hands the connection over to wayvnc.
 
 *desktop*, *output=name*, *toplevel=identifier*
 	Optional: What to capture.

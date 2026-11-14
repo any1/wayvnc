@@ -456,6 +456,13 @@ test_attach_ipc() {
 	print_ok
 }
 
+test_attach_ipc_to_default_display() {
+	echo "Attaching to default display"
+	$WAYVNCCTL attach &>/dev/null
+	echo "  attach IPC succeeded"
+	print_ok
+}
+
 test_detach_ipc() {
 	echo "Checking detach command"
 	$WAYVNCCTL detach &>/dev/null
@@ -474,6 +481,15 @@ detached_test() {
 
 	start_sway
 	test_attach_ipc "$WAYLAND_DISPLAY"
+	wait_until test_output_list_ipc HEADLESS-1
+
+	test_detach_ipc
+	wait_until verify_events \
+		capture-changed \
+		detached
+	test_output_list_empty
+
+	test_attach_ipc_to_default_display
 	wait_until test_output_list_ipc HEADLESS-1
 
 	test_detach_ipc
