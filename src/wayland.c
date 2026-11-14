@@ -271,14 +271,18 @@ static void on_wayland_event(struct aml_handler* handler)
 	}
 }
 
-struct wayland* wayland_connect(const char* display, enum wayland_flags flags)
+static struct wayland* wayland_create_from_display(struct wl_display* display,
+		enum wayland_flags flags)
 {
 	struct wayland* self = calloc(1, sizeof(*self));
-	if (!self)
+	if (!self) {
+		wl_display_disconnect(display);
 		return NULL;
+	}
 
 	self->is_initialising = true;
 	self->flags = flags;
+	self->display = display;
 
 	wl_list_init(&self->outputs);
 	wl_list_init(&self->toplevels);
@@ -287,19 +291,6 @@ struct wayland* wayland_connect(const char* display, enum wayland_flags flags)
 #define X(x) observable_init(&self->observable.x);
 	X_WAYLAND_OBSERVABLES
 #undef X
-
-	self->display = wl_display_connect(display);
-	if (!self->display) {
-		const char* display_name = display ? display:
-			getenv("WAYLAND_DISPLAY");
-		if (!display_name) {
-			nvnc_log(NVNC_LOG_ERROR,"WAYLAND_DISPLAY is not set in the environment");
-		} else {
-			nvnc_log(NVNC_LOG_ERROR, "Failed to connect to WAYLAND_DISPLAY=\"%s\"", display_name);
-			nvnc_log(NVNC_LOG_ERROR, "Ensure wayland is running with that display name");
-		}
-		goto connect_failure;
-	}
 
 	self->registry = wl_display_get_registry(self->display);
 	if (!self->registry) {
@@ -335,10 +326,37 @@ handler_failure:
 	self->wl_handler = NULL;
 registry_failure:
 	wl_display_disconnect(self->display);
-	self->display = NULL;
-connect_failure:
 	free(self);
 	return NULL;
+}
+
+struct wayland* wayland_connect(const char* display, enum wayland_flags flags)
+{
+	struct wl_display* wl_display = wl_display_connect(display);
+	if (!wl_display) {
+		const char* display_name = display ? display:
+			getenv("WAYLAND_DISPLAY");
+		if (!display_name) {
+			nvnc_log(NVNC_LOG_ERROR,"WAYLAND_DISPLAY is not set in the environment");
+		} else {
+			nvnc_log(NVNC_LOG_ERROR, "Failed to connect to WAYLAND_DISPLAY=\"%s\"", display_name);
+			nvnc_log(NVNC_LOG_ERROR, "Ensure wayland is running with that display name");
+		}
+		return NULL;
+	}
+
+	return wayland_create_from_display(wl_display, flags);
+}
+
+struct wayland* wayland_connect_to_fd(int fd, enum wayland_flags flags)
+{
+	struct wl_display* wl_display = wl_display_connect_to_fd(fd);
+	if (!wl_display) {
+		nvnc_log(NVNC_LOG_ERROR, "Failed to connect to wayland display on file descriptor: %m");
+		return NULL;
+	}
+
+	return wayland_create_from_display(wl_display, flags);
 }
 
 void wayland_destroy(struct wayland* self)

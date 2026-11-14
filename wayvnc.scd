@@ -250,6 +250,21 @@ Event registration registers for all available server events and is scoped to
 the current connection only. If a client disconnects and reconnects, it must
 re-register for events.
 
+_ATTACH_
+
+The *attach* command attaches wayvnc to a running wayland compositor.
+
+Parameters:
+
+*display*
+	Optional: The name of the wayland display to connect to. If this is left
+	out, the client must instead pass an already connected wayland socket as
+	a file descriptor in ancillary data (*SCM_RIGHTS*) along with the
+	command.
+
+*desktop*, *output=name*, *toplevel=identifier*
+	Optional: What to capture.
+
 _CLIENT-LIST_
 
 The *client-list* command retrieves a list of all VNC clients currently
