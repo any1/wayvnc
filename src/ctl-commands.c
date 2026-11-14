@@ -24,7 +24,7 @@ struct cmd_info ctl_command_list[] = {
 	[CMD_ATTACH] = { "attach",
 		"Attach to a running wayland compositor",
 		{
-			{ "display", "Display name", "<name>",
+			{ "display", "Display name (default: $WAYLAND_DISPLAY)", "<name>",
 				.positional = true },
 			{ "desktop", "Capture all outputs" },
 			{ "output", "Capture a specific output", "<name>" },
