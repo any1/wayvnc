@@ -8,6 +8,7 @@ ConditionPathExists=/etc/wayvnc/config
 Type=simple
 ExecStart=/usr/sbin/wayvnc-control.py
 Restart=always
+PrivateTmp=yes
 
 [Install]
 WantedBy=wayvnc.service
