@@ -7,6 +7,7 @@ import re
 import os
 import glob
 import socket
+import struct
 
 async def run_loginctl(*args):
 	proc = await asyncio.create_subprocess_exec('loginctl', *args,
@@ -34,6 +35,12 @@ async def get_active_session_user_id():
 def find_displays_of(user_id):
 	paths = glob.glob('/run/user/{}/wayland-*'.format(user_id))
 	return sorted(path for path in paths if not path.endswith('.lock'))
+
+def get_peer_user_id(sock):
+	credentials = sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED,
+			struct.calcsize('3i'))
+	_, user_id, _ = struct.unpack('3i', credentials)
+	return user_id
 
 class Program:
 	command_seq = 0
@@ -87,11 +94,15 @@ class Program:
 
 		return self.replies.pop(command_id)['code'] == 0
 
-	async def attach(self, display):
+	async def attach(self, display, user_id):
 		display_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 		try:
 			display_socket.connect(display)
 		except OSError:
+			display_socket.close()
+			return False
+
+		if get_peer_user_id(display_socket) != user_id:
 			display_socket.close()
 			return False
 
@@ -108,7 +119,7 @@ class Program:
 			return False
 
 		for path in find_displays_of(user_id):
-			if await self.attach(path):
+			if await self.attach(path, user_id):
 				return True
 
 		return False
