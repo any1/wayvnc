@@ -90,4 +90,5 @@ struct wayland {
 };
 
 struct wayland* wayland_connect(const char* display, enum wayland_flags flags);
+struct wayland* wayland_connect_to_fd(int fd, enum wayland_flags flags);
 void wayland_destroy(struct wayland* self);

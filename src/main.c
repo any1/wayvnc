@@ -33,6 +33,8 @@
 #include <sys/param.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 #include <fcntl.h>
 
 #include "ext-transient-seat-v1.h"
@@ -200,7 +202,8 @@ static void client_init_data_control(struct wayvnc_client* self);
 static void client_detach_wayland(struct wayvnc_client* self);
 static int blank_screen(struct wayvnc* self);
 static bool wayland_attach(struct wayvnc* self, const char* display,
-		enum image_source_type, const char* image_source_name);
+		int display_fd, enum image_source_type,
+		const char* image_source_name);
 static void wayland_detach(struct wayvnc* self);
 static bool configure_cursor_sc(struct wayvnc* self,
 		struct wayvnc_client* client);
@@ -397,7 +400,8 @@ static void on_wayland_destroyed(struct observer* observer, void* data)
 	wayland = NULL;
 }
 
-static int init_wayland(struct wayvnc* self, const char* display)
+static int init_wayland(struct wayvnc* self, const char* display,
+		int display_fd)
 {
 	assert(!wayland);
 
@@ -409,7 +413,8 @@ static int init_wayland(struct wayvnc* self, const char* display)
 	if (self->use_toplevel)
 		flags |= WAYLAND_FLAG_ENABLE_TOPLEVEL_CAPTURE;
 
-	wayland = wayland_connect(display, flags);
+	wayland = display_fd >= 0 ? wayland_connect_to_fd(display_fd, flags) :
+		wayland_connect(display, flags);
 	if (!wayland)
 		return -1;
 
@@ -2307,17 +2312,48 @@ static void intercept_cmd_error(const struct nvnc_log_data* meta,
 			sizeof(intercepted_error) - len);
 }
 
+static bool find_display_path_from_fd(char* path, size_t size, int display_fd)
+{
+	struct sockaddr_un addr = {};
+	socklen_t addr_len = sizeof(addr);
+	if (getpeername(display_fd, (struct sockaddr*)&addr, &addr_len) < 0)
+		return false;
+
+	if (addr.sun_family != AF_UNIX || addr.sun_path[0] == '\0')
+		return false;
+
+	snprintf(path, size, "%.*s", (int)sizeof(addr.sun_path), addr.sun_path);
+	return true;
+}
+
+static void describe_display(char* description, size_t size,
+		const char* display, int display_fd)
+{
+	if (display_fd < 0) {
+		strlcpy(description, display ? display : "default display",
+				size);
+		return;
+	}
+
+	if (!find_display_path_from_fd(description, size, display_fd))
+		strlcpy(description, "display passed as file descriptor", size);
+}
+
 static struct cmd_response* on_attach(struct ctl* ctl, const char* display,
-		enum image_source_type image_source_type,
+		int display_fd, enum image_source_type image_source_type,
 		const char* image_source_name)
 {
 	struct wayvnc* self = ctl_server_userdata(ctl);
 	assert(self);
 
+	char display_description[256];
+	describe_display(display_description, sizeof(display_description),
+			display, display_fd);
+
 	memset(intercepted_error, 0, sizeof(intercepted_error));
 	nvnc_set_log_fn_thread_local(intercept_cmd_error);
 
-	bool ok = wayland_attach(self, display, image_source_type,
+	bool ok = wayland_attach(self, display, display_fd, image_source_type,
 			image_source_name);
 
 	wayvnc_display_list_deinit(&self->wayvnc_displays);
@@ -2335,8 +2371,7 @@ static struct cmd_response* on_attach(struct ctl* ctl, const char* display,
 		client_init_wayland(client);
 	}
 
-	nvnc_log(NVNC_LOG_INFO, "Attached to %s",
-			display ? display : "default display");
+	nvnc_log(NVNC_LOG_INFO, "Attached to %s", display_description);
 
 	if (self->nr_clients > 0) {
 		handle_first_client(self);
@@ -2350,7 +2385,7 @@ out:
 
 // TODO: Also add arguments for seat
 static bool wayland_attach(struct wayvnc* self, const char* display,
-		enum image_source_type image_source_type,
+		int display_fd, enum image_source_type image_source_type,
 		const char* image_source_name)
 {
 	if (wayland) {
@@ -2366,10 +2401,12 @@ static bool wayland_attach(struct wayvnc* self, const char* display,
 		}
 	}
 
-	nvnc_log(NVNC_LOG_DEBUG, "Attaching to %s",
-			display ? display : "default display");
+	char display_description[256];
+	describe_display(display_description, sizeof(display_description),
+			display, display_fd);
+	nvnc_log(NVNC_LOG_DEBUG, "Attaching to %s", display_description);
 
-	if (init_wayland(self, display) < 0) {
+	if (init_wayland(self, display, display_fd) < 0) {
 		nvnc_log(NVNC_LOG_ERROR, "Failed to initialise wayland");
 		goto failure;
 	}
@@ -2736,7 +2773,7 @@ int main(int argc, char* argv[])
 	}
 
 	if (!start_detached)
-		if (!wayland_attach(&self, NULL, IMAGE_SOURCE_TYPE_UNSPEC,
+		if (!wayland_attach(&self, NULL, -1, IMAGE_SOURCE_TYPE_UNSPEC,
 					NULL))
 			goto wayland_failure;
 
