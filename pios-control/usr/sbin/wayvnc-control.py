@@ -5,10 +5,11 @@ import json
 import re
 import os
 import glob
-from pathlib import Path
+import socket
 
 class Program:
 	command_seq = 0
+	ctl_socket = None
 	reader = None
 	writer = None
 	read_buffer = ""
@@ -26,7 +27,7 @@ class Program:
 				data = await self.reader.read(4096)
 				self.read_buffer += data.decode('utf-8')
 
-	async def send_command(self, method, params = None):
+	async def send_command(self, method, params = None, fd = None):
 		command_id = self.command_seq
 		self.command_seq += 1
 
@@ -38,8 +39,13 @@ class Program:
 		if not params is None:
 			cmd['params'] = params
 
-		self.writer.write(json.dumps(cmd).encode())
-		await self.writer.drain()
+		data = json.dumps(cmd).encode()
+		if fd is None:
+			self.writer.write(data)
+			await self.writer.drain()
+		else:
+			await self.writer.drain()
+			socket.send_fds(self.ctl_socket, [data], [fd])
 
 		while command_id not in self.replies:
 			message = await self.read_message()
@@ -51,13 +57,18 @@ class Program:
 		return self.replies.pop(command_id)['code'] == 0
 
 	async def attach(self, display):
-		# TODO: It would be better to pass the socket on to wayvnc as a file descriptor
-		proc = await asyncio.create_subprocess_shell('setfacl -m "u:vnc:rwx" {} {}'.format(Path(display).parent, display))
-		await proc.wait()
+		display_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+		try:
+			display_socket.connect(display)
+		except OSError:
+			display_socket.close()
+			return False
 
-		self.attaching = True
-		result = await self.send_command('attach', {'display': display})
-		self.attaching = False
+		with display_socket:
+			self.attaching = True
+			result = await self.send_command('attach', None,
+					display_socket.fileno())
+			self.attaching = False
 		return result
 
 	async def attach_any(self):
@@ -83,7 +94,10 @@ class Program:
 				await self.attach_any_with_retry()
 
 	async def main(self):
-		self.reader, self.writer = await asyncio.open_unix_connection("/tmp/wayvnc/wayvncctl.sock")
+		self.ctl_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+		self.ctl_socket.connect("/tmp/wayvnc/wayvncctl.sock")
+		self.reader, self.writer = await asyncio.open_unix_connection(
+				sock=self.ctl_socket)
 
 		await self.attach_any_with_retry()
 		await self.send_command("event-receive")
