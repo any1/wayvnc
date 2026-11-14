@@ -13,6 +13,8 @@ Restart=always
 User=vnc
 KillSignal=INT
 SyslogIdentifier=wayvnc
+RuntimeDirectory=wayvnc
+RuntimeDirectoryMode=0700
 
 [Install]
 WantedBy=multi-user.target
