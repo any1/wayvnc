@@ -164,7 +164,7 @@ class Program:
 
 	async def main(self):
 		self.ctl_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-		self.ctl_socket.connect("/tmp/wayvnc/wayvncctl.sock")
+		self.ctl_socket.connect("/run/wayvnc/wayvncctl.sock")
 		self.reader, self.writer = await asyncio.open_unix_connection(
 				sock=self.ctl_socket)
 
