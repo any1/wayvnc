@@ -24,11 +24,7 @@ async def get_session_property(session, name):
 	return await run_loginctl('show-session', session,
 			'--property=' + name, '--value')
 
-async def get_active_session_user_id():
-	session = await get_active_session()
-	if not session:
-		return None
-
+async def get_session_user_id(session):
 	user_id = await get_session_property(session, 'User')
 	return int(user_id) if user_id and user_id.isdigit() else None
 
@@ -52,6 +48,7 @@ class Program:
 	decoder = json.JSONDecoder()
 	replies = {}
 	attaching = False
+	allowed_user = None
 
 	async def read_message(self):
 		while True:
@@ -92,7 +89,7 @@ class Program:
 			else:
 				await self.process_message(message)
 
-		return self.replies.pop(command_id)['code'] == 0
+		return self.replies.pop(command_id)
 
 	async def attach(self, display, user_id):
 		display_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -108,18 +105,45 @@ class Program:
 
 		with display_socket:
 			self.attaching = True
-			result = await self.send_command('attach', None,
+			reply = await self.send_command('attach', None,
 					display_socket.fileno())
 			self.attaching = False
-		return result
+		return reply['code'] == 0
+
+	def is_client_allowed(self, client):
+		return self.allowed_user is None or \
+				client.get('username') == self.allowed_user
+
+	async def disconnect_if_disallowed(self, client):
+		if not self.is_client_allowed(client):
+			await self.send_command('client-disconnect',
+					{'id': client['id']})
+
+	async def disconnect_disallowed_clients(self):
+		reply = await self.send_command('client-list')
+		for client in reply.get('data') or []:
+			await self.disconnect_if_disallowed(client)
+
+	async def allow_only_user_of(self, session):
+		if await get_session_property(session, 'Class') == 'greeter':
+			self.allowed_user = None
+		else:
+			self.allowed_user = await get_session_property(session,
+					'Name') or ''
+		await self.disconnect_disallowed_clients()
 
 	async def attach_any(self):
-		user_id = await get_active_session_user_id()
+		session = await get_active_session()
+		if not session:
+			return False
+
+		user_id = await get_session_user_id(session)
 		if user_id is None:
 			return False
 
 		for path in find_displays_of(user_id):
 			if await self.attach(path, user_id):
+				await self.allow_only_user_of(session)
 				return True
 
 		return False
@@ -135,6 +159,8 @@ class Program:
 			# ignore the detached event our own attach produces.
 			if not self.attaching:
 				await self.attach_any_with_retry()
+		elif (method == 'client-connected'):
+			await self.disconnect_if_disallowed(message['params'])
 
 	async def main(self):
 		self.ctl_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
