@@ -25,6 +25,8 @@ class Program:
 				return result
 			except json.JSONDecodeError:
 				data = await self.reader.read(4096)
+				if not data:
+					raise ConnectionError("wayvnc closed the control socket")
 				self.read_buffer += data.decode('utf-8')
 
 	async def send_command(self, method, params = None, fd = None):
