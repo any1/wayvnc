@@ -16,6 +16,24 @@ async def run_loginctl(*args):
 	out, _ = await proc.communicate()
 	return out.decode().strip() if proc.returncode == 0 else None
 
+async def run_busctl(*args):
+	proc = await asyncio.create_subprocess_exec('busctl', '--json=short',
+			*args,
+			stdout=asyncio.subprocess.PIPE,
+			stderr=asyncio.subprocess.DEVNULL)
+	out, _ = await proc.communicate()
+	return json.loads(out)['data'] if proc.returncode == 0 else None
+
+async def find_session_of_process(pid):
+	reply = await run_busctl('call', 'org.freedesktop.login1',
+			'/org/freedesktop/login1', 'org.freedesktop.login1.Manager',
+			'GetSessionByPID', 'u', str(pid))
+	return reply[0] if reply else None
+
+async def get_session_object_property(path, name):
+	return await run_busctl('get-property', 'org.freedesktop.login1', path,
+			'org.freedesktop.login1.Session', name)
+
 async def get_active_session():
 	return await run_loginctl('show-seat', 'seat0',
 			'--property=ActiveSession', '--value')
@@ -32,11 +50,11 @@ def find_displays_of(user_id):
 	paths = glob.glob('/run/user/{}/wayland-*'.format(user_id))
 	return sorted(path for path in paths if not path.endswith('.lock'))
 
-def get_peer_user_id(sock):
+def get_peer_credentials(sock):
 	credentials = sock.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED,
 			struct.calcsize('3i'))
-	_, user_id, _ = struct.unpack('3i', credentials)
-	return user_id
+	pid, user_id, _ = struct.unpack('3i', credentials)
+	return pid, user_id
 
 class Program:
 	command_seq = 0
@@ -48,7 +66,7 @@ class Program:
 	decoder = json.JSONDecoder()
 	replies = {}
 	attaching = False
-	allowed_user = None
+	compositor_pid = None
 
 	async def read_message(self):
 		while True:
@@ -99,7 +117,9 @@ class Program:
 			display_socket.close()
 			return False
 
-		if get_peer_user_id(display_socket) != user_id:
+		compositor_pid, compositor_user_id = get_peer_credentials(
+				display_socket)
+		if compositor_user_id != user_id:
 			display_socket.close()
 			return False
 
@@ -108,14 +128,28 @@ class Program:
 			reply = await self.send_command('attach', None,
 					display_socket.fileno())
 			self.attaching = False
-		return reply['code'] == 0
+		if reply['code'] != 0:
+			return False
+		self.compositor_pid = compositor_pid
+		return True
 
-	def is_client_allowed(self, client):
-		return self.allowed_user is None or \
-				client.get('username') == self.allowed_user
+	async def is_client_allowed(self, client):
+		if self.compositor_pid is None:
+			return True
+
+		session = await find_session_of_process(self.compositor_pid)
+		if session is None:
+			return False
+
+		if await get_session_object_property(session, 'Class') == 'greeter':
+			return True
+
+		username = client.get('username')
+		return username is not None and username == \
+				await get_session_object_property(session, 'Name')
 
 	async def disconnect_if_disallowed(self, client):
-		if not self.is_client_allowed(client):
+		if not await self.is_client_allowed(client):
 			await self.send_command('client-disconnect',
 					{'id': client['id']})
 
@@ -123,14 +157,6 @@ class Program:
 		reply = await self.send_command('client-list')
 		for client in reply.get('data') or []:
 			await self.disconnect_if_disallowed(client)
-
-	async def allow_only_user_of(self, session):
-		if await get_session_property(session, 'Class') == 'greeter':
-			self.allowed_user = None
-		else:
-			self.allowed_user = await get_session_property(session,
-					'Name') or ''
-		await self.disconnect_disallowed_clients()
 
 	async def attach_any(self):
 		session = await get_active_session()
@@ -143,7 +169,7 @@ class Program:
 
 		for path in find_displays_of(user_id):
 			if await self.attach(path, user_id):
-				await self.allow_only_user_of(session)
+				await self.disconnect_disallowed_clients()
 				return True
 
 		return False
@@ -155,6 +181,7 @@ class Program:
 	async def process_message(self, message):
 		method = message['method']
 		if (method == 'detached'):
+			self.compositor_pid = None
 			# Switching attachment detaches from the old compositor first;
 			# ignore the detached event our own attach produces.
 			if not self.attaching:
