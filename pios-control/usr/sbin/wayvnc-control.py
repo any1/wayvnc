@@ -137,6 +137,10 @@ class Program:
 		if self.compositor_pid is None:
 			return True
 
+		username = client.get('username')
+		if username is None:
+			return True
+
 		session = await find_session_of_process(self.compositor_pid)
 		if session is None:
 			return False
@@ -144,9 +148,7 @@ class Program:
 		if await get_session_object_property(session, 'Class') == 'greeter':
 			return True
 
-		username = client.get('username')
-		return username is not None and username == \
-				await get_session_object_property(session, 'Name')
+		return username == await get_session_object_property(session, 'Name')
 
 	async def disconnect_if_disallowed(self, client):
 		if not await self.is_client_allowed(client):
