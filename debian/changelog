@@ -1,3 +1,12 @@
+wayvnc (0.9.1-1~bpo12+rpt5) bookworm; urgency=medium
+
+  * Perform some security hardening
+  * Fix attachment state tracking
+  * Admit anonymous users when auth is disabled
+  * Clear cursor when screen blanking
+
+ -- Andri Yngvason <andri@yngvason.is>  Tue, 24 Nov 2026 14:00:00 +0000
+
 wayvnc (0.9.1-1~bpo12+rpt4) bookworm; urgency=medium
 
   * Add acl as a dependency
