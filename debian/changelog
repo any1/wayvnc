@@ -1,61 +1,62 @@
-wayvnc (0.9.1~rpt3) bookworm; urgency=medium
+wayvnc (0.9.1-1~bpo12+rpt4) bookworm; urgency=medium
 
-  * Upgrade to v0.9.1
+  * Add acl as a dependency
 
- -- Andri Yngvason <andri@yngvason.is>  Wed, 27 Nov 2024 21:00:00 +0000
+ -- Simon Long <simon@raspberrypi.com>  Mon, 01 Sep 2025 14:45:14 +0100
 
-wayvnc (0.9.0~dev-1+rpt2) bookworm; urgency=medium
+wayvnc (0.9.1-1~bpo12+rpt3) bookworm; urgency=medium
 
-  * Add power management patch from upstream
+  * Backport scanout fix from trixie
 
- -- Simon Long <simon@raspberrypi.com>  Thu, 31 Oct 2024 13:06:35 +0000
+ -- David Turner <david.turner@raspberrypi.com>  Thu, 21 Aug 2025 17:04:03 +0100
 
-wayvnc (0.9.0~dev-1+rpt1) bookworm; urgency=medium
+wayvnc (0.9.1-1~bpo12+rpt2) bookworm; urgency=medium
 
-  * Add vnc user to video group
+  * Backport from trixie
 
- -- Serge Schneider <serge@raspberrypi.com>  Sat, 28 Sep 2024 15:04:59 +0100
+ -- Simon Long <simon@raspberrypi.com>  Mon, 07 Jul 2025 08:02:52 +0100
 
-wayvnc (0.9.0~dev-1) bookworm; urgency=medium
+wayvnc (0.9.1-1+rpt2) trixie; urgency=medium
 
-  * Upgrade to v0.9.0-dev
-  * This adds aligned CMA buffer allocation which is required for h264 encoding
-    on the Raspberry Pi 4.
+  * Block users from other user's active session
 
- -- Andri Yngvason <andri@yngvason.is>  Tue, 26 Mar 2024 11:00:00 +0000
+ -- Simon Long <simon@raspberrypi.com>  Fri, 04 Jul 2025 12:50:55 +0100
 
-wayvnc (0.8.0-rel-1) bookworm; urgency=medium
+wayvnc (0.9.1-1+rpt1) trixie; urgency=medium
 
-  * Upgrade to v0.8.0
-  * The rel bit is there for sake of the new version being greater than the
-    previous one. Remove later.
+  * Add pios-control
 
- -- Andri Yngvason <andri@yngvason.is>  Sun, 25 Feb 2024 13:00:00 +0000
+ -- Simon Long <simon@raspberrypi.com>  Thu, 20 Mar 2025 15:51:00 +0000
 
-wayvnc (0.8.0-rc0-2) bookworm; urgency=medium
+wayvnc (0.9.1-1) unstable; urgency=medium
 
-  * Removed IP and added local domain to TLS
-  * Using ECDSA instead of RSA for TLS
+  * Team upload.
+  * Add a trivial git-buildpackage config file.
+  * New upstream version:
+    - update the neatvnc build dependency to 0.9.x; Closes: #1089194
+    - update the upstream copyright notices
+  * Declare compliance with Policy 4.7.0 with no changes.
+  * Include dpkg's default.mk for completeness.
+  * Declare dpkg-build-api 1, drop the implied Rules-Requires-Root: no.
 
- -- Andri Yngvason <andri@yngvason.is>  Tue, 23 Jan 2024 23:00:00 +0000
+ -- Peter Pentchev <roam@debian.org>  Wed, 12 Feb 2025 18:15:23 +0200
 
-wayvnc (0.8.0-rc0-1) bookworm; urgency=medium
+wayvnc (0.8.0-1) unstable; urgency=medium
 
-  * Upgrade to v0.8-rc0
+  * Team upload.
+  * New upstream release.
+  * debian/control:
+    + Remove myself from the uploaders list.
+    + Add versioned requirement on neatvnc v0.8.0+.
+  * debian/copyright: Update information on new protocol files.
 
- -- Andri Yngvason <andri@yngvason.is>  Sun, 10 Dec 2023 20:00:00 +0000
+ -- Boyuan Yang <byang@debian.org>  Sat, 09 Mar 2024 10:59:07 -0500
 
-wayvnc (0.7.1-1~bpo12+rpt2) bookworm; urgency=medium
+wayvnc (0.7.2-1) unstable; urgency=medium
 
-  * Add unreleased 0.7.2 changes
+  * New upstream release.
 
- -- Simon Long <simon@raspberrypi.com>  Mon, 06 Nov 2023 09:44:26 +0000
-
-wayvnc (0.7.1-1~bpo12+rpt1) bookworm; urgency=medium
-
-  * Backport from Trixie
-
- -- Simon Long <simon@raspberrypi.com>  Tue, 31 Oct 2023 07:10:38 +0000
+ -- Boyuan Yang <byang@debian.org>  Sun, 26 Nov 2023 10:46:48 -0500
 
 wayvnc (0.7.1-1) unstable; urgency=medium
 
