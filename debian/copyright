@@ -4,11 +4,12 @@ Upstream-Contact: Andri Yngvason <andri@yngvason.is>
 Source: https://github.com/any1/wayvnc
 
 Files: *
-Copyright: 2019-2020, 2023 Andri Yngvason
+Copyright: 2019-2024 Andri Yngvason
            2020 Scott Moreau
            2020 Nicholas Sica
            1998, 2015 Todd C. Miller <Todd.Miller@courtesan.com>
            2022-2023 Jim Ramsay
+           2023 The wayvnc authors
 License: ISC
 
 Files: debian/*
@@ -32,6 +33,26 @@ Copyright: 2019 Josef Gajdusek
            2018, 2019 Purism SPC
            2014, 2015 Collabora, Ltd.
 License: Expat
+
+Files: protocols/ext-foreign-toplevel-list-v1.xml
+Copyright:
+ © 2018 Ilia Bozhinov
+ © 2020 Isaac Freund
+ © 2022 wb9688
+ © 2023 i509VCB
+License: HPND-sell-variant
+
+Files: protocols/ext-image-capture-source-v1.xml
+       protocols/ext-image-copy-capture-v1.xml
+Copyright:
+ © 2021-2023 Andri Yngvason
+ © 2024 Simon Ser
+License: HPND-sell-variant
+
+Files: protocols/wlr-output-management-unstable-v1.xml
+Copyright:
+ 2019 Purism SPC
+License: HPND-sell-variant
 
 License: Unlicense
  This is free and unencumbered software released into the public domain.
@@ -82,6 +103,28 @@ License: Expat
 License: CC0-1.0
  On Debian systems, the full text of the CC0 1.0 Universal License
  can be found in the file `/usr/share/common-licenses/CC0-1.0'.
+
+License: HPND-sell-variant
+ Permission to use, copy, modify, distribute, and sell this
+ software and its documentation for any purpose is hereby granted
+ without fee, provided that the above copyright notice appear in
+ all copies and that both that copyright notice and this permission
+ notice appear in supporting documentation, and that the name of
+ the copyright holders not be used in advertising or publicity
+ pertaining to distribution of the software without specific,
+ written prior permission.  The copyright holders make no
+ representations about the suitability of this software for any
+ purpose.  It is provided "as is" without express or implied
+ warranty.
+ .
+ THE COPYRIGHT HOLDERS DISCLAIM ALL WARRANTIES WITH REGARD TO THIS
+ SOFTWARE, INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+ FITNESS, IN NO EVENT SHALL THE COPYRIGHT HOLDERS BE LIABLE FOR ANY
+ SPECIAL, INDIRECT OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN
+ AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION,
+ ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
+ THIS SOFTWARE.
 
 License: ISC
  Permission to use, copy, modify, and/or distribute this software for any purpose
