@@ -121,12 +121,13 @@ static struct cmd_attach* cmd_attach_new(json_t* args,
 		struct jsonipc_error* err)
 {
 	const char* display = NULL;
-	if (json_unpack(args, "{s:s}", "display", &display) == -1) {
-		jsonipc_error_printf(err, EINVAL, "Missing display name");
+	if (args && json_unpack(args, "{s?s}", "display", &display) == -1) {
+		jsonipc_error_printf(err, EINVAL, "Invalid attach parameters");
 		return NULL;
 	}
 	struct cmd_attach* cmd = calloc(1, sizeof(*cmd));
-	strlcpy(cmd->display, display, sizeof(cmd->display));
+	if (display)
+		strlcpy(cmd->display, display, sizeof(cmd->display));
 	return cmd;
 }
 
@@ -274,6 +275,18 @@ static void client_keep_received_fds(struct ctl_client* self,
 			client_keep_received_fd(self, fd);
 		}
 	}
+}
+
+static int client_take_received_fd(struct ctl_client* self)
+{
+	if (self->nr_received_fds == 0)
+		return -1;
+
+	int fd = self->received_fds[0];
+	self->nr_received_fds--;
+	memmove(self->received_fds, self->received_fds + 1,
+			self->nr_received_fds * sizeof(fd));
+	return fd;
 }
 
 static void client_close_unused_fds(struct ctl_client* self)
@@ -513,6 +526,17 @@ static struct cmd_response* generate_output_list(struct ctl* self)
 	return response;
 }
 
+static struct cmd_response* ctl_server_attach(struct ctl* self,
+		struct ctl_client* client, const struct cmd_attach* cmd)
+{
+	const char* display = cmd->display[0] ? cmd->display : NULL;
+	int display_fd = display ? -1 : client_take_received_fd(client);
+	if (!display && display_fd < 0)
+		return cmd_failed("Missing display name or file descriptor");
+
+	return self->actions.on_attach(self, display, display_fd);
+}
+
 static struct cmd_response* ctl_server_dispatch_cmd(struct ctl* self,
 		struct ctl_client* client, struct cmd* cmd)
 {
@@ -523,7 +547,7 @@ static struct cmd_response* ctl_server_dispatch_cmd(struct ctl* self,
 	switch (cmd->type) {
 	case CMD_ATTACH:{
 		struct cmd_attach* c = (struct cmd_attach*)cmd;
-		response = self->actions.on_attach(self, c->display);
+		response = ctl_server_attach(self, client, c);
 		break;
 		}
 	case CMD_HELP:{
