@@ -1,3 +1,10 @@
+wayvnc (0.10.2-1+rpt3) bookworm; urgency=medium
+
+  * Fix attachment state tracking
+  * Admit anonymous users when auth is disabled
+
+ -- Andri Yngvason <andri@yngvason.is>  Tue, 24 Nov 2026 11:00:00 +0000
+
 wayvnc (0.10.2-1+rpt2) bookworm; urgency=medium
 
   * Perform some security hardening
